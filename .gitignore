@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-electron/
+apps/desktop/dist/
+apps/desktop/dist-electron/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
+local/

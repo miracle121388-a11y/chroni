@@ -1,0 +1,41 @@
+{
+  "name": "@dueflow/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DueFlow desktop DDL assistant.",
+  "license": "MIT",
+  "author": "DueFlow",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "npm run build && electron .",
+    "dev:renderer": "vite --host 127.0.0.1",
+    "dev:desktop": "concurrently -k -n renderer,electron -c cyan,magenta \"npm run dev:renderer\" \"wait-on http://127.0.0.1:5173 && cross-env DUEFLOW_RENDERER_URL=http://127.0.0.1:5173 npm run build:main && electron .\"",
+    "build:main": "tsc -p tsconfig.json",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
+    "package": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "mammoth": "^1.12.0",
+    "pdf-parse": "^2.4.5",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "read-excel-file": "^9.2.0",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^42.0.0",
+    "electron-builder": "^26.10.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14",
+    "wait-on": "^9.0.10"
+  }
+}

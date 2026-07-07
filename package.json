@@ -1,0 +1,25 @@
+{
+  "name": "dueflow-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DueFlow local DDL schedule assistant workspace.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "npm@11.6.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm --workspace apps/desktop run dev",
+    "build": "npm --workspace apps/desktop run build",
+    "typecheck": "npm --workspace apps/desktop run typecheck",
+    "package:desktop": "npm --workspace apps/desktop run package",
+    "check": "npm run typecheck && npm run build"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

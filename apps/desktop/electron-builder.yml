@@ -1,0 +1,50 @@
+appId: app.dueflow.desktop
+productName: DueFlow
+executableName: dueflow
+copyright: Copyright © 2026 DueFlow
+
+directories:
+  output: dist-electron
+
+artifactName: DueFlow-${version}-${os}-${arch}.${ext}
+
+files:
+  - dist/**
+  - preload.cjs
+  - package.json
+
+asar: true
+npmRebuild: false
+publish: null
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  identity: "-"
+  hardenedRuntime: false
+  gatekeeperAssess: false
+
+win:
+  target:
+    - nsis
+    - portable
+  verifyUpdateCodeSignature: false
+
+nsis:
+  artifactName: DueFlow-${version}-win-${arch}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+portable:
+  artifactName: DueFlow-${version}-win-${arch}-portable.${ext}
+
+linux:
+  target:
+    - AppImage
+    - deb
+    - tar.gz
+  category: Utility
+  maintainer: DueFlow
