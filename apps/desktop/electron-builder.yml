@@ -1,12 +1,12 @@
-appId: app.dueflow.desktop
-productName: DueFlow
-executableName: dueflow
-copyright: Copyright © 2026 DueFlow
+appId: app.chroni.desktop
+productName: Chroni
+executableName: chroni
+copyright: Copyright © 2026 Chroni
 
 directories:
   output: dist-electron
 
-artifactName: DueFlow-${version}-${os}-${arch}.${ext}
+artifactName: Chroni-${version}-${os}-${arch}.${ext}
 
 files:
   - dist/**
@@ -33,13 +33,13 @@ win:
   verifyUpdateCodeSignature: false
 
 nsis:
-  artifactName: DueFlow-${version}-win-${arch}-setup.${ext}
+  artifactName: Chroni-${version}-win-${arch}-setup.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
 
 portable:
-  artifactName: DueFlow-${version}-win-${arch}-portable.${ext}
+  artifactName: Chroni-${version}-win-${arch}-portable.${ext}
 
 linux:
   target:
@@ -47,4 +47,4 @@ linux:
     - deb
     - tar.gz
   category: Utility
-  maintainer: DueFlow
+  maintainer: Chroni

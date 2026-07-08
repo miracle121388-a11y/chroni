@@ -2,8 +2,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, extname } from "node:path";
 import mammoth from "mammoth";
 import readXlsxFile from "read-excel-file/node";
-import type { DdlItem, DueFlowInputFile, DueFlowLlmSettings, ExtractResult, ExtractedInput, Importance, IntakePayload, IntakeResult } from "./shared/types.js";
-import type { DueFlowStore } from "./store.js";
+import type { DdlItem, ChroniInputFile, ChroniLlmSettings, ExtractResult, ExtractedInput, Importance, IntakePayload, IntakeResult } from "./shared/types.js";
+import type { ChroniStore } from "./store.js";
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
 const documentExtensions = new Set([".docx", ".pdf"]);
@@ -15,7 +15,7 @@ const maxTextBytes = 2 * 1024 * 1024;
 const maxDocumentBytes = 18 * 1024 * 1024;
 
 type ExtractOptions = {
-  llm?: DueFlowLlmSettings;
+  llm?: ChroniLlmSettings;
 };
 
 type LlmDdlCandidate = {
@@ -25,7 +25,7 @@ type LlmDdlCandidate = {
   sourceSummary?: unknown;
 };
 
-export async function processIntake(payload: IntakePayload, store: DueFlowStore): Promise<IntakeResult> {
+export async function processIntake(payload: IntakePayload, store: ChroniStore): Promise<IntakeResult> {
   store.setCompanion("processing", "正在识别 DDL...");
   const result = await extractPayload(payload, { llm: store.snapshot().preferences.llm });
   if (!result.ok) {
@@ -70,12 +70,12 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
   }
 }
 
-async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?: DueFlowLlmSettings): Promise<DdlItem[]> {
-  const envApiKey = process.env.DUEFLOW_LLM_API_KEY ?? "";
-  const enabled = settings?.enabled || process.env.DUEFLOW_LLM_ENABLED === "1";
+async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?: ChroniLlmSettings): Promise<DdlItem[]> {
+  const envApiKey = process.env.CHRONI_LLM_API_KEY ?? "";
+  const enabled = settings?.enabled || process.env.CHRONI_LLM_ENABLED === "1";
   const apiKey = settings?.apiKey || envApiKey;
-  const baseUrl = normalizeBaseUrl(settings?.baseUrl || process.env.DUEFLOW_LLM_BASE_URL || "https://api.openai.com/v1");
-  const model = settings?.model || process.env.DUEFLOW_LLM_MODEL || "gpt-4.1-mini";
+  const baseUrl = normalizeBaseUrl(settings?.baseUrl || process.env.CHRONI_LLM_BASE_URL || "https://api.openai.com/v1");
+  const model = settings?.model || process.env.CHRONI_LLM_MODEL || "gpt-4.1-mini";
   if (!enabled || !apiKey || !model) return [];
 
   const allText = extracted.map((input) => `来源：${input.sourceName}\n${input.text}`).join("\n\n---\n\n").slice(0, 24_000);
@@ -94,7 +94,7 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
         {
           role: "system",
           content: [
-            "你是 DueFlow 的 DDL 信息抽取器。",
+            "你是 Chroni 的 DDL 信息抽取器。",
             "只输出 JSON，不输出解释。",
             "从输入中抽取明确的截止事项。",
             "字段结构固定：{\"items\":[{\"title\":\"短标题\",\"dueAt\":\"ISO-8601时间\",\"importance\":\"high|medium|low\",\"sourceSummary\":\"一句来源摘要\"}]}。",
@@ -147,7 +147,7 @@ function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
-export async function extractFromFiles(files: DueFlowInputFile[]): Promise<ExtractedInput[]> {
+export async function extractFromFiles(files: ChroniInputFile[]): Promise<ExtractedInput[]> {
   if (!files.length) throw new Error("没有收到可读取的文件。");
   const results: ExtractedInput[] = [];
   for (const file of files) {
@@ -174,7 +174,7 @@ export function extractDdlItemsFromText(text: string, sourceName = "输入内容
   return dueAt ? [createItem(shortTitle(normalized), dueAt, `${sourceName}: ${normalized.slice(0, 180)}`)] : [];
 }
 
-async function extractSingleFile(file: DueFlowInputFile): Promise<ExtractedInput> {
+async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput> {
   const name = file.name || (file.path ? basename(file.path) : "未命名文件");
   const extension = extname(name || file.path || "").toLowerCase();
   if (unsupportedExtensions.has(extension)) throw new Error(`文件类型不支持：${name}`);
@@ -215,7 +215,7 @@ async function extractSingleFile(file: DueFlowInputFile): Promise<ExtractedInput
   throw new Error(`文件类型不支持：${name}`);
 }
 
-function readFileBuffer(file: DueFlowInputFile): Buffer {
+function readFileBuffer(file: ChroniInputFile): Buffer {
   if (file.contentBase64) return Buffer.from(file.contentBase64, "base64");
   if (!file.path || !existsSync(file.path)) throw new Error(`文件无法读取：${file.name}`);
   const stat = statSync(file.path);

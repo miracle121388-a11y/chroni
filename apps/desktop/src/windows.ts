@@ -1,6 +1,6 @@
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, type BrowserWindowConstructorOptions, type NativeImage } from "electron";
 import { join } from "node:path";
-import type { DueFlowView } from "./shared/types.js";
+import type { ChroniView } from "./shared/types.js";
 
 type WindowSet = {
   pet?: BrowserWindow;
@@ -36,7 +36,7 @@ export function createAppWindows(): void {
   });
   positionScheduleWindow(false);
 
-  ipcMain.on("dueflow:drag-window", (event, dx: number, dy: number) => {
+  ipcMain.on("chroni:drag-window", (event, dx: number, dy: number) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
     const [x, y] = win.getPosition();
@@ -51,9 +51,9 @@ export function createTray(): void {
     { label: "显示桌宠", click: () => windows.pet?.show() },
     { label: "显示日程表", click: () => showSchedule(true) },
     { type: "separator" },
-    { label: "退出 DueFlow", click: () => app.quit() },
+    { label: "退出 Chroni", click: () => app.quit() },
   ]);
-  windows.tray.setToolTip("DueFlow");
+  windows.tray.setToolTip("Chroni");
   windows.tray.setContextMenu(menu);
   windows.tray.on("click", () => showControlCenter());
 }
@@ -67,7 +67,7 @@ export function showControlCenter(): void {
       minHeight: 520,
       frame: true,
       resizable: true,
-      title: "DueFlow 控制中心",
+      title: "Chroni 控制中心",
     });
     windows.control.on("closed", () => { windows.control = undefined; });
   }
@@ -86,7 +86,7 @@ export function broadcast(channel: string, payload: unknown): void {
   }
 }
 
-function createViewWindow(view: DueFlowView, options: BrowserWindowConstructorOptions): BrowserWindow {
+function createViewWindow(view: ChroniView, options: BrowserWindowConstructorOptions): BrowserWindow {
   const win = new BrowserWindow({
     backgroundColor: "#00000000",
     webPreferences: {
@@ -101,8 +101,8 @@ function createViewWindow(view: DueFlowView, options: BrowserWindowConstructorOp
   return win;
 }
 
-async function loadView(win: BrowserWindow, view: DueFlowView): Promise<void> {
-  const devUrl = process.env.DUEFLOW_RENDERER_URL;
+async function loadView(win: BrowserWindow, view: ChroniView): Promise<void> {
+  const devUrl = process.env.CHRONI_RENDERER_URL;
   if (devUrl) {
     await win.loadURL(`${devUrl}?view=${view}`);
   } else {

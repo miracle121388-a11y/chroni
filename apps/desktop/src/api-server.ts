@@ -1,11 +1,11 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { DueFlowPreferencesPatch, DueFlowSnapshot, IntakePayload, ItemPatch } from "./shared/types.js";
+import type { ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch } from "./shared/types.js";
 import { extractPayload, processIntake } from "./intake.js";
-import type { DueFlowStore } from "./store.js";
+import type { ChroniStore } from "./store.js";
 
-type SnapshotCallback = (snapshot: DueFlowSnapshot) => void;
+type SnapshotCallback = (snapshot: ChroniSnapshot) => void;
 
-export function startDueFlowApiServer(store: DueFlowStore, onSnapshot: SnapshotCallback): Server {
+export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCallback): Server {
   const server = createServer(async (request, response) => {
     try {
       await route(request, response, store, onSnapshot);
@@ -13,23 +13,23 @@ export function startDueFlowApiServer(store: DueFlowStore, onSnapshot: SnapshotC
       sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
-  const configuredPort = Number(process.env.DUEFLOW_API_PORT || 8765);
+  const configuredPort = Number(process.env.CHRONI_API_PORT || 8765);
   server.listen(configuredPort, "127.0.0.1", () => {
     const address = server.address();
     const port = typeof address === "object" && address ? address.port : configuredPort;
-    console.log(`DueFlow API listening at http://127.0.0.1:${port}`);
+    console.log(`Chroni API listening at http://127.0.0.1:${port}`);
   });
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE" && configuredPort !== 0) {
       server.listen(0, "127.0.0.1");
       return;
     }
-    console.error("DueFlow API failed.", error);
+    console.error("Chroni API failed.", error);
   });
   return server;
 }
 
-async function route(request: IncomingMessage, response: ServerResponse, store: DueFlowStore, onSnapshot: SnapshotCallback): Promise<void> {
+async function route(request: IncomingMessage, response: ServerResponse, store: ChroniStore, onSnapshot: SnapshotCallback): Promise<void> {
   setCors(response);
   if (request.method === "OPTIONS") {
     response.writeHead(204);
@@ -41,7 +41,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   if (request.method === "GET" && pathname === "/api/health") {
     sendJson(response, 200, {
       ok: true,
-      product: "DueFlow",
+      product: "Chroni",
       version: "0.1.0",
       defaultBaseUrl: "http://127.0.0.1:8765",
       supportedInputs: [
@@ -103,14 +103,14 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     return;
   }
   if (request.method === "PATCH" && pathname === "/api/preferences") {
-    const patch = await readJson<DueFlowPreferencesPatch>(request);
+    const patch = await readJson<ChroniPreferencesPatch>(request);
     const snapshot = store.updatePreferences(patch);
     onSnapshot(snapshot);
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
 
-  sendJson(response, 404, { ok: false, error: "Unknown DueFlow API endpoint.", endpoints: apiEndpoints() });
+  sendJson(response, 404, { ok: false, error: "Unknown Chroni API endpoint.", endpoints: apiEndpoints() });
 }
 
 function apiEndpoints(): string[] {

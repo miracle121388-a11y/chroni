@@ -1,23 +1,23 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { CompanionState, DdlItem, DueFlowPreferences, DueFlowPreferencesPatch, DueFlowSnapshot, ItemPatch, ServiceStatus } from "./shared/types.js";
+import type { CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ItemPatch, ServiceStatus } from "./shared/types.js";
 
 type StoredState = {
   items: DdlItem[];
-  preferences: DueFlowPreferences;
+  preferences: ChroniPreferences;
   companion: {
     state: CompanionState;
     bubble: string;
   };
 };
 
-const defaultPreferences: DueFlowPreferences = {
+const defaultPreferences: ChroniPreferences = {
   companionEnabled: true,
   remindersEnabled: true,
   quietHoursEnabled: false,
   quietHoursStart: "22:30",
   quietHoursEnd: "08:00",
-  hotkey: "Ctrl+Shift+D",
+  hotkey: "Ctrl+Shift+C",
   llm: {
     enabled: false,
     provider: "openai-compatible",
@@ -57,16 +57,16 @@ const defaultState: StoredState = {
   },
 };
 
-export class DueFlowStore {
+export class ChroniStore {
   readonly filePath: string;
   #state: StoredState;
 
   constructor(userDataPath: string) {
-    this.filePath = join(userDataPath, "dueflow-state.json");
+    this.filePath = join(userDataPath, "chroni-state.json");
     this.#state = this.#load();
   }
 
-  snapshot(): DueFlowSnapshot {
+  snapshot(): ChroniSnapshot {
     return {
       items: [...this.#state.items].sort(compareDdlItems),
       preferences: { ...this.#state.preferences },
@@ -75,13 +75,13 @@ export class DueFlowStore {
     };
   }
 
-  setCompanion(state: CompanionState, bubble: string): DueFlowSnapshot {
+  setCompanion(state: CompanionState, bubble: string): ChroniSnapshot {
     this.#state.companion = { state, bubble };
     this.#save();
     return this.snapshot();
   }
 
-  addItems(items: DdlItem[], message = "已加入日程。"): DueFlowSnapshot {
+  addItems(items: DdlItem[], message = "已加入日程。"): ChroniSnapshot {
     const existingKeys = new Set(this.#state.items.map((item) => dedupeKey(item)));
     const accepted = items.filter((item) => !existingKeys.has(dedupeKey(item)));
     this.#state.items = [...this.#state.items, ...accepted];
@@ -92,7 +92,7 @@ export class DueFlowStore {
     return this.snapshot();
   }
 
-  updateItem(id: string, patch: ItemPatch): DueFlowSnapshot {
+  updateItem(id: string, patch: ItemPatch): ChroniSnapshot {
     this.#state.items = this.#state.items.map((item) => item.id === id ? { ...item, ...patch, updatedAt: new Date().toISOString() } : item);
     const updated = this.#state.items.find((item) => item.id === id);
     if (updated?.completed) this.#state.companion = { state: "celebrating", bubble: "完成得很干脆。" };
@@ -100,14 +100,14 @@ export class DueFlowStore {
     return this.snapshot();
   }
 
-  deleteItem(id: string): DueFlowSnapshot {
+  deleteItem(id: string): ChroniSnapshot {
     this.#state.items = this.#state.items.filter((item) => item.id !== id);
     this.#state.companion = { state: "idle", bubble: "已删除误识别事项。" };
     this.#save();
     return this.snapshot();
   }
 
-  updatePreferences(patch: DueFlowPreferencesPatch): DueFlowSnapshot {
+  updatePreferences(patch: ChroniPreferencesPatch): ChroniSnapshot {
     this.#state.preferences = {
       ...this.#state.preferences,
       ...patch,
@@ -119,9 +119,9 @@ export class DueFlowStore {
   }
 
   serviceStatus(): ServiceStatus {
-    const envKey = process.env.DUEFLOW_LLM_API_KEY ?? "";
+    const envKey = process.env.CHRONI_LLM_API_KEY ?? "";
     const llm = this.#state.preferences.llm;
-    const modelEnabled = llm.enabled || process.env.DUEFLOW_LLM_ENABLED === "1";
+    const modelEnabled = llm.enabled || process.env.CHRONI_LLM_ENABLED === "1";
     const modelReady = modelEnabled && !!(llm.apiKey || envKey);
     return {
       parser: "ready",
@@ -132,7 +132,7 @@ export class DueFlowStore {
       notes: [
         "已支持文本、PDF、DOCX、XLSX、CSV、网页/结构化文本和图片 OCR 的本地抽取。",
         modelReady
-          ? `LLM 智能抽取已启用，当前模型：${llm.model || process.env.DUEFLOW_LLM_MODEL || "未设置"}。`
+          ? `LLM 智能抽取已启用，当前模型：${llm.model || process.env.CHRONI_LLM_MODEL || "未设置"}。`
           : "未配置 LLM API Key 时会使用本地规则抽取；配置后优先使用大模型抽取并自动回退。",
         "识别结果不设确认步骤，可在控制中心轻量修正。",
       ],

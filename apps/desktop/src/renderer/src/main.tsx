@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { CompanionState, DdlItem, DueFlowInputFile, DueFlowPreferences, DueFlowPreferencesPatch, DueFlowSnapshot, ExtractResult, Importance } from "../../shared/types";
+import type { CompanionState, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance } from "../../shared/types";
 import "./styles.css";
 
-const api = window.dueFlow;
+const api = window.chroni;
 
-function useSnapshot(): [DueFlowSnapshot | null, React.Dispatch<React.SetStateAction<DueFlowSnapshot | null>>] {
-  const [snapshot, setSnapshot] = useState<DueFlowSnapshot | null>(null);
+function useSnapshot(): [ChroniSnapshot | null, React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>] {
+  const [snapshot, setSnapshot] = useState<ChroniSnapshot | null>(null);
   useEffect(() => {
     void api.getSnapshot().then(setSnapshot);
     return api.onSnapshotUpdated(setSnapshot);
@@ -17,7 +17,7 @@ function useSnapshot(): [DueFlowSnapshot | null, React.Dispatch<React.SetStateAc
 function App() {
   const view = new URLSearchParams(window.location.search).get("view") ?? "control";
   const [snapshot, setSnapshot] = useSnapshot();
-  if (!snapshot) return <div className="loading">DueFlow</div>;
+  if (!snapshot) return <div className="loading">Chroni</div>;
   if (view === "pet") return <PetView snapshot={snapshot} setSnapshot={setSnapshot} />;
   if (view === "schedule") return <ScheduleView snapshot={snapshot} setSnapshot={setSnapshot} />;
   return <ControlCenter snapshot={snapshot} setSnapshot={setSnapshot} />;
@@ -72,7 +72,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
       }}
       onPointerUp={() => { dragStart.current = null; }}
     >
-      <button className="pet-body" type="button" onClick={() => void api.companionClicked().then(setSnapshot)} aria-label="DueFlow 桌宠">
+      <button className="pet-body" type="button" onClick={() => void api.companionClicked().then(setSnapshot)} aria-label="Chroni 桌宠">
         <span className="pet-face">
           <span className="pet-eye" />
           <span className="pet-eye" />
@@ -113,7 +113,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
       <section className="schedule-panel">
         <header className="panel-head">
           <div>
-            <p>DueFlow</p>
+            <p>Chroni</p>
             <h1>最近要注意</h1>
           </div>
           <button className="icon-btn" type="button" onClick={() => void api.openControlCenter()} title="控制中心">⚙</button>
@@ -140,9 +140,9 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
     <main className="control-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-icon">D</div>
+          <div className="brand-icon">C</div>
           <div>
-            <h1>DueFlow</h1>
+            <h1>Chroni</h1>
             <p>本地 DDL 日程助手</p>
           </div>
         </div>
@@ -236,8 +236,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
   );
 }
 
-function PreferencesPane({ preferences, setSnapshot }: { preferences: DueFlowPreferences; setSnapshot: ViewProps["setSnapshot"] }) {
-  async function patch(next: DueFlowPreferencesPatch) {
+function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPreferences; setSnapshot: ViewProps["setSnapshot"] }) {
+  async function patch(next: ChroniPreferencesPatch) {
     setSnapshot(await api.updatePreferences(next));
   }
   return (
@@ -270,7 +270,7 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: DueFlowPre
   );
 }
 
-function ServicesPane({ snapshot }: { snapshot: DueFlowSnapshot }) {
+function ServicesPane({ snapshot }: { snapshot: ChroniSnapshot }) {
   return (
     <div className="pane narrow">
       <header className="pane-head">
@@ -358,8 +358,8 @@ function StatusRow({ label, state }: { label: string; state: string }) {
 }
 
 type ViewProps = {
-  snapshot: DueFlowSnapshot;
-  setSnapshot: React.Dispatch<React.SetStateAction<DueFlowSnapshot | null>>;
+  snapshot: ChroniSnapshot;
+  setSnapshot: React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>;
 };
 
 function topVisibleItems(items: DdlItem[]): DdlItem[] {
@@ -412,7 +412,7 @@ function acceptedFileTypes(): string {
   return ".txt,.md,.csv,.tsv,.json,.ics,.log,.html,.htm,.xml,.yaml,.yml,.rtf,.docx,.pdf,.xlsx,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff";
 }
 
-async function filesFromFileList(fileList: FileList | File[] | null): Promise<DueFlowInputFile[]> {
+async function filesFromFileList(fileList: FileList | File[] | null): Promise<ChroniInputFile[]> {
   if (!fileList) return [];
   return Promise.all(Array.from(fileList).map(async (file) => {
     const path = safeFilePath(file);

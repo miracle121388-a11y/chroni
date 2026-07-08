@@ -22,7 +22,7 @@ export default defineConfig(({ command }) => ({
   plugins: [
     react(),
     command === "serve" && {
-      name: "dueflow-dev-csp",
+      name: "chroni-dev-csp",
       transformIndexHtml(html: string) {
         return html.replace(productionCsp, devCsp);
       },

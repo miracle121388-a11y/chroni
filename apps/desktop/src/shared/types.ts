@@ -1,4 +1,4 @@
-export type DueFlowView = "pet" | "schedule" | "control";
+export type ChroniView = "pet" | "schedule" | "control";
 
 export type CompanionState =
   | "idle"
@@ -28,25 +28,25 @@ export type DdlItem = {
   snoozedUntil?: string;
 };
 
-export type DueFlowPreferences = {
+export type ChroniPreferences = {
   companionEnabled: boolean;
   remindersEnabled: boolean;
   quietHoursEnabled: boolean;
   quietHoursStart: string;
   quietHoursEnd: string;
   hotkey: string;
-  llm: DueFlowLlmSettings;
+  llm: ChroniLlmSettings;
 };
 
-export type DueFlowPreferencesPatch = Partial<Omit<DueFlowPreferences, "llm">> & {
-  llm?: Partial<DueFlowLlmSettings>;
+export type ChroniPreferencesPatch = Partial<Omit<ChroniPreferences, "llm">> & {
+  llm?: Partial<ChroniLlmSettings>;
 };
 
-export type DueFlowLlmProvider = "openai-compatible";
+export type ChroniLlmProvider = "openai-compatible";
 
-export type DueFlowLlmSettings = {
+export type ChroniLlmSettings = {
   enabled: boolean;
-  provider: DueFlowLlmProvider;
+  provider: ChroniLlmProvider;
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -61,9 +61,9 @@ export type ServiceStatus = {
   notes: string[];
 };
 
-export type DueFlowSnapshot = {
+export type ChroniSnapshot = {
   items: DdlItem[];
-  preferences: DueFlowPreferences;
+  preferences: ChroniPreferences;
   companion: {
     state: CompanionState;
     bubble: string;
@@ -74,10 +74,10 @@ export type DueFlowSnapshot = {
 export type IntakePayload = {
   kind: "text" | "files";
   text?: string;
-  files?: DueFlowInputFile[];
+  files?: ChroniInputFile[];
 };
 
-export type DueFlowInputFile = {
+export type ChroniInputFile = {
   path?: string;
   name: string;
   type?: string;
@@ -95,7 +95,7 @@ export type ExtractResult =
   | { ok: false; reason: string; extracted: ExtractedInput[]; items: [] };
 
 export type IntakeResult =
-  | { ok: true; created: DdlItem[]; message: string; snapshot: DueFlowSnapshot }
-  | { ok: false; reason: string; snapshot: DueFlowSnapshot };
+  | { ok: true; created: DdlItem[]; message: string; snapshot: ChroniSnapshot }
+  | { ok: false; reason: string; snapshot: ChroniSnapshot };
 
 export type ItemPatch = Partial<Pick<DdlItem, "title" | "importance" | "dueAt" | "sourceSummary" | "completed" | "snoozedUntil">>;

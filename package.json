@@ -1,8 +1,8 @@
 {
-  "name": "dueflow-workspace",
+  "name": "chroni-workspace",
   "version": "0.1.0",
   "private": true,
-  "description": "DueFlow local DDL schedule assistant workspace.",
+  "description": "Chroni local DDL schedule assistant workspace.",
   "license": "MIT",
   "type": "module",
   "packageManager": "npm@11.6.2",
