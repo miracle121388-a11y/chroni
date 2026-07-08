@@ -448,7 +448,7 @@ button {
 
 .ddl-row.edit {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 90px 220px 72px;
+  grid-template-columns: minmax(150px, 1fr) 82px 210px 96px 72px;
 }
 
 .ddl-row.edit button {
@@ -500,6 +500,69 @@ button {
   color: #657386;
   font-size: 13px;
   line-height: 1.6;
+}
+
+.source-history {
+  margin: 20px 0;
+  padding-top: 16px;
+  border-top: 1px solid #dbe4ef;
+}
+
+.source-list {
+  display: grid;
+  gap: 8px;
+}
+
+.source-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+  border: 1px solid #e0e6ee;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.source-row div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.source-row b,
+.source-row span,
+.source-row em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-row span,
+.source-row em,
+.source-chip {
+  color: #657386;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.source-row button {
+  border: 0;
+  border-radius: 10px;
+  background: #edf4fb;
+  color: #243b53;
+  padding: 8px 10px;
+  font-weight: 900;
+}
+
+.source-chip {
+  min-width: 0;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-row {

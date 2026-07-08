@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { CompanionState, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance } from "../../shared/types";
+import type { CompanionState, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, SourceRecord } from "../../shared/types";
 import "./styles.css";
 
 const api = window.chroni;
@@ -70,7 +70,10 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         dragStart.current = { x: event.screenX, y: event.screenY };
         api.dragWindow(dx, dy);
       }}
-      onPointerUp={() => { dragStart.current = null; }}
+      onPointerUp={() => {
+        dragStart.current = null;
+        api.snapWindow();
+      }}
     >
       <button className="pet-body" type="button" onClick={() => void api.companionClicked().then(setSnapshot)} aria-label="Chroni 桌宠">
         <span className="pet-face">
@@ -86,7 +89,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
 
 function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   const items = useMemo(() => topVisibleItems(snapshot.items), [snapshot.items]);
-  const hiddenCount = snapshot.items.filter((item) => !item.completed).length - items.length;
+  const hiddenCount = activeVisibleCount(snapshot.items) - items.length;
   const [quickText, setQuickText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -231,7 +234,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
           )}
         </div>
       )}
-      <DdlList items={activeItems} setSnapshot={setSnapshot} editable />
+      <SourceHistory sources={snapshot.sources} setSnapshot={setSnapshot} />
+      <DdlList items={activeItems} sources={snapshot.sources} setSnapshot={setSnapshot} editable />
     </div>
   );
 }
@@ -289,18 +293,43 @@ function ServicesPane({ snapshot }: { snapshot: ChroniSnapshot }) {
   );
 }
 
-function DdlList({ items, setSnapshot, compact = false, editable = false }: { items: DdlItem[]; setSnapshot: ViewProps["setSnapshot"]; compact?: boolean; editable?: boolean }) {
+function SourceHistory({ sources, setSnapshot }: { sources: SourceRecord[]; setSnapshot: ViewProps["setSnapshot"] }) {
+  if (!sources.length) return null;
+  return (
+    <section className="source-history">
+      <div className="section-head">
+        <h3>来源记录</h3>
+        <p>用于查看原始输入摘要和重新识别。</p>
+      </div>
+      <div className="source-list">
+        {sources.slice(0, 8).map((source) => (
+          <article key={source.id} className="source-row">
+            <div>
+              <b>{source.sourceName}</b>
+              <span>{source.sourceType} · {source.text.length} 字 · {source.itemIds.length} 条日程</span>
+              <em>{source.text.slice(0, 120)}</em>
+            </div>
+            <button type="button" onClick={() => void api.reprocessSource(source.id).then((result) => setSnapshot(result.snapshot))}>重新识别</button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DdlList({ items, sources = [], setSnapshot, compact = false, editable = false }: { items: DdlItem[]; sources?: SourceRecord[]; setSnapshot: ViewProps["setSnapshot"]; compact?: boolean; editable?: boolean }) {
   if (!items.length) return <div className="empty">暂时没有需要马上处理的 DDL。</div>;
+  const sourceMap = new Map(sources.map((source) => [source.id, source]));
   return (
     <div className={`ddl-list ${compact ? "compact" : ""}`}>
       {items.map((item) => (
-        <DdlRow key={item.id} item={item} setSnapshot={setSnapshot} editable={editable} />
+        <DdlRow key={item.id} item={item} source={item.sourceId ? sourceMap.get(item.sourceId) : undefined} setSnapshot={setSnapshot} editable={editable} />
       ))}
     </div>
   );
 }
 
-function DdlRow({ item, setSnapshot, editable }: { item: DdlItem; setSnapshot: ViewProps["setSnapshot"]; editable?: boolean }) {
+function DdlRow({ item, source, setSnapshot, editable }: { item: DdlItem; source?: SourceRecord; setSnapshot: ViewProps["setSnapshot"]; editable?: boolean }) {
   const urgency = urgencyTone(item);
   const [draft, setDraft] = useState(item);
   useEffect(() => setDraft(item), [item]);
@@ -320,6 +349,7 @@ function DdlRow({ item, setSnapshot, editable }: { item: DdlItem; setSnapshot: V
           <option value="low">低</option>
         </select>
         <input type="datetime-local" value={toInputDate(draft.dueAt)} onChange={(event) => void update({ dueAt: new Date(event.target.value).toISOString() })} />
+        <span className="source-chip" title={item.sourceSummary}>{source?.sourceName ?? "手动"}</span>
         <button type="button" onClick={() => void api.deleteItem(item.id).then(setSnapshot)}>删除</button>
       </article>
     );
@@ -363,7 +393,20 @@ type ViewProps = {
 };
 
 function topVisibleItems(items: DdlItem[]): DdlItem[] {
-  return [...items].filter((item) => !item.completed).sort(compareItems).slice(0, 6);
+  const now = Date.now();
+  return [...items]
+    .filter((item) => !item.completed)
+    .filter((item) => !item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= now)
+    .sort(compareItems)
+    .slice(0, 6);
+}
+
+function activeVisibleCount(items: DdlItem[]): number {
+  const now = Date.now();
+  return items
+    .filter((item) => !item.completed)
+    .filter((item) => !item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= now)
+    .length;
 }
 
 function compareItems(a: DdlItem, b: DdlItem): number {

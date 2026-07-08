@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch } from "./shared/types.js";
-import { extractPayload, processIntake } from "./intake.js";
+import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniStore } from "./store.js";
 
 type SnapshotCallback = (snapshot: ChroniSnapshot) => void;
@@ -109,6 +109,13 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
+  if (request.method === "POST" && pathname.startsWith("/api/sources/") && pathname.endsWith("/reprocess")) {
+    const id = decodeURIComponent(pathname.slice("/api/sources/".length, -"/reprocess".length));
+    const result = await reprocessSource(id, store);
+    onSnapshot(result.snapshot);
+    sendJson(response, result.ok ? 200 : 422, result);
+    return;
+  }
 
   sendJson(response, 404, { ok: false, error: "Unknown Chroni API endpoint.", endpoints: apiEndpoints() });
 }
@@ -122,6 +129,7 @@ function apiEndpoints(): string[] {
     "PATCH /api/items/:id",
     "DELETE /api/items/:id",
     "PATCH /api/preferences",
+    "POST /api/sources/:id/reprocess",
   ];
 }
 

@@ -12,8 +12,10 @@ contextBridge.exposeInMainWorld("chroni", {
   quickAdd: (text) => ipcRenderer.invoke("chroni:quick-add", text),
   openControlCenter: () => ipcRenderer.invoke("chroni:open-control"),
   showSchedule: (expanded) => ipcRenderer.invoke("chroni:show-schedule", expanded),
+  reprocessSource: (sourceId) => ipcRenderer.invoke("chroni:source-reprocess", sourceId),
   openStorage: () => ipcRenderer.invoke("chroni:open-storage"),
   dragWindow: (dx, dy) => ipcRenderer.send("chroni:drag-window", dx, dy),
+  snapWindow: () => ipcRenderer.send("chroni:snap-window"),
   filePath: (file) => webUtils.getPathForFile(file),
   onSnapshotUpdated: (callback) => {
     const listener = (_event, snapshot) => callback(snapshot);

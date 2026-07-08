@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ItemPatch, ServiceStatus } from "./shared/types.js";
+import type { CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, ServiceStatus, SourceRecord } from "./shared/types.js";
 
 type StoredState = {
   items: DdlItem[];
+  sources: SourceRecord[];
   preferences: ChroniPreferences;
   companion: {
     state: CompanionState;
@@ -50,6 +51,7 @@ const defaultState: StoredState = {
       completed: false,
     },
   ],
+  sources: [],
   preferences: defaultPreferences,
   companion: {
     state: "idle",
@@ -69,6 +71,7 @@ export class ChroniStore {
   snapshot(): ChroniSnapshot {
     return {
       items: [...this.#state.items].sort(compareDdlItems),
+      sources: [...this.#state.sources].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
       preferences: { ...this.#state.preferences },
       companion: { ...this.#state.companion },
       services: this.serviceStatus(),
@@ -81,15 +84,30 @@ export class ChroniStore {
     return this.snapshot();
   }
 
-  addItems(items: DdlItem[], message = "已加入日程。"): ChroniSnapshot {
+  addItems(items: DdlItem[], message = "已加入日程。", extracted: ExtractedInput[] = []): ChroniSnapshot {
     const existingKeys = new Set(this.#state.items.map((item) => dedupeKey(item)));
-    const accepted = items.filter((item) => !existingKeys.has(dedupeKey(item)));
+    const sources = extracted.map((input) => sourceRecordFromInput(input));
+    const sourceByName = new Map(sources.map((source) => [source.sourceName, source]));
+    const accepted = items
+      .filter((item) => !existingKeys.has(dedupeKey(item)))
+      .map((item) => {
+        const source = sourceByName.get(sourceNameFromSummary(item.sourceSummary)) ?? sources[0];
+        return source ? { ...item, sourceId: source.id } : item;
+      });
+    for (const source of sources) {
+      source.itemIds = accepted.filter((item) => item.sourceId === source.id).map((item) => item.id);
+    }
     this.#state.items = [...this.#state.items, ...accepted];
+    this.#state.sources = accepted.length ? pruneSources([...sources, ...this.#state.sources]) : this.#state.sources;
     this.#state.companion = accepted.length
       ? { state: "success", bubble: message }
       : { state: "confused", bubble: "这条 DDL 已经在日程里了。" };
     this.#save();
     return this.snapshot();
+  }
+
+  sourceById(id: string): SourceRecord | undefined {
+    return this.#state.sources.find((source) => source.id === id);
   }
 
   updateItem(id: string, patch: ItemPatch): ChroniSnapshot {
@@ -100,9 +118,37 @@ export class ChroniStore {
     return this.snapshot();
   }
 
+  markItemReminded(id: string): ChroniSnapshot {
+    this.#state.items = this.#state.items.map((item) => item.id === id ? { ...item, lastRemindedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : item);
+    this.#save();
+    return this.snapshot();
+  }
+
   deleteItem(id: string): ChroniSnapshot {
     this.#state.items = this.#state.items.filter((item) => item.id !== id);
+    this.#state.sources = this.#state.sources.map((source) => ({ ...source, itemIds: source.itemIds.filter((itemId) => itemId !== id) }));
     this.#state.companion = { state: "idle", bubble: "已删除误识别事项。" };
+    this.#save();
+    return this.snapshot();
+  }
+
+  replaceSourceItems(sourceId: string, items: DdlItem[], message = "已重新识别来源。"): ChroniSnapshot {
+    const source = this.#state.sources.find((record) => record.id === sourceId);
+    if (!source) {
+      this.#state.companion = { state: "confused", bubble: "找不到原始输入，无法重新识别。" };
+      this.#save();
+      return this.snapshot();
+    }
+    const existing = this.#state.items.filter((item) => item.sourceId !== sourceId);
+    const accepted = mergeNewItems(existing, items.map((item) => ({ ...item, sourceId })));
+    const itemIds = accepted.filter((item) => item.sourceId === sourceId).map((item) => item.id);
+    this.#state.items = accepted;
+    this.#state.sources = this.#state.sources.map((record) => record.id === sourceId
+      ? { ...record, itemIds, updatedAt: new Date().toISOString(), lastExtractedAt: new Date().toISOString() }
+      : record);
+    this.#state.companion = itemIds.length
+      ? { state: "success", bubble: message }
+      : { state: "confused", bubble: "重新识别后没有明确 DDL。" };
     this.#save();
     return this.snapshot();
   }
@@ -134,6 +180,11 @@ export class ChroniStore {
         modelReady
           ? `LLM 智能抽取已启用，当前模型：${llm.model || process.env.CHRONI_LLM_MODEL || "未设置"}。`
           : "未配置 LLM API Key 时会使用本地规则抽取；配置后优先使用大模型抽取并自动回退。",
+        `${this.#state.sources.length} 条输入来源保存在本机，可在控制中心重新识别。`,
+        this.#state.preferences.remindersEnabled
+          ? `提醒已开启${this.#state.preferences.quietHoursEnabled ? `，勿扰时间 ${this.#state.preferences.quietHoursStart}-${this.#state.preferences.quietHoursEnd}` : ""}。`
+          : "提醒已关闭。",
+        this.#state.preferences.companionEnabled ? "桌宠入口已开启。" : "桌宠入口已隐藏，可在控制中心重新开启。",
         "识别结果不设确认步骤，可在控制中心轻量修正。",
       ],
     };
@@ -145,6 +196,7 @@ export class ChroniStore {
       const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<StoredState>;
       return {
         items: Array.isArray(parsed.items) ? parsed.items : defaultState.items,
+        sources: Array.isArray(parsed.sources) ? parsed.sources as SourceRecord[] : defaultState.sources,
         preferences: {
           ...defaultPreferences,
           ...(parsed.preferences ?? {}),
@@ -163,6 +215,21 @@ export class ChroniStore {
     writeFileSync(tmp, JSON.stringify(this.#state, null, 2), "utf8");
     renameSync(tmp, this.filePath);
   }
+}
+
+export function sourceRecordFromInput(input: ExtractedInput): SourceRecord {
+  const now = new Date().toISOString();
+  return {
+    id: `source-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    sourceName: input.sourceName,
+    sourceType: input.sourceType,
+    text: input.text,
+    summary: `${input.sourceName}，抽取 ${input.text.length} 字`,
+    createdAt: now,
+    updatedAt: now,
+    lastExtractedAt: now,
+    itemIds: [],
+  };
 }
 
 export function compareDdlItems(a: DdlItem, b: DdlItem): number {
@@ -200,6 +267,33 @@ function urgencyScore(item: DdlItem): number {
 
 function dedupeKey(item: DdlItem): string {
   return `${item.title.trim().toLowerCase()}|${new Date(item.dueAt).toISOString().slice(0, 16)}`;
+}
+
+function sourceNameFromSummary(summary: string): string {
+  return summary.split(":", 1)[0] || "";
+}
+
+function pruneSources(sources: SourceRecord[]): SourceRecord[] {
+  const seen = new Set<string>();
+  const result: SourceRecord[] = [];
+  for (const source of sources) {
+    const key = `${source.sourceName}|${source.text.slice(0, 200)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(source);
+  }
+  return result.slice(0, 80);
+}
+
+function mergeNewItems(existing: DdlItem[], candidates: DdlItem[]): DdlItem[] {
+  const keys = new Set(existing.map((item) => dedupeKey(item)));
+  const accepted = candidates.filter((item) => {
+    const key = dedupeKey(item);
+    if (keys.has(key)) return false;
+    keys.add(key);
+    return true;
+  });
+  return [...existing, ...accepted];
 }
 
 function nextDateAt(daysFromNow: number, hour: number, minute: number): string {

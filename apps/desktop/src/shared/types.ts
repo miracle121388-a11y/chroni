@@ -22,10 +22,24 @@ export type DdlItem = {
   importance: Importance;
   dueAt: string;
   sourceSummary: string;
+  sourceId?: string;
   createdAt: string;
   updatedAt: string;
   completed: boolean;
   snoozedUntil?: string;
+  lastRemindedAt?: string;
+};
+
+export type SourceRecord = {
+  id: string;
+  sourceName: string;
+  sourceType: string;
+  text: string;
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+  lastExtractedAt: string;
+  itemIds: string[];
 };
 
 export type ChroniPreferences = {
@@ -63,6 +77,7 @@ export type ServiceStatus = {
 
 export type ChroniSnapshot = {
   items: DdlItem[];
+  sources: SourceRecord[];
   preferences: ChroniPreferences;
   companion: {
     state: CompanionState;

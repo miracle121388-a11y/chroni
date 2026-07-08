@@ -5,16 +5,19 @@
   "description": "Chroni local DDL schedule assistant workspace.",
   "license": "MIT",
   "type": "module",
-  "packageManager": "npm@11.6.2",
+  "packageManager": "pnpm@11.7.0",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "dev": "npm --workspace apps/desktop run dev",
-    "build": "npm --workspace apps/desktop run build",
-    "typecheck": "npm --workspace apps/desktop run typecheck",
-    "package:desktop": "npm --workspace apps/desktop run package",
-    "check": "npm run typecheck && npm run build"
+    "dev": "pnpm --filter @chroni/desktop run dev",
+    "build": "pnpm --filter @chroni/desktop run build",
+    "typecheck": "pnpm --filter @chroni/desktop run typecheck",
+    "package:desktop": "pnpm --filter @chroni/desktop run package",
+    "check": "pnpm run typecheck && pnpm run build",
+    "dev:mac": "pnpm --filter @chroni/desktop run dev",
+    "open:mac": "open -n /Applications/Chroni.app",
+    "stop:mac": "osascript -e 'quit app \"Chroni\"' || pkill -x chroni || true"
   },
   "workspaces": [
     "apps/*"

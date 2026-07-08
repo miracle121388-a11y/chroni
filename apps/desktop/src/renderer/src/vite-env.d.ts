@@ -16,8 +16,10 @@ declare global {
       quickAdd(text: string): Promise<IntakeResult>;
       openControlCenter(): Promise<void>;
       showSchedule(expanded: boolean): Promise<void>;
+      reprocessSource(sourceId: string): Promise<IntakeResult>;
       openStorage(): Promise<void>;
       dragWindow(dx: number, dy: number): void;
+      snapWindow(): void;
       filePath(file: File): string;
       onSnapshotUpdated(callback: (snapshot: ChroniSnapshot) => void): () => void;
     };

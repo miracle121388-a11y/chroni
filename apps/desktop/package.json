@@ -8,14 +8,14 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "dev": "npm run build && electron .",
+    "dev": "pnpm run build && electron .",
     "dev:renderer": "vite --host 127.0.0.1",
-    "dev:desktop": "concurrently -k -n renderer,electron -c cyan,magenta \"npm run dev:renderer\" \"wait-on http://127.0.0.1:5173 && cross-env CHRONI_RENDERER_URL=http://127.0.0.1:5173 npm run build:main && electron .\"",
+    "dev:desktop": "concurrently -k -n renderer,electron -c cyan,magenta \"pnpm run dev:renderer\" \"wait-on http://127.0.0.1:5173 && cross-env CHRONI_RENDERER_URL=http://127.0.0.1:5173 pnpm run build:main && electron .\"",
     "build:main": "tsc -p tsconfig.json",
     "build:renderer": "vite build",
-    "build": "npm run build:main && npm run build:renderer",
+    "build": "pnpm run build:main && pnpm run build:renderer",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
-    "package": "npm run build && electron-builder"
+    "package": "pnpm run build && electron-builder"
   },
   "dependencies": {
     "mammoth": "^1.12.0",

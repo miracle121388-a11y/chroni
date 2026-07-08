@@ -33,8 +33,29 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
     return { ok: false, reason: result.reason, snapshot };
   }
 
-  const snapshot = store.addItems(result.items, result.message);
+  const snapshot = store.addItems(result.items, result.message, result.extracted);
   return { ok: true, created: result.items, message: snapshot.companion.bubble, snapshot };
+}
+
+export async function reprocessSource(sourceId: string, store: ChroniStore): Promise<IntakeResult> {
+  const source = store.sourceById(sourceId);
+  if (!source) {
+    const snapshot = store.setCompanion("confused", "找不到原始输入，无法重新识别。");
+    return { ok: false, reason: "找不到原始输入。", snapshot };
+  }
+  store.setCompanion("processing", "正在重新识别来源...");
+  const result = await extractPayload({ kind: "text", text: source.text }, { llm: store.snapshot().preferences.llm });
+  if (!result.ok) {
+    const snapshot = store.replaceSourceItems(sourceId, [], result.reason);
+    return { ok: false, reason: result.reason, snapshot };
+  }
+  const nextItems = result.items.map((item) => ({
+    ...item,
+    sourceId,
+    sourceSummary: `${source.sourceName}: ${item.sourceSummary.replace(/^直接文本:\s*/, "")}`,
+  }));
+  const snapshot = store.replaceSourceItems(sourceId, nextItems, result.message.replace("已加入", "已重新识别"));
+  return { ok: true, created: nextItems, message: snapshot.companion.bubble, snapshot };
 }
 
 export async function extractPayload(payload: IntakePayload, options: ExtractOptions = {}): Promise<ExtractResult> {
