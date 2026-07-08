@@ -3,7 +3,7 @@ import { startChroniApiServer } from "./api-server.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
 import { companionStateForItems, ChroniStore } from "./store.js";
-import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showSchedule } from "./windows.js";
+import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showSchedule, toggleScheduleSurface } from "./windows.js";
 
 let store: ChroniStore;
 
@@ -56,6 +56,7 @@ function installIpc(): void {
     const current = companionStateForItems(store.snapshot().items);
     const snapshot = store.setCompanion("clicked", current.bubble);
     broadcast("chroni:snapshot-updated", snapshot);
+    toggleScheduleSurface();
     return snapshot;
   });
   ipcMain.handle("chroni:companion-hover", (_event, hovering: boolean) => {
@@ -67,12 +68,14 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:item-update", (_event, id: string, patch: ItemPatch) => {
-    const snapshot = store.updateItem(id, patch);
+    store.updateItem(id, patch);
+    const snapshot = refreshCompanionSnapshot();
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
   ipcMain.handle("chroni:item-delete", (_event, id: string) => {
-    const snapshot = store.deleteItem(id);
+    store.deleteItem(id);
+    const snapshot = refreshCompanionSnapshot();
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
@@ -100,10 +103,14 @@ function installIpc(): void {
 }
 
 function refreshCompanionFromSchedule(): void {
-  const next = companionStateForItems(store.snapshot().items);
-  const snapshot = store.setCompanion(next.state, next.bubble);
+  const snapshot = refreshCompanionSnapshot();
   broadcast("chroni:snapshot-updated", snapshot);
   setTimeout(refreshCompanionFromSchedule, 60_000);
+}
+
+function refreshCompanionSnapshot() {
+  const next = companionStateForItems(store.snapshot().items);
+  return store.setCompanion(next.state, next.bubble);
 }
 
 function refreshReminders(): void {
@@ -163,7 +170,7 @@ function registerHotkey(): void {
   const hotkey = store.snapshot().preferences.hotkey.trim();
   if (!hotkey) return;
   try {
-    globalShortcut.register(hotkey, () => showSchedule(true));
+    globalShortcut.register(hotkey, () => toggleScheduleSurface());
   } catch {
     console.warn(`Unable to register Chroni hotkey: ${hotkey}`);
   }

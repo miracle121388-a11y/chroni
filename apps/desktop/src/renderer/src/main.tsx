@@ -92,6 +92,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   const hiddenCount = activeVisibleCount(snapshot.items) - items.length;
   const [quickText, setQuickText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isWindowsDrawer = navigator.userAgent.includes("Windows");
 
   async function quickAdd() {
     if (!quickText.trim()) return;
@@ -109,10 +110,15 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
 
   return (
     <main
-      className="schedule-shell"
-      onMouseEnter={() => void api.showSchedule(true)}
-      onMouseLeave={() => void api.showSchedule(false)}
+      className={`schedule-shell ${isWindowsDrawer ? "drawer-shell" : "popover-shell"}`}
+      onMouseEnter={() => {
+        if (isWindowsDrawer) void api.showSchedule(true);
+      }}
+      onMouseLeave={() => {
+        if (isWindowsDrawer) void api.showSchedule(false);
+      }}
     >
+      {isWindowsDrawer && <div className="drawer-handle"><span>DDL</span></div>}
       <section className="schedule-panel">
         <header className="panel-head">
           <div>
@@ -307,7 +313,10 @@ function SourceHistory({ sources, setSnapshot }: { sources: SourceRecord[]; setS
             <div>
               <b>{source.sourceName}</b>
               <span>{source.sourceType} · {source.text.length} 字 · {source.itemIds.length} 条日程</span>
-              <em>{source.text.slice(0, 120)}</em>
+              <details>
+                <summary>{source.text.slice(0, 120)}</summary>
+                <pre>{source.text}</pre>
+              </details>
             </div>
             <button type="button" onClick={() => void api.reprocessSource(source.id).then((result) => setSnapshot(result.snapshot))}>重新识别</button>
           </article>

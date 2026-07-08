@@ -46,7 +46,7 @@ export async function reprocessSource(sourceId: string, store: ChroniStore): Pro
   store.setCompanion("processing", "正在重新识别来源...");
   const result = await extractPayload({ kind: "text", text: source.text }, { llm: store.snapshot().preferences.llm });
   if (!result.ok) {
-    const snapshot = store.replaceSourceItems(sourceId, [], result.reason);
+    const snapshot = store.setCompanion("confused", result.reason);
     return { ok: false, reason: result.reason, snapshot };
   }
   const nextItems = result.items.map((item) => ({
@@ -70,9 +70,19 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
     }
 
     const ruleItems = extracted.flatMap((input) => extractDdlItemsFromText(input.text, input.sourceName));
-    const llmItems = await extractWithLlmIfAvailable(extracted, options.llm).catch(() => []);
+    let llmError = "";
+    const llmItems = await extractWithLlmIfAvailable(extracted, options.llm).catch((error) => {
+      llmError = error instanceof Error ? error.message : String(error);
+      return [];
+    });
     const items = llmItems.length ? llmItems : ruleItems;
     if (!items.length) {
+      if (llmError && isLlmEnabled(options.llm)) {
+        return { ok: false, reason: `模型或本地服务不可用：${llmError}`, extracted, items: [] };
+      }
+      if (hasPossibleTaskWithoutDeadline(extracted.map((input) => input.text).join("\n"))) {
+        return { ok: false, reason: "关键信息不足：没有明确截止时间。", extracted, items: [] };
+      }
       return { ok: false, reason: "没有识别到明确 DDL。", extracted, items: [] };
     }
     return {
@@ -89,6 +99,14 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
       items: [],
     };
   }
+}
+
+function isLlmEnabled(settings?: ChroniLlmSettings): boolean {
+  return !!(settings?.enabled || process.env.CHRONI_LLM_ENABLED === "1");
+}
+
+function hasPossibleTaskWithoutDeadline(text: string): boolean {
+  return /(作业|报告|提交|完成|ddl|deadline|due|考试|答辩|实验|汇报|presentation|quiz|任务|提醒)/i.test(text);
 }
 
 async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?: ChroniLlmSettings): Promise<DdlItem[]> {

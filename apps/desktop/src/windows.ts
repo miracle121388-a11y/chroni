@@ -10,6 +10,14 @@ type WindowSet = {
 };
 
 const windows: WindowSet = {};
+let scheduleExpanded = false;
+let macScheduleHideTimer: NodeJS.Timeout | undefined;
+
+const windowsDrawerWidth = 342;
+const windowsDrawerHandleWidth = 28;
+const windowsDrawerMargin = 10;
+const macPopoverWidth = 348;
+const macPopoverHeight = 418;
 
 export function createAppWindows(): void {
   windows.pet = createViewWindow("pet", {
@@ -27,6 +35,15 @@ export function createAppWindows(): void {
 
   windows.schedule = createViewWindow("schedule", scheduleWindowOptions());
   positionScheduleWindow(false);
+  if (process.platform === "darwin") {
+    windows.schedule.on("blur", () => {
+      macScheduleHideTimer = setTimeout(() => hideSchedule(), 160);
+    });
+    windows.schedule.on("focus", () => {
+      if (macScheduleHideTimer) clearTimeout(macScheduleHideTimer);
+      macScheduleHideTimer = undefined;
+    });
+  }
 
   ipcMain.on("chroni:drag-window", (event, dx: number, dy: number) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -46,7 +63,8 @@ export function createTray(): void {
     { label: "打开控制中心", click: () => showControlCenter() },
     { label: "显示桌宠", click: () => windows.pet?.show() },
     { label: "隐藏桌宠", click: () => windows.pet?.hide() },
-    { label: "显示日程表", click: () => showSchedule(true) },
+    { label: "显示日程表", click: () => showSchedule(true, true) },
+    { label: "隐藏日程表", click: () => hideSchedule() },
     { type: "separator" },
     { label: "退出 Chroni", click: () => app.quit() },
   ]);
@@ -72,9 +90,47 @@ export function showControlCenter(): void {
   windows.control.focus();
 }
 
-export function showSchedule(expanded = true): void {
+export function showSchedule(expanded = true, focus = false): void {
+  scheduleExpanded = expanded;
+  if (process.platform === "darwin" && !expanded) {
+    hideSchedule();
+    return;
+  }
   positionScheduleWindow(expanded);
+  if (process.platform === "darwin") {
+    if (macScheduleHideTimer) clearTimeout(macScheduleHideTimer);
+    macScheduleHideTimer = undefined;
+    if (focus) {
+      windows.schedule?.show();
+      windows.schedule?.focus();
+    } else {
+      windows.schedule?.showInactive();
+    }
+    return;
+  }
   windows.schedule?.showInactive();
+}
+
+export function hideSchedule(): void {
+  if (process.platform === "win32") {
+    scheduleExpanded = false;
+    positionScheduleWindow(false);
+    windows.schedule?.showInactive();
+    return;
+  }
+  windows.schedule?.hide();
+}
+
+export function toggleScheduleSurface(): void {
+  if (process.platform === "darwin") {
+    if (windows.schedule?.isVisible()) {
+      hideSchedule();
+    } else {
+      showSchedule(true, true);
+    }
+    return;
+  }
+  showSchedule(!scheduleExpanded);
 }
 
 export function applyPreferences(preferences: ChroniPreferences): void {
@@ -87,11 +143,10 @@ export function applyPreferences(preferences: ChroniPreferences): void {
 
 export function refreshScheduleAfterUpdate(): void {
   if (process.platform === "win32") {
-    showSchedule(true);
+    showSchedule(scheduleExpanded);
     return;
   }
-  positionScheduleWindow(true);
-  if (!windows.schedule?.isVisible()) windows.schedule?.showInactive();
+  if (windows.schedule?.isVisible()) positionScheduleWindow(true);
 }
 
 export function broadcast(channel: string, payload: unknown): void {
@@ -101,14 +156,17 @@ export function broadcast(channel: string, payload: unknown): void {
 }
 
 function scheduleWindowOptions(): BrowserWindowConstructorOptions {
+  const isWindows = process.platform === "win32";
+  const isMac = process.platform === "darwin";
   return {
-    width: process.platform === "win32" ? 342 : 380,
-    height: 430,
+    width: isWindows ? windowsDrawerWidth : isMac ? macPopoverWidth : 380,
+    height: isMac ? macPopoverHeight : 430,
     transparent: true,
     frame: false,
     resizable: false,
     skipTaskbar: true,
-    alwaysOnTop: process.platform === "win32",
+    alwaysOnTop: isWindows,
+    show: !isMac,
   };
 }
 
@@ -142,10 +200,42 @@ function positionScheduleWindow(expanded: boolean): void {
   const area = screen.getPrimaryDisplay().workArea;
   if (process.platform === "win32") {
     const width = win.getBounds().width;
-    const x = expanded ? area.x + area.width - width - 10 : area.x + area.width - 24;
-    win.setPosition(x, area.y + Math.round((area.height - win.getBounds().height) / 2));
+    const height = Math.min(430, area.height - 48);
+    if (win.getBounds().height !== height) win.setSize(width, height);
+    const x = expanded
+      ? area.x + area.width - width - windowsDrawerMargin
+      : area.x + area.width - windowsDrawerHandleWidth;
+    const y = area.y + Math.round((area.height - height) / 2);
+    animateWindowTo(win, x, y);
+  } else if (process.platform === "darwin") {
+    const petBounds = windows.pet?.getBounds();
+    const bounds = win.getBounds();
+    const nearPetLeft = petBounds ? petBounds.x - bounds.width - 14 : Number.NaN;
+    const nearPetRight = petBounds ? petBounds.x + petBounds.width + 14 : Number.NaN;
+    const targetX = petBounds
+      ? (nearPetLeft >= area.x + 12 ? nearPetLeft : nearPetRight)
+      : area.x + area.width - bounds.width - 28;
+    const targetY = petBounds ? petBounds.y + Math.round((petBounds.height - bounds.height) / 2) : area.y + 72;
+    const x = Math.min(Math.max(targetX, area.x + 12), area.x + area.width - bounds.width - 12);
+    const y = Math.min(Math.max(targetY, area.y + 12), area.y + area.height - bounds.height - 12);
+    win.setPosition(Math.round(x), Math.round(y));
   } else {
     win.setPosition(area.x + area.width - win.getBounds().width - 28, area.y + 72);
+  }
+}
+
+function animateWindowTo(win: BrowserWindow, targetX: number, targetY: number): void {
+  const [startX, startY] = win.getPosition();
+  const steps = 6;
+  for (let step = 1; step <= steps; step += 1) {
+    setTimeout(() => {
+      const progress = step / steps;
+      const eased = 1 - Math.pow(1 - progress, 3);
+      win.setPosition(
+        Math.round(startX + (targetX - startX) * eased),
+        Math.round(startY + (targetY - startY) * eased),
+      );
+    }, step * 12);
   }
 }
 
