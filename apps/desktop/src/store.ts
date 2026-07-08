@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, ServiceStatus, SourceRecord } from "./shared/types.js";
+import type { CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, ServiceStatus, SourceExtractionStatus, SourceRecord } from "./shared/types.js";
 
 type StoredState = {
   items: DdlItem[];
@@ -10,53 +10,6 @@ type StoredState = {
     state: CompanionState;
     bubble: string;
   };
-};
-
-const defaultPreferences: ChroniPreferences = {
-  companionEnabled: true,
-  remindersEnabled: true,
-  quietHoursEnabled: false,
-  quietHoursStart: "22:30",
-  quietHoursEnd: "08:00",
-  hotkey: "Ctrl+Shift+C",
-  llm: {
-    enabled: false,
-    provider: "openai-compatible",
-    baseUrl: "https://api.openai.com/v1",
-    apiKey: "",
-    model: "gpt-4.1-mini",
-  },
-};
-
-const defaultState: StoredState = {
-  items: [
-    {
-      id: "seed-course-report",
-      title: "课程报告 PDF",
-      importance: "high",
-      dueAt: nextDateAt(2, 23, 59),
-      sourceSummary: "示例：拖入课程通知后生成的 DDL。",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      completed: false,
-    },
-    {
-      id: "seed-lab-submit",
-      title: "实验记录提交",
-      importance: "medium",
-      dueAt: nextDateAt(5, 18, 0),
-      sourceSummary: "示例：近期需要关注的普通事项。",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      completed: false,
-    },
-  ],
-  sources: [],
-  preferences: defaultPreferences,
-  companion: {
-    state: "idle",
-    bubble: "把 DDL 文件、截图或文字拖给我。",
-  },
 };
 
 export class ChroniStore {
@@ -86,6 +39,7 @@ export class ChroniStore {
 
   addItems(items: DdlItem[], message = "已加入日程。", extracted: ExtractedInput[] = []): ChroniSnapshot {
     const existingKeys = new Set(this.#state.items.map((item) => dedupeKey(item)));
+    const existingByKey = new Map(this.#state.items.map((item) => [dedupeKey(item), item]));
     const sources = extracted.map((input) => sourceRecordFromInput(input));
     const sourceByName = new Map(sources.map((source) => [source.sourceName, source]));
     const accepted = items
@@ -95,13 +49,29 @@ export class ChroniStore {
         return source ? { ...item, sourceId: source.id } : item;
       });
     for (const source of sources) {
-      source.itemIds = accepted.filter((item) => item.sourceId === source.id).map((item) => item.id);
+      const sourceItems = items.filter((item) => (sourceByName.get(sourceNameFromSummary(item.sourceSummary)) ?? sources[0])?.id === source.id);
+      const acceptedForSource = accepted.filter((item) => item.sourceId === source.id);
+      const duplicateIds = sourceItems
+        .map((item) => existingByKey.get(dedupeKey(item))?.id)
+        .filter((id): id is string => !!id);
+      source.itemIds = [...new Set([...acceptedForSource.map((item) => item.id), ...duplicateIds])];
+      source.extractionStatus = acceptedForSource.length ? "success" : "duplicate";
+      source.summary = source.extractionStatus === "success"
+        ? `${source.sourceName}，生成 ${acceptedForSource.length} 条日程`
+        : `${source.sourceName}，识别结果已存在`;
     }
     this.#state.items = [...this.#state.items, ...accepted];
-    this.#state.sources = accepted.length ? pruneSources([...sources, ...this.#state.sources]) : this.#state.sources;
+    this.#state.sources = sources.length ? pruneSources([...sources, ...this.#state.sources]) : this.#state.sources;
     this.#state.companion = accepted.length
       ? { state: "success", bubble: message }
       : { state: "confused", bubble: "这条 DDL 已经在日程里了。" };
+    this.#save();
+    return this.snapshot();
+  }
+
+  recordSourceFailure(extracted: ExtractedInput[], reason: string): ChroniSnapshot {
+    const sources = extracted.map((input) => sourceRecordFromInput(input, "failed", reason));
+    this.#state.sources = sources.length ? pruneSources([...sources, ...this.#state.sources]) : this.#state.sources;
     this.#save();
     return this.snapshot();
   }
@@ -110,7 +80,26 @@ export class ChroniStore {
     return this.#state.sources.find((source) => source.id === id);
   }
 
+  updateSourceText(id: string, text: string): ChroniSnapshot {
+    this.#state.sources = this.#state.sources.map((source) => source.id === id
+      ? { ...source, text, updatedAt: new Date().toISOString() }
+      : source);
+    this.#save();
+    return this.snapshot();
+  }
+
   updateItem(id: string, patch: ItemPatch): ChroniSnapshot {
+    if (!this.#state.items.some((item) => item.id === id)) return this.snapshot();
+    if (patch.dueAt !== undefined && !isValidDateString(patch.dueAt)) {
+      this.#state.companion = { state: "confused", bubble: "截止时间格式无效，未保存修改。" };
+      this.#save();
+      return this.snapshot();
+    }
+    if (patch.snoozedUntil !== undefined && !isValidDateString(patch.snoozedUntil)) {
+      this.#state.companion = { state: "confused", bubble: "稍后提醒时间无效，未保存修改。" };
+      this.#save();
+      return this.snapshot();
+    }
     this.#state.items = this.#state.items.map((item) => item.id === id ? { ...item, ...patch, updatedAt: new Date().toISOString() } : item);
     const updated = this.#state.items.find((item) => item.id === id);
     if (updated?.completed) this.#state.companion = { state: "celebrating", bubble: "完成得很干脆。" };
@@ -141,10 +130,18 @@ export class ChroniStore {
     }
     const existing = this.#state.items.filter((item) => item.sourceId !== sourceId);
     const accepted = mergeNewItems(existing, items.map((item) => ({ ...item, sourceId })));
-    const itemIds = accepted.filter((item) => item.sourceId === sourceId).map((item) => item.id);
+    const itemIds = itemIdsForCandidates(accepted, items);
     this.#state.items = accepted;
     this.#state.sources = this.#state.sources.map((record) => record.id === sourceId
-      ? { ...record, itemIds, updatedAt: new Date().toISOString(), lastExtractedAt: new Date().toISOString() }
+      ? {
+        ...record,
+        itemIds,
+        extractionStatus: itemIds.length ? "success" : "duplicate",
+        lastError: undefined,
+        summary: itemIds.length ? `${record.sourceName}，重新识别 ${itemIds.length} 条日程` : `${record.sourceName}，重新识别结果已存在`,
+        updatedAt: new Date().toISOString(),
+        lastExtractedAt: new Date().toISOString(),
+      }
       : record);
     this.#state.companion = itemIds.length
       ? { state: "success", bubble: message }
@@ -153,7 +150,38 @@ export class ChroniStore {
     return this.snapshot();
   }
 
+  markSourceFailed(sourceId: string, reason: string): ChroniSnapshot {
+    let found = false;
+    this.#state.sources = this.#state.sources.map((record) => {
+      if (record.id !== sourceId) return record;
+      found = true;
+      return {
+        ...record,
+        extractionStatus: "failed",
+        lastError: reason,
+        summary: `${record.sourceName}，重新识别失败`,
+        updatedAt: new Date().toISOString(),
+        lastExtractedAt: new Date().toISOString(),
+      };
+    });
+    this.#state.companion = found
+      ? { state: "confused", bubble: reason }
+      : { state: "confused", bubble: "找不到原始输入，无法重新识别。" };
+    this.#save();
+    return this.snapshot();
+  }
+
   updatePreferences(patch: ChroniPreferencesPatch): ChroniSnapshot {
+    if (patch.quietHoursStart !== undefined && !isValidClockTime(patch.quietHoursStart)) {
+      this.#state.companion = { state: "confused", bubble: "勿扰时间格式无效，未保存修改。" };
+      this.#save();
+      return this.snapshot();
+    }
+    if (patch.quietHoursEnd !== undefined && !isValidClockTime(patch.quietHoursEnd)) {
+      this.#state.companion = { state: "confused", bubble: "勿扰时间格式无效，未保存修改。" };
+      this.#save();
+      return this.snapshot();
+    }
     this.#state.preferences = {
       ...this.#state.preferences,
       ...patch,
@@ -191,21 +219,23 @@ export class ChroniStore {
   }
 
   #load(): StoredState {
-    if (!existsSync(this.filePath)) return defaultState;
+    if (!existsSync(this.filePath)) return createDefaultState();
     try {
       const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<StoredState>;
+      const fallback = createDefaultState();
+      const defaultPreferences = createDefaultPreferences();
       return {
-        items: Array.isArray(parsed.items) ? parsed.items : defaultState.items,
-        sources: Array.isArray(parsed.sources) ? parsed.sources as SourceRecord[] : defaultState.sources,
+        items: Array.isArray(parsed.items) ? parsed.items : fallback.items,
+        sources: Array.isArray(parsed.sources) ? (parsed.sources as SourceRecord[]).map(normalizeSourceRecord) : fallback.sources,
         preferences: {
           ...defaultPreferences,
           ...(parsed.preferences ?? {}),
           llm: { ...defaultPreferences.llm, ...(parsed.preferences?.llm ?? {}) },
         },
-        companion: parsed.companion?.state ? parsed.companion as StoredState["companion"] : defaultState.companion,
+        companion: parsed.companion?.state ? parsed.companion as StoredState["companion"] : fallback.companion,
       };
     } catch {
-      return defaultState;
+      return createDefaultState();
     }
   }
 
@@ -217,14 +247,47 @@ export class ChroniStore {
   }
 }
 
-export function sourceRecordFromInput(input: ExtractedInput): SourceRecord {
+function createDefaultPreferences(): ChroniPreferences {
+  return {
+    companionEnabled: true,
+    companionStyle: "classic",
+    remindersEnabled: true,
+    quietHoursEnabled: false,
+    quietHoursStart: "22:30",
+    quietHoursEnd: "08:00",
+    hotkey: "Ctrl+Shift+C",
+    llm: {
+      enabled: false,
+      provider: "openai-compatible",
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "",
+      model: "gpt-4.1-mini",
+    },
+  };
+}
+
+function createDefaultState(): StoredState {
+  return {
+    items: [],
+    sources: [],
+    preferences: createDefaultPreferences(),
+    companion: {
+      state: "idle",
+      bubble: "把 DDL 文件、截图或文字拖给我。",
+    },
+  };
+}
+
+export function sourceRecordFromInput(input: ExtractedInput, status: SourceExtractionStatus = "success", lastError?: string): SourceRecord {
   const now = new Date().toISOString();
   return {
     id: `source-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     sourceName: input.sourceName,
     sourceType: input.sourceType,
     text: input.text,
-    summary: `${input.sourceName}，抽取 ${input.text.length} 字`,
+    summary: status === "failed" ? `${input.sourceName}，识别失败` : `${input.sourceName}，抽取 ${input.text.length} 字`,
+    extractionStatus: status,
+    lastError,
     createdAt: now,
     updatedAt: now,
     lastExtractedAt: now,
@@ -250,6 +313,7 @@ export function visibleItems(items: DdlItem[], limit = 6): DdlItem[] {
 
 export function companionStateForItems(items: DdlItem[]): { state: CompanionState; bubble: string } {
   const active = items.filter((item) => !item.completed);
+  if (!items.length) return { state: "idle", bubble: "把 DDL 文件、截图或文字拖给我。" };
   if (!active.length) return { state: "celebrating", bubble: "今天暂时没有紧急 DDL。" };
   const first = [...active].sort(compareDdlItems)[0];
   const hours = (new Date(first.dueAt).getTime() - Date.now()) / 3_600_000;
@@ -296,9 +360,24 @@ function mergeNewItems(existing: DdlItem[], candidates: DdlItem[]): DdlItem[] {
   return [...existing, ...accepted];
 }
 
-function nextDateAt(daysFromNow: number, hour: number, minute: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + daysFromNow);
-  date.setHours(hour, minute, 0, 0);
-  return date.toISOString();
+function itemIdsForCandidates(items: DdlItem[], candidates: DdlItem[]): string[] {
+  const byKey = new Map(items.map((item) => [dedupeKey(item), item.id]));
+  return [...new Set(candidates.map((item) => byKey.get(dedupeKey(item))).filter((id): id is string => !!id))];
+}
+
+function isValidDateString(value: string): boolean {
+  return typeof value === "string" && !Number.isNaN(new Date(value).getTime());
+}
+
+function isValidClockTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function normalizeSourceRecord(source: SourceRecord): SourceRecord {
+  return {
+    ...source,
+    extractionStatus: source.extractionStatus ?? "success",
+    itemIds: Array.isArray(source.itemIds) ? source.itemIds : [],
+    lastExtractedAt: source.lastExtractedAt ?? source.updatedAt ?? source.createdAt ?? new Date().toISOString(),
+  };
 }

@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, type BrowserWindowConstructorOptions, type NativeImage } from "electron";
+import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type NativeImage } from "electron";
 import { join } from "node:path";
 import type { ChroniPreferences, ChroniView } from "./shared/types.js";
 
@@ -59,18 +59,16 @@ export function createAppWindows(): void {
 
 export function createTray(): void {
   windows.tray = new Tray(createTrayIcon());
-  const menu = Menu.buildFromTemplate([
-    { label: "打开控制中心", click: () => showControlCenter() },
-    { label: "显示桌宠", click: () => windows.pet?.show() },
-    { label: "隐藏桌宠", click: () => windows.pet?.hide() },
-    { label: "显示日程表", click: () => showSchedule(true, true) },
-    { label: "隐藏日程表", click: () => hideSchedule() },
-    { type: "separator" },
-    { label: "退出 Chroni", click: () => app.quit() },
-  ]);
+  const menu = Menu.buildFromTemplate(appMenuTemplate());
   windows.tray.setToolTip("Chroni");
   windows.tray.setContextMenu(menu);
   windows.tray.on("click", () => showControlCenter());
+}
+
+export function showPetMenu(source?: BrowserWindow | null): void {
+  Menu.buildFromTemplate(appMenuTemplate()).popup({
+    window: source ?? windows.pet,
+  });
 }
 
 export function showControlCenter(): void {
@@ -257,4 +255,17 @@ function snapWindowToEdge(win: BrowserWindow): void {
 function createTrayIcon(): NativeImage {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="8" fill="#243b53"/><path d="M8 17h9l-2 7 9-11h-9l2-6z" fill="#f8d66d"/></svg>`;
   return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+}
+
+function appMenuTemplate(): MenuItemConstructorOptions[] {
+  return [
+    { label: "查看日程", click: () => showSchedule(true, true) },
+    { label: "打开控制中心", click: () => showControlCenter() },
+    { type: "separator" },
+    { label: "显示桌宠", click: () => windows.pet?.showInactive() },
+    { label: "隐藏桌宠", click: () => windows.pet?.hide() },
+    { label: "隐藏日程表", click: () => hideSchedule() },
+    { type: "separator" },
+    { label: "退出 Chroni", click: () => app.quit() },
+  ];
 }

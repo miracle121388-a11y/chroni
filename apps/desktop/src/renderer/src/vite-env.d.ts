@@ -5,6 +5,7 @@ import type { ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePaylo
 declare global {
   interface Window {
     chroni: {
+      platform: "darwin" | "win32" | "linux" | string;
       getSnapshot(): Promise<ChroniSnapshot>;
       extract(payload: IntakePayload): Promise<ExtractResult>;
       intake(payload: IntakePayload): Promise<IntakeResult>;
@@ -15,8 +16,10 @@ declare global {
       updatePreferences(patch: ChroniPreferencesPatch): Promise<ChroniSnapshot>;
       quickAdd(text: string): Promise<IntakeResult>;
       openControlCenter(): Promise<void>;
+      openPetMenu(): Promise<void>;
       showSchedule(expanded: boolean): Promise<void>;
       reprocessSource(sourceId: string): Promise<IntakeResult>;
+      updateSourceText(sourceId: string, text: string): Promise<ChroniSnapshot>;
       openStorage(): Promise<void>;
       dragWindow(dx: number, dy: number): void;
       snapWindow(): void;

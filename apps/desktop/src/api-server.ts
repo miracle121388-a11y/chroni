@@ -3,14 +3,22 @@ import type { ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch }
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniStore } from "./store.js";
 
-type SnapshotCallback = (snapshot: ChroniSnapshot) => void;
+type SnapshotUpdateReason = "data" | "preferences";
+type SnapshotCallback = (snapshot: ChroniSnapshot, reason: SnapshotUpdateReason) => void;
+
+class HttpError extends Error {
+  constructor(readonly statusCode: number, message: string) {
+    super(message);
+  }
+}
 
 export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCallback): Server {
   const server = createServer(async (request, response) => {
     try {
       await route(request, response, store, onSnapshot);
     } catch (error) {
-      sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+      const status = error instanceof HttpError ? error.statusCode : 500;
+      sendJson(response, status, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
   const configuredPort = Number(process.env.CHRONI_API_PORT || 8765);
@@ -83,7 +91,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   if (request.method === "POST" && pathname === "/api/intake") {
     const payload = await readJson<IntakePayload>(request);
     const result = await processIntake(payload, store);
-    onSnapshot(result.snapshot);
+    onSnapshot(result.snapshot, "data");
     sendJson(response, result.ok ? 200 : 422, result);
     return;
   }
@@ -91,28 +99,28 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     const id = decodeURIComponent(pathname.slice("/api/items/".length));
     const patch = await readJson<ItemPatch>(request);
     const snapshot = store.updateItem(id, patch);
-    onSnapshot(snapshot);
+    onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "DELETE" && pathname.startsWith("/api/items/")) {
     const id = decodeURIComponent(pathname.slice("/api/items/".length));
     const snapshot = store.deleteItem(id);
-    onSnapshot(snapshot);
+    onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "PATCH" && pathname === "/api/preferences") {
     const patch = await readJson<ChroniPreferencesPatch>(request);
     const snapshot = store.updatePreferences(patch);
-    onSnapshot(snapshot);
+    onSnapshot(snapshot, "preferences");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "POST" && pathname.startsWith("/api/sources/") && pathname.endsWith("/reprocess")) {
     const id = decodeURIComponent(pathname.slice("/api/sources/".length, -"/reprocess".length));
     const result = await reprocessSource(id, store);
-    onSnapshot(result.snapshot);
+    onSnapshot(result.snapshot, "data");
     sendJson(response, result.ok ? 200 : 422, result);
     return;
   }
@@ -137,8 +145,12 @@ async function readJson<T>(request: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw.trim()) throw new Error("Request body must be JSON.");
-  return JSON.parse(raw) as T;
+  if (!raw.trim()) throw new HttpError(400, "Request body must be JSON.");
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new HttpError(400, "Request body must be valid JSON.");
+  }
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {

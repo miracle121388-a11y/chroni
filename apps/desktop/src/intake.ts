@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, extname } from "node:path";
 import mammoth from "mammoth";
 import readXlsxFile from "read-excel-file/node";
-import type { DdlItem, ChroniInputFile, ChroniLlmSettings, ExtractResult, ExtractedInput, Importance, IntakePayload, IntakeResult } from "./shared/types.js";
+import type { DdlItem, ChroniInputFile, ChroniLlmSettings, ExtractResult, ExtractedFailure, ExtractedInput, Importance, IntakePayload, IntakeResult } from "./shared/types.js";
 import type { ChroniStore } from "./store.js";
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
@@ -29,11 +29,15 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
   store.setCompanion("processing", "正在识别 DDL...");
   const result = await extractPayload(payload, { llm: store.snapshot().preferences.llm });
   if (!result.ok) {
+    const fallbackFailures = result.failures.length ? [] : fallbackExtractedInputs(payload, result.extracted);
+    store.recordSourceFailure(fallbackFailures, result.reason);
+    recordExtractionFailures(store, result.failures);
     const snapshot = store.setCompanion("confused", result.reason);
     return { ok: false, reason: result.reason, snapshot };
   }
 
-  const snapshot = store.addItems(result.items, result.message, result.extracted);
+  let snapshot = store.addItems(result.items, result.message, result.extracted);
+  snapshot = recordExtractionFailures(store, result.failures) ?? snapshot;
   return { ok: true, created: result.items, message: snapshot.companion.bubble, snapshot };
 }
 
@@ -46,7 +50,7 @@ export async function reprocessSource(sourceId: string, store: ChroniStore): Pro
   store.setCompanion("processing", "正在重新识别来源...");
   const result = await extractPayload({ kind: "text", text: source.text }, { llm: store.snapshot().preferences.llm });
   if (!result.ok) {
-    const snapshot = store.setCompanion("confused", result.reason);
+    const snapshot = store.markSourceFailed(sourceId, result.reason);
     return { ok: false, reason: result.reason, snapshot };
   }
   const nextItems = result.items.map((item) => ({
@@ -60,13 +64,20 @@ export async function reprocessSource(sourceId: string, store: ChroniStore): Pro
 
 export async function extractPayload(payload: IntakePayload, options: ExtractOptions = {}): Promise<ExtractResult> {
   const extracted: ExtractedInput[] = [];
+  const failures: ExtractedFailure[] = [];
   try {
     if (payload.kind === "text") {
       const text = payload.text?.trim() ?? "";
-      if (!text) return { ok: false, reason: "输入内容为空。", extracted, items: [] };
+      if (!text) return { ok: false, reason: "输入内容为空。", extracted, failures, items: [] };
       extracted.push({ sourceName: "直接文本", sourceType: "text", text });
     } else {
-      extracted.push(...await extractFromFiles(payload.files ?? []));
+      const fileResult = await extractFromFilesWithFailures(payload.files ?? []);
+      extracted.push(...fileResult.extracted);
+      failures.push(...fileResult.failures);
+      if (!extracted.length && failures.length) {
+        const reason = failures.length === 1 ? failures[0].reason : `${failures.length} 个文件无法读取或不支持。`;
+        return { ok: false, reason, extracted, failures, items: [] };
+      }
     }
 
     const ruleItems = extracted.flatMap((input) => extractDdlItemsFromText(input.text, input.sourceName));
@@ -78,16 +89,17 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
     const items = llmItems.length ? llmItems : ruleItems;
     if (!items.length) {
       if (llmError && isLlmEnabled(options.llm)) {
-        return { ok: false, reason: `模型或本地服务不可用：${llmError}`, extracted, items: [] };
+        return { ok: false, reason: `模型或本地服务不可用：${llmError}`, extracted, failures, items: [] };
       }
       if (hasPossibleTaskWithoutDeadline(extracted.map((input) => input.text).join("\n"))) {
-        return { ok: false, reason: "关键信息不足：没有明确截止时间。", extracted, items: [] };
+        return { ok: false, reason: "关键信息不足：没有明确截止时间。", extracted, failures, items: [] };
       }
-      return { ok: false, reason: "没有识别到明确 DDL。", extracted, items: [] };
+      return { ok: false, reason: "没有识别到明确 DDL。", extracted, failures, items: [] };
     }
     return {
       ok: true,
       extracted,
+      failures,
       items: mergeDuplicateItems(items).slice(0, 12),
       message: items.length === 1 ? "已加入 1 条日程。" : `已加入 ${Math.min(items.length, 12)} 条日程。`,
     };
@@ -96,9 +108,18 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
       ok: false,
       reason: error instanceof Error ? error.message : String(error),
       extracted,
+      failures,
       items: [],
     };
   }
+}
+
+function recordExtractionFailures(store: ChroniStore, failures: ExtractedFailure[]) {
+  let snapshot;
+  for (const failure of failures) {
+    snapshot = store.recordSourceFailure([failure], failure.reason);
+  }
+  return snapshot;
 }
 
 function isLlmEnabled(settings?: ChroniLlmSettings): boolean {
@@ -107,6 +128,23 @@ function isLlmEnabled(settings?: ChroniLlmSettings): boolean {
 
 function hasPossibleTaskWithoutDeadline(text: string): boolean {
   return /(作业|报告|提交|完成|ddl|deadline|due|考试|答辩|实验|汇报|presentation|quiz|任务|提醒)/i.test(text);
+}
+
+function fallbackExtractedInputs(payload: IntakePayload, extracted: ExtractedInput[]): ExtractedInput[] {
+  if (extracted.length) return extracted;
+  if (payload.kind === "text") {
+    const text = payload.text?.trim() ?? "";
+    return text ? [{ sourceName: "直接文本", sourceType: "text", text }] : [];
+  }
+  return (payload.files ?? []).map((file) => {
+    const name = file.name || (file.path ? basename(file.path) : "未命名文件");
+    const extension = extname(name || file.path || "").toLowerCase();
+    return {
+      sourceName: name,
+      sourceType: extension ? extension.slice(1) : "unknown",
+      text: "",
+    };
+  });
 }
 
 async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?: ChroniLlmSettings): Promise<DdlItem[]> {
@@ -187,12 +225,34 @@ function normalizeBaseUrl(value: string): string {
 }
 
 export async function extractFromFiles(files: ChroniInputFile[]): Promise<ExtractedInput[]> {
+  const result = await extractFromFilesWithFailures(files);
+  if (!result.extracted.length && result.failures.length) throw new Error(result.failures[0].reason);
+  return result.extracted;
+}
+
+async function extractFromFilesWithFailures(files: ChroniInputFile[]): Promise<{ extracted: ExtractedInput[]; failures: ExtractedFailure[] }> {
   if (!files.length) throw new Error("没有收到可读取的文件。");
-  const results: ExtractedInput[] = [];
+  const extracted: ExtractedInput[] = [];
+  const failures: ExtractedFailure[] = [];
   for (const file of files) {
-    results.push(await extractSingleFile(file));
+    try {
+      extracted.push(await extractSingleFile(file));
+    } catch (error) {
+      failures.push(failureFromFile(file, error instanceof Error ? error.message : String(error)));
+    }
   }
-  return results;
+  return { extracted, failures };
+}
+
+function failureFromFile(file: ChroniInputFile, reason: string): ExtractedFailure {
+  const name = file.name || (file.path ? basename(file.path) : "未命名文件");
+  const extension = extname(name || file.path || "").toLowerCase();
+  return {
+    sourceName: name,
+    sourceType: extension ? extension.slice(1) : "unknown",
+    text: "",
+    reason,
+  };
 }
 
 export function extractDdlItemsFromText(text: string, sourceName = "输入内容"): DdlItem[] {
@@ -225,20 +285,25 @@ async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput>
 
   if (plainTextExtensions.has(extension)) {
     if (buffer.length > maxTextBytes) throw new Error(`文本文件过大：${name}`);
-    return { sourceName: name, sourceType, text: textFromBuffer(buffer) };
+    const text = textFromBuffer(buffer);
+    if (!text.trim()) throw new Error(`文件没有可读取文本：${name}`);
+    return { sourceName: name, sourceType, text };
   }
   if (extension === ".docx") {
     const result = await mammoth.extractRawText({ buffer });
+    if (!result.value.trim()) throw new Error(`文件没有可读取文本：${name}`);
     return { sourceName: name, sourceType, text: result.value };
   }
   if (extension === ".pdf") {
     const mod = await import("pdf-parse") as unknown as { default: (data: Buffer) => Promise<{ text: string }> };
     const result = await mod.default(buffer);
+    if (!result.text.trim()) throw new Error(`文件没有可读取文本：${name}`);
     return { sourceName: name, sourceType, text: result.text };
   }
   if (spreadsheetExtensions.has(extension)) {
     const rows = await readXlsxFile(buffer) as unknown as unknown[][];
     const text = rows.map((row) => row.map((cell: unknown) => cell instanceof Date ? cell.toISOString() : String(cell ?? "")).join(", ")).join("\n");
+    if (!text.trim()) throw new Error(`文件没有可读取文本：${name}`);
     return { sourceName: name, sourceType, text };
   }
   if (imageExtensions.has(extension)) {
@@ -287,9 +352,9 @@ export function shortTitle(text: string): string {
   const cleaned = text
     .replace(/(截止|截至|ddl|deadline|due|提交|完成|之前|前|到期|提醒|请在|需要|任务)[:：]*/gi, " ")
     .replace(/\d{4}[年/-]\d{1,2}[月/-]\d{1,2}日?/g, " ")
-    .replace(/\d{1,2}[月/-]\d{1,2}日?/g, " ")
+    .replace(/\d{1,2}[月/.-]\d{1,2}日?/g, " ")
     .replace(/\d{1,2}[:：]\d{2}/g, " ")
-    .replace(/(明天|后天|今天|今晚|上午|下午|晚上|中午|周[一二三四五六日天]|星期[一二三四五六日天])/g, " ")
+    .replace(/(明天|后天|今天|今晚|上午|下午|晚上|中午|下个?周[一二三四五六日天]|下个?星期[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天])/g, " ")
     .replace(/^[,，、:：\s]+|[,，、:：\s]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -328,10 +393,10 @@ function mergeDuplicateItems(items: DdlItem[]): DdlItem[] {
 function dateFromText(text: string): string | null {
   const now = new Date();
   const normalized = text.replace(/\s+/g, " ");
-  const full = normalized.match(/(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})日?(?:\s*(上午|下午|晚上|中午)?\s*(\d{1,2})(?:[:：点](\d{2})?)?)?/);
+  const full = normalized.match(/(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?(?:\s*(上午|下午|晚上|中午)?\s*(\d{1,2})(?:[:：点](\d{2})?)?)?/);
   if (full) return toIso(Number(full[1]), Number(full[2]), Number(full[3]), full[5], full[6], full[4]);
 
-  const partial = normalized.match(/(\d{1,2})[月/-](\d{1,2})日?(?:\s*(上午|下午|晚上|中午)?\s*(\d{1,2})(?:[:：点](\d{2})?)?)?/);
+  const partial = normalized.match(/(\d{1,2})[月/.-](\d{1,2})日?(?:\s*(上午|下午|晚上|中午)?\s*(\d{1,2})(?:[:：点](\d{2})?)?)?/);
   if (partial) {
     const month = Number(partial[1]);
     const day = Number(partial[2]);
@@ -350,6 +415,9 @@ function dateFromText(text: string): string | null {
   const dayMatch = normalized.match(/(\d+)\s*天后/);
   if (dayMatch) return relativeDate(Number(dayMatch[1]), normalized);
 
+  const nextWeek = normalized.match(/下(?:个)?(?:周|星期)([一二三四五六日天])/);
+  if (nextWeek) return nextWeekday(nextWeek[1], normalized, true);
+
   const weekday = normalized.match(/(?:周|星期)([一二三四五六日天])/);
   if (weekday) return nextWeekday(weekday[1], normalized);
 
@@ -364,11 +432,14 @@ function relativeDate(days: number, text: string): string {
   return date.toISOString();
 }
 
-function nextWeekday(dayText: string, text: string): string {
+function nextWeekday(dayText: string, text: string, forceNextWeek = false): string {
   const target = "一二三四五六日天".indexOf(dayText);
   const targetDay = target >= 6 ? 0 : target + 1;
   const date = new Date();
-  const diff = (targetDay - date.getDay() + 7) % 7 || 7;
+  const currentDay = date.getDay();
+  const diff = forceNextWeek
+    ? (((1 - currentDay + 7) % 7) || 7) + (targetDay === 0 ? 6 : targetDay - 1)
+    : (targetDay - currentDay + 7) % 7 || 7;
   date.setDate(date.getDate() + diff);
   const { hour, minute } = parseTime(text);
   date.setHours(hour, minute, 0, 0);

@@ -16,6 +16,10 @@ export type Importance = "high" | "medium" | "low";
 
 export type ServiceState = "ready" | "limited" | "unavailable";
 
+export type SourceExtractionStatus = "success" | "failed" | "duplicate";
+
+export type CompanionStyle = "classic" | "mint" | "sunrise";
+
 export type DdlItem = {
   id: string;
   title: string;
@@ -36,6 +40,8 @@ export type SourceRecord = {
   sourceType: string;
   text: string;
   summary: string;
+  extractionStatus: SourceExtractionStatus;
+  lastError?: string;
   createdAt: string;
   updatedAt: string;
   lastExtractedAt: string;
@@ -44,6 +50,7 @@ export type SourceRecord = {
 
 export type ChroniPreferences = {
   companionEnabled: boolean;
+  companionStyle: CompanionStyle;
   remindersEnabled: boolean;
   quietHoursEnabled: boolean;
   quietHoursStart: string;
@@ -105,9 +112,13 @@ export type ExtractedInput = {
   text: string;
 };
 
+export type ExtractedFailure = ExtractedInput & {
+  reason: string;
+};
+
 export type ExtractResult =
-  | { ok: true; extracted: ExtractedInput[]; items: DdlItem[]; message: string }
-  | { ok: false; reason: string; extracted: ExtractedInput[]; items: [] };
+  | { ok: true; extracted: ExtractedInput[]; failures: ExtractedFailure[]; items: DdlItem[]; message: string }
+  | { ok: false; reason: string; extracted: ExtractedInput[]; failures: ExtractedFailure[]; items: [] };
 
 export type IntakeResult =
   | { ok: true; created: DdlItem[]; message: string; snapshot: ChroniSnapshot }

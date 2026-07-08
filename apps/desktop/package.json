@@ -15,6 +15,7 @@
     "build:renderer": "vite build",
     "build": "pnpm run build:main && pnpm run build:renderer",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
+    "test": "pnpm run build:main && node --test test/*.test.mjs",
     "package": "pnpm run build && electron-builder"
   },
   "dependencies": {

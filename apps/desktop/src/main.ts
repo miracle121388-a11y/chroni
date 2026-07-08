@@ -1,9 +1,9 @@
-import { app, globalShortcut, ipcMain, Notification, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, Notification, shell } from "electron";
 import { startChroniApiServer } from "./api-server.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
 import { companionStateForItems, ChroniStore } from "./store.js";
-import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showSchedule, toggleScheduleSurface } from "./windows.js";
+import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
 
 let store: ChroniStore;
 
@@ -23,7 +23,11 @@ if (!gotLock) {
     createTray();
     applyPreferences(store.snapshot().preferences);
     registerHotkey();
-    startChroniApiServer(store, (snapshot) => {
+    startChroniApiServer(store, (snapshot, reason) => {
+      if (reason === "preferences") {
+        applyPreferences(snapshot.preferences);
+        registerHotkey();
+      }
       broadcast("chroni:snapshot-updated", snapshot);
       refreshScheduleAfterUpdate();
     });
@@ -47,6 +51,7 @@ function installIpc(): void {
   ipcMain.handle("chroni:snapshot", () => store.snapshot());
   ipcMain.handle("chroni:extract", async (_event, payload: IntakePayload) => extractPayload(payload, { llm: store.snapshot().preferences.llm }));
   ipcMain.handle("chroni:intake", async (_event, payload: IntakePayload) => {
+    broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
     const result = await processIntake(payload, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
     refreshScheduleAfterUpdate();
@@ -87,17 +92,25 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:quick-add", async (_event, text: string) => {
+    broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
     const result = await processIntake({ kind: "text", text }, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
     return result;
   });
   ipcMain.handle("chroni:open-control", () => showControlCenter());
+  ipcMain.handle("chroni:open-pet-menu", (event) => showPetMenu(BrowserWindow.fromWebContents(event.sender)));
   ipcMain.handle("chroni:show-schedule", (_event, expanded: boolean) => showSchedule(expanded));
   ipcMain.handle("chroni:source-reprocess", async (_event, sourceId: string) => {
+    broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在重新识别来源..."));
     const result = await reprocessSource(sourceId, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
     refreshScheduleAfterUpdate();
     return result;
+  });
+  ipcMain.handle("chroni:source-update-text", (_event, sourceId: string, text: string) => {
+    const snapshot = store.updateSourceText(sourceId, text);
+    broadcast("chroni:snapshot-updated", snapshot);
+    return snapshot;
   });
   ipcMain.handle("chroni:open-storage", () => shell.showItemInFolder(store.filePath));
 }
