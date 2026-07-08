@@ -17,7 +17,7 @@
     "check": "pnpm run typecheck && pnpm run build",
     "dev:mac": "pnpm --filter @chroni/desktop run dev",
     "open:mac": "open -n /Applications/Chroni.app",
-    "stop:mac": "osascript -e 'quit app \"Chroni\"' || pkill -x chroni || true"
+    "stop:mac": "osascript -e 'quit app \"Chroni\"' || pkill -x Chroni || true"
   },
   "workspaces": [
     "apps/*"
