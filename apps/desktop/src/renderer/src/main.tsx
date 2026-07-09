@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { fullScheduleSummary, visibleScheduleSummary } from "../../shared/schedule";
 import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, SourceRecord } from "../../shared/types";
 import "./styles.css";
 
@@ -89,11 +90,16 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
 
 function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   const items = useMemo(() => topVisibleItems(snapshot.items), [snapshot.items]);
-  const summary = useMemo(() => scheduleSummary(snapshot.items), [snapshot.items]);
+  const summary = useMemo(() => visibleScheduleSummary(snapshot.items), [snapshot.items]);
   const hiddenCount = activeVisibleCount(snapshot.items) - items.length;
+  const emptyText = activeVisibleCount(snapshot.items)
+    ? "近期没有需要提醒的 DDL，远期事项可在控制中心查看。"
+    : "暂无 DDL。把文件、截图或文字拖给桌宠，或在这里快速添加。";
   const [quickText, setQuickText] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [busyMessage, setBusyMessage] = useState("");
   const isWindowsDrawer = api.platform === "win32";
+  const isBusy = !!busyMessage;
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
@@ -104,11 +110,17 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   }, []);
 
   async function quickAdd() {
-    if (!quickText.trim()) return;
-    const result = await api.quickAdd(quickText);
-    setSnapshot(result.snapshot);
-    setFeedback(result.ok ? result.message : result.reason);
-    if (result.ok) setQuickText("");
+    if (!quickText.trim() || isBusy) return;
+    setBusyMessage("正在识别...");
+    setFeedback("");
+    try {
+      const result = await api.quickAdd(quickText);
+      setSnapshot(result.snapshot);
+      setFeedback(result.ok ? result.message : result.reason);
+      if (result.ok) setQuickText("");
+    } finally {
+      setBusyMessage("");
+    }
   }
 
   return (
@@ -141,16 +153,18 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
         <div className="quick-add">
           <input
             value={quickText}
+            disabled={isBusy}
             onChange={(event) => setQuickText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") void quickAdd();
             }}
             placeholder="快速添加：7月12日 23:59 课程报告"
           />
-          <button type="button" onClick={() => void quickAdd()}>＋</button>
+          <button type="button" disabled={isBusy} onClick={() => void quickAdd()}>＋</button>
         </div>
+        {busyMessage && <p className="inline-feedback info">{busyMessage}</p>}
         {feedback && <p className={`inline-feedback ${feedback.includes("已加入") ? "ok" : "warn"}`}>{feedback}</p>}
-        <DdlList items={items} setSnapshot={setSnapshot} compact emptyText="暂无 DDL。把文件、截图或文字拖给桌宠，或在这里快速添加。" onAction={setFeedback} />
+        <DdlList items={items} setSnapshot={setSnapshot} compact emptyText={emptyText} onAction={setFeedback} />
         {hiddenCount > 0 && <button className="more-link" type="button" onClick={() => void api.openControlCenter()}>还有 {hiddenCount} 条，打开轻量修正</button>}
       </section>
     </main>
@@ -191,9 +205,13 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
   const [feedback, setFeedback] = useState("");
   const [itemFilter, setItemFilter] = useState<"active" | "completed" | "all">("active");
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const [busyMessage, setBusyMessage] = useState("");
+  const manualInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileImportMode = useRef<"preview" | "fill">("preview");
-  const summary = useMemo(() => scheduleSummary(snapshot.items), [snapshot.items]);
+  const isBusy = !!busyMessage;
+  const isFirstRun = !snapshot.items.length && !snapshot.sources.length && !preview;
+  const summary = useMemo(() => fullScheduleSummary(snapshot.items), [snapshot.items]);
   const filteredItems = useMemo(() => {
     if (itemFilter === "completed") return snapshot.items.filter((item) => item.completed);
     if (itemFilter === "all") return snapshot.items;
@@ -201,33 +219,50 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
   }, [itemFilter, snapshot.items]);
 
   async function addManual() {
-    if (!manual.trim()) return;
-    const result = await api.quickAdd(manual);
-    setSnapshot(result.snapshot);
-    setFeedback(result.ok ? result.message : result.reason);
-    if (result.ok) setManual("");
+    if (!manual.trim() || isBusy) return;
+    setBusyMessage("正在识别...");
+    setFeedback("");
+    try {
+      const result = await api.quickAdd(manual);
+      setSnapshot(result.snapshot);
+      setFeedback(result.ok ? result.message : result.reason);
+      if (result.ok) setManual("");
+    } finally {
+      setBusyMessage("");
+    }
   }
 
   async function extractFiles(fileList: FileList | null, fill: boolean) {
+    if (isBusy) return;
     const files = await filesFromFileList(fileList);
     if (!files.length) return;
     const payload: IntakePayload = { kind: "files", files };
+    setBusyMessage(fill ? "正在填入日程..." : "正在预览抽取...");
+    setFeedback("");
     if (fill) {
-      const result = await api.intake(payload);
-      setSnapshot(result.snapshot);
-      setFeedback(result.ok ? result.message : result.reason);
-      setPreview(null);
-      setPreviewPayload(null);
+      try {
+        const result = await api.intake(payload);
+        setSnapshot(result.snapshot);
+        setFeedback(result.ok ? result.message : result.reason);
+        setPreview(null);
+        setPreviewPayload(null);
+      } finally {
+        setBusyMessage("");
+      }
       return;
     }
-    setPreview(await api.extract(payload));
-    setPreviewPayload(payload);
-    setFeedback("");
+    try {
+      setPreview(await api.extract(payload));
+      setPreviewPayload(payload);
+    } finally {
+      setBusyMessage("");
+    }
   }
 
   async function previewDroppedFiles(event: React.DragEvent) {
     event.preventDefault();
     setDraggingFiles(false);
+    if (isBusy) return;
     await extractFiles(event.dataTransfer.files, false);
   }
 
@@ -244,30 +279,45 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
         <span className={summary.overdue ? "alert" : ""}>{summary.overdue} 逾期</span>
         <span>{summary.today} 今日</span>
       </div>
+      {isFirstRun && (
+        <section className="start-panel">
+          <div>
+            <h3>先放进一个 DDL</h3>
+            <p>粘贴一句截止时间，或选择课程通知、截图、PDF 等文件。</p>
+          </div>
+          <div className="start-actions">
+            <button type="button" disabled={isBusy} onClick={() => manualInputRef.current?.focus()}>写一句</button>
+            <button type="button" disabled={isBusy} onClick={() => { fileImportMode.current = "preview"; fileInputRef.current?.click(); }}>选择文件</button>
+          </div>
+        </section>
+      )}
       <div className="manual-row">
         <input
+          ref={manualInputRef}
           value={manual}
+          disabled={isBusy}
           onChange={(event) => setManual(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") void addManual();
           }}
           placeholder="快速添加或重新识别：明天 18:00 交实验报告"
         />
-        <button type="button" onClick={() => void addManual()}>识别</button>
+        <button type="button" disabled={isBusy} onClick={() => void addManual()}>识别</button>
       </div>
+      {busyMessage && <p className="inline-feedback info">{busyMessage}</p>}
       {feedback && <p className={`inline-feedback ${feedback.includes("已加入") ? "ok" : "warn"}`}>{feedback}</p>}
       <div
-        className={`upload-box ${draggingFiles ? "dragging" : ""}`}
+        className={`upload-box ${draggingFiles ? "dragging" : ""} ${isBusy ? "busy" : ""}`}
         onDragOver={(event) => {
           event.preventDefault();
-          if (!draggingFiles) setDraggingFiles(true);
+          if (!draggingFiles && !isBusy) setDraggingFiles(true);
         }}
         onDragLeave={() => setDraggingFiles(false)}
         onDrop={(event) => void previewDroppedFiles(event)}
       >
-        <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => void extractFiles(event.target.files, fileImportMode.current === "fill")} accept={acceptedFileTypes()} />
-        <button type="button" onClick={() => { fileImportMode.current = "preview"; fileInputRef.current?.click(); }}>上传并预览抽取</button>
-        <button type="button" onClick={() => { fileImportMode.current = "fill"; fileInputRef.current?.click(); }}>直接填入日程</button>
+        <input ref={fileInputRef} type="file" multiple hidden disabled={isBusy} onChange={(event) => void extractFiles(event.target.files, fileImportMode.current === "fill")} accept={acceptedFileTypes()} />
+        <button type="button" disabled={isBusy} onClick={() => { fileImportMode.current = "preview"; fileInputRef.current?.click(); }}>上传并预览抽取</button>
+        <button type="button" disabled={isBusy} onClick={() => { fileImportMode.current = "fill"; fileInputRef.current?.click(); }}>直接填入日程</button>
         <p>可把文件拖到这里预览。支持 TXT、MD、CSV、JSON、ICS、HTML、DOCX、PDF、XLSX、PNG/JPG/WEBP/TIFF。</p>
       </div>
       {preview && (
@@ -293,17 +343,23 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
             </article>
           ))}
           {preview.ok && (
-            <button type="button" onClick={async () => {
-              const result = await api.intake(previewPayload ?? { kind: "text", text: preview.extracted.map((input) => input.text).join("\n") });
-              setSnapshot(result.snapshot);
-              setFeedback(result.ok ? result.message : result.reason);
-              setPreview(null);
-              setPreviewPayload(null);
+            <button type="button" disabled={isBusy} onClick={async () => {
+              if (isBusy) return;
+              setBusyMessage("正在填入日程...");
+              setFeedback("");
+              try {
+                const result = await api.intake(previewPayload ?? { kind: "text", text: preview.extracted.map((input) => input.text).join("\n") });
+                setSnapshot(result.snapshot);
+                setFeedback(result.ok ? result.message : result.reason);
+                setPreview(null);
+                setPreviewPayload(null);
+              } finally {
+                setBusyMessage("");
+              }
             }}>填入日程</button>
           )}
         </div>
       )}
-      <SourceHistory sources={snapshot.sources} setSnapshot={setSnapshot} />
       <div className="list-toolbar">
         <div>
           <h3>日程列表</h3>
@@ -315,7 +371,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
           <button className={itemFilter === "all" ? "active" : ""} type="button" onClick={() => setItemFilter("all")}>全部</button>
         </div>
       </div>
-      <DdlList items={filteredItems} sources={snapshot.sources} setSnapshot={setSnapshot} editable emptyText={itemFilter === "completed" ? "还没有完成记录。" : "暂时没有需要处理的 DDL。"} />
+      <DdlList items={filteredItems} sources={snapshot.sources} setSnapshot={setSnapshot} editable emptyText={itemFilter === "completed" ? "还没有完成记录。" : "暂时没有需要处理的 DDL。"} onAction={setFeedback} />
+      <SourceHistory sources={snapshot.sources} setSnapshot={setSnapshot} />
     </div>
   );
 }
@@ -456,24 +513,53 @@ function SourceHistory({ sources, setSnapshot }: { sources: SourceRecord[]; setS
 function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot: ViewProps["setSnapshot"] }) {
   const [draftText, setDraftText] = useState(source.text);
   const [feedback, setFeedback] = useState("");
+  const [busyMessage, setBusyMessage] = useState("");
+  const isBusy = !!busyMessage;
   useEffect(() => setDraftText(source.text), [source.text]);
 
-  async function saveText(): Promise<ChroniSnapshot> {
-    const snapshot = await api.updateSourceText(source.id, draftText);
-    setSnapshot(snapshot);
-    setFeedback("原文已保存。");
-    return snapshot;
+  async function saveText() {
+    if (isBusy) return;
+    setBusyMessage("正在保存...");
+    setFeedback("");
+    try {
+      const snapshot = await api.updateSourceText(source.id, draftText);
+      setSnapshot(snapshot);
+      setFeedback("原文已保存。");
+    } finally {
+      setBusyMessage("");
+    }
   }
 
   async function saveAndReprocess() {
-    await saveText();
-    const result = await api.reprocessSource(source.id);
-    setSnapshot(result.snapshot);
-    setFeedback(result.ok ? result.message : result.reason);
+    if (isBusy) return;
+    setBusyMessage("正在重新识别...");
+    setFeedback("");
+    try {
+      const snapshot = await api.updateSourceText(source.id, draftText);
+      setSnapshot(snapshot);
+      const result = await api.reprocessSource(source.id);
+      setSnapshot(result.snapshot);
+      setFeedback(result.ok ? result.message : result.reason);
+    } finally {
+      setBusyMessage("");
+    }
+  }
+
+  async function reprocessOnly() {
+    if (isBusy) return;
+    setBusyMessage("正在重新识别...");
+    setFeedback("");
+    try {
+      const result = await api.reprocessSource(source.id);
+      setSnapshot(result.snapshot);
+      setFeedback(result.ok ? result.message : result.reason);
+    } finally {
+      setBusyMessage("");
+    }
   }
 
   return (
-    <article className="source-row">
+    <article className={`source-row ${isBusy ? "busy" : ""}`}>
       <div>
         <b>{source.sourceName}</b>
         <span>
@@ -483,15 +569,15 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
         {source.lastError && <strong className="source-error">{source.lastError}</strong>}
         <details>
           <summary>{source.text.slice(0, 120) || "查看原文"}</summary>
-          <textarea className="source-textarea" value={draftText} onChange={(event) => setDraftText(event.target.value)} />
+          <textarea className="source-textarea" value={draftText} disabled={isBusy} onChange={(event) => setDraftText(event.target.value)} />
           <div className="source-detail-actions">
-            <button type="button" onClick={() => void saveText()}>保存原文</button>
-            <button type="button" onClick={() => void saveAndReprocess()}>保存并重新识别</button>
+            <button type="button" disabled={isBusy} onClick={() => void saveText()}>{busyMessage === "正在保存..." ? "保存中" : "保存原文"}</button>
+            <button type="button" disabled={isBusy} onClick={() => void saveAndReprocess()}>{busyMessage === "正在重新识别..." ? "识别中" : "保存并重新识别"}</button>
           </div>
-          {feedback && <p className="source-feedback">{feedback}</p>}
+          {(busyMessage || feedback) && <p className={`source-feedback ${busyMessage ? "busy" : ""}`}>{busyMessage || feedback}</p>}
         </details>
       </div>
-      <button type="button" onClick={() => void api.reprocessSource(source.id).then((result) => setSnapshot(result.snapshot))}>重新识别</button>
+      <button type="button" disabled={isBusy} onClick={() => void reprocessOnly()}>{busyMessage === "正在重新识别..." ? "识别中" : "重新识别"}</button>
     </article>
   );
 }
@@ -511,11 +597,14 @@ function DdlList({ items, sources = [], setSnapshot, compact = false, editable =
 function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlItem; source?: SourceRecord; setSnapshot: ViewProps["setSnapshot"]; editable?: boolean; onAction?(message: string): void }) {
   const urgency = urgencyTone(item);
   const [draft, setDraft] = useState(item);
+  const [busyAction, setBusyAction] = useState("");
   const fresh = isFreshItem(item);
   const snoozed = isSnoozed(item);
+  const isBusy = !!busyAction;
   useEffect(() => setDraft(item), [item]);
 
   async function update(patch: Partial<DdlItem>) {
+    if (isBusy) return;
     const snapshot = await api.updateItem(item.id, patch);
     setSnapshot(snapshot);
   }
@@ -527,37 +616,46 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
     void update({ dueAt: date.toISOString() });
   }
 
+  async function runItemAction(message: string, action: () => Promise<void>, doneMessage?: string) {
+    if (isBusy) return;
+    setBusyAction(message);
+    try {
+      await action();
+      if (doneMessage) onAction?.(doneMessage);
+    } finally {
+      setBusyAction("");
+    }
+  }
+
   async function completeItem() {
-    await update({ completed: true });
-    onAction?.("已完成。");
+    await runItemAction("正在完成", () => update({ completed: true }), "已完成。");
   }
 
   async function snoozeItem() {
-    await update({ snoozedUntil: new Date(Date.now() + 2 * 3_600_000).toISOString() });
-    onAction?.("已稍后提醒 2 小时。");
+    await runItemAction("正在稍后", () => update({ snoozedUntil: new Date(Date.now() + 2 * 3_600_000).toISOString() }), "已稍后提醒 2 小时。");
   }
 
   if (editable) {
     return (
-      <article className={`ddl-row edit tone-${urgency} ${snoozed ? "snoozed" : ""} ${item.completed ? "completed" : ""}`}>
-        <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} onBlur={() => void update({ title: draft.title })} />
-        <select value={draft.importance} onChange={(event) => void update({ importance: event.target.value as Importance })}>
+      <article className={`ddl-row edit tone-${urgency} ${snoozed ? "snoozed" : ""} ${item.completed ? "completed" : ""} ${isBusy ? "busy" : ""}`}>
+        <input value={draft.title} disabled={isBusy} onChange={(event) => setDraft({ ...draft, title: event.target.value })} onBlur={() => void update({ title: draft.title })} />
+        <select value={draft.importance} disabled={isBusy} onChange={(event) => void update({ importance: event.target.value as Importance })}>
           <option value="high">高</option>
           <option value="medium">中</option>
           <option value="low">低</option>
         </select>
-        <input type="datetime-local" value={toInputDate(draft.dueAt)} onChange={(event) => void updateDueAt(event.target.value)} />
+        <input type="datetime-local" value={toInputDate(draft.dueAt)} disabled={isBusy} onChange={(event) => void updateDueAt(event.target.value)} />
         <span className={`source-chip ${snoozed ? "snoozed-chip" : ""}`} title={item.sourceSummary}>{snoozed && item.snoozedUntil ? `稍后至 ${formatDue(item.snoozedUntil)}` : source?.sourceName ?? "手动"}</span>
-        {snoozed && <button type="button" onClick={() => void update({ snoozedUntil: undefined })}>取消稍后</button>}
-        <button type="button" onClick={() => void update({ completed: !item.completed })}>{item.completed ? "恢复" : "完成"}</button>
-        <button type="button" onClick={() => void api.deleteItem(item.id).then(setSnapshot)}>删除</button>
+        {snoozed && <button type="button" disabled={isBusy} onClick={() => void runItemAction("正在取消", () => update({ snoozedUntil: undefined }), "已取消稍后提醒。")}>{busyAction === "正在取消" ? "取消中" : "取消稍后"}</button>}
+        <button type="button" disabled={isBusy} onClick={() => void runItemAction("正在更新", () => update({ completed: !item.completed }), item.completed ? "已恢复为待处理。" : "已完成。")}>{busyAction === "正在更新" ? "处理中" : item.completed ? "恢复" : "完成"}</button>
+        <button type="button" disabled={isBusy} onClick={() => void runItemAction("正在删除", async () => setSnapshot(await api.deleteItem(item.id)), "已删除误识别事项。")}>{busyAction === "正在删除" ? "删除中" : "删除"}</button>
       </article>
     );
   }
 
   return (
-    <article className={`ddl-row tone-${urgency}`}>
-      <button className="check" type="button" title="完成" onClick={() => void completeItem()}>✓</button>
+    <article className={`ddl-row tone-${urgency} ${isBusy ? "busy" : ""}`}>
+      <button className="check" type="button" title="完成" disabled={isBusy} onClick={() => void completeItem()}>✓</button>
       <button className="row-main" type="button" onClick={() => void api.openControlCenter()}>
         <span className="title-line">
           <strong>{item.title}</strong>
@@ -567,7 +665,7 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
         <time>{formatDue(item.dueAt)}</time>
         <em>{remainingText(item.dueAt)}</em>
       </button>
-      <button className="snooze" type="button" title="稍后提醒" onClick={() => void snoozeItem()}>⏱</button>
+      <button className="snooze" type="button" title="稍后提醒" disabled={isBusy} onClick={() => void snoozeItem()}>⏱</button>
     </article>
   );
 }
@@ -606,6 +704,7 @@ function topVisibleItems(items: DdlItem[]): DdlItem[] {
   return [...items]
     .filter((item) => !item.completed)
     .filter((item) => !item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= now)
+    .filter((item) => isSchedulePopoverItem(item, now))
     .sort(compareItems)
     .slice(0, 6);
 }
@@ -618,24 +717,6 @@ function activeVisibleCount(items: DdlItem[]): number {
     .length;
 }
 
-function scheduleSummary(items: DdlItem[]) {
-  const now = Date.now();
-  const today = new Date();
-  return items.reduce((summary, item) => {
-    const due = new Date(item.dueAt);
-    const dueTime = due.getTime();
-    if (item.completed) {
-      summary.completed += 1;
-      return summary;
-    }
-    summary.active += 1;
-    if (dueTime < now) summary.overdue += 1;
-    if (sameLocalDay(due, today)) summary.today += 1;
-    if (dueTime >= now && dueTime <= now + 7 * 86_400_000) summary.upcoming += 1;
-    return summary;
-  }, { active: 0, completed: 0, overdue: 0, today: 0, upcoming: 0 });
-}
-
 function sourceStats(sources: SourceRecord[]) {
   return sources.reduce((stats, source) => {
     stats[source.extractionStatus] += 1;
@@ -643,12 +724,14 @@ function sourceStats(sources: SourceRecord[]) {
   }, { success: 0, duplicate: 0, failed: 0 });
 }
 
-function sameLocalDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
 function isFreshItem(item: DdlItem): boolean {
   return Date.now() - new Date(item.createdAt).getTime() <= 10 * 60_000;
+}
+
+function isSchedulePopoverItem(item: DdlItem, now: number): boolean {
+  const dueTime = new Date(item.dueAt).getTime();
+  if (Number.isNaN(dueTime)) return false;
+  return dueTime <= now + 7 * 86_400_000 || isFreshItem(item);
 }
 
 function isSnoozed(item: DdlItem): boolean {

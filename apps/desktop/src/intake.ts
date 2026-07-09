@@ -13,6 +13,7 @@ const unsupportedExtensions = new Set([".exe", ".dll", ".zip", ".rar", ".7z", ".
 
 const maxTextBytes = 2 * 1024 * 1024;
 const maxDocumentBytes = 18 * 1024 * 1024;
+const minimumOcrConfidence = 70;
 
 type ExtractOptions = {
   llm?: ChroniLlmSettings;
@@ -177,6 +178,7 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
             "字段结构固定：{\"items\":[{\"title\":\"短标题\",\"dueAt\":\"ISO-8601时间\",\"importance\":\"high|medium|low\",\"sourceSummary\":\"一句来源摘要\"}]}。",
             "title 控制在 16 个中文字符以内。",
             "dueAt 必须是可被 JavaScript Date 解析的 ISO-8601 字符串。",
+            "sourceSummary 必须直接截取自原文中的短片段，不要改写或总结。",
             "没有明确截止时间的内容不要输出。",
           ].join("\n"),
         },
@@ -193,8 +195,9 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
   const content = data.choices?.[0]?.message?.content ?? "";
   const parsed = parseLlmJson(content);
   const candidates = Array.isArray(parsed.items) ? parsed.items as LlmDdlCandidate[] : [];
+  const evidenceText = extracted.map((input) => input.text).join("\n");
   return candidates
-    .map((candidate) => itemFromLlmCandidate(candidate))
+    .map((candidate) => itemFromLlmCandidate(candidate, evidenceText))
     .filter((item): item is DdlItem => !!item);
 }
 
@@ -209,19 +212,36 @@ function parseLlmJson(content: string): { items?: unknown } {
   }
 }
 
-function itemFromLlmCandidate(candidate: LlmDdlCandidate): DdlItem | null {
+export function itemFromLlmCandidate(candidate: LlmDdlCandidate, evidenceText = ""): DdlItem | null {
   const title = String(candidate.title ?? "").trim().slice(0, 16);
   const dueAtRaw = String(candidate.dueAt ?? "").trim();
-  const dueAt = new Date(dueAtRaw);
-  if (!title || Number.isNaN(dueAt.getTime())) return null;
+  const sourceSummary = String(candidate.sourceSummary ?? title).slice(0, 180);
+  if (!title || !hasDeadlineIntent(`${title} ${sourceSummary}`)) return null;
+  if (evidenceText && !hasSourceEvidence(sourceSummary, evidenceText)) return null;
+  const dueAt = strictIsoDate(dueAtRaw);
+  if (!dueAt) return null;
   const importance = candidate.importance === "high" || candidate.importance === "medium" || candidate.importance === "low"
     ? candidate.importance
-    : importanceFromText(`${title} ${candidate.sourceSummary ?? ""}`);
-  return createItem(title, dueAt.toISOString(), String(candidate.sourceSummary ?? title).slice(0, 180), importance);
+    : importanceFromText(`${title} ${sourceSummary}`);
+  return createItem(title, dueAt.toISOString(), sourceSummary, importance);
 }
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function hasSourceEvidence(sourceSummary: string, evidenceText: string): boolean {
+  const summary = normalizeEvidenceText(sourceSummary);
+  const evidence = normalizeEvidenceText(evidenceText);
+  if (summary.length < 6) return false;
+  return evidence.includes(summary);
+}
+
+function normalizeEvidenceText(value: string): string {
+  return value
+    .replace(/\s+/g, "")
+    .replace(/[，。！？、；：,.!?:;()[\]【】《》"'“”‘’]/g, "")
+    .toLowerCase();
 }
 
 export async function extractFromFiles(files: ChroniInputFile[]): Promise<ExtractedInput[]> {
@@ -262,15 +282,25 @@ export function extractDdlItemsFromText(text: string, sourceName = "输入内容
   const candidates = candidateLines(normalized);
   const items = candidates
     .map((line) => {
-      const dueAt = dateFromText(line);
+      if (!hasDeadlineIntent(line)) return null;
+      const dueAt = safeDateFromText(line);
       if (!dueAt) return null;
       return createItem(shortTitle(line), dueAt, `${sourceName}: ${line.slice(0, 180)}`);
     })
     .filter((item): item is DdlItem => !!item);
 
   if (items.length) return items;
-  const dueAt = dateFromText(normalized);
+  if (!hasDeadlineIntent(normalized)) return [];
+  const dueAt = safeDateFromText(normalized);
   return dueAt ? [createItem(shortTitle(normalized), dueAt, `${sourceName}: ${normalized.slice(0, 180)}`)] : [];
+}
+
+function safeDateFromText(text: string): string | null {
+  try {
+    return dateFromText(text);
+  } catch {
+    return null;
+  }
 }
 
 async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput> {
@@ -286,33 +316,34 @@ async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput>
   if (plainTextExtensions.has(extension)) {
     if (buffer.length > maxTextBytes) throw new Error(`文本文件过大：${name}`);
     const text = textFromBuffer(buffer);
-    if (!text.trim()) throw new Error(`文件没有可读取文本：${name}`);
+    assertReliableExtractedText(text, name);
     return { sourceName: name, sourceType, text };
   }
   if (extension === ".docx") {
     const result = await mammoth.extractRawText({ buffer });
-    if (!result.value.trim()) throw new Error(`文件没有可读取文本：${name}`);
+    assertReliableExtractedText(result.value, name);
     return { sourceName: name, sourceType, text: result.value };
   }
   if (extension === ".pdf") {
     const mod = await import("pdf-parse") as unknown as { default: (data: Buffer) => Promise<{ text: string }> };
     const result = await mod.default(buffer);
-    if (!result.text.trim()) throw new Error(`文件没有可读取文本：${name}`);
+    assertReliableExtractedText(result.text, name);
     return { sourceName: name, sourceType, text: result.text };
   }
   if (spreadsheetExtensions.has(extension)) {
     const rows = await readXlsxFile(buffer) as unknown as unknown[][];
     const text = rows.map((row) => row.map((cell: unknown) => cell instanceof Date ? cell.toISOString() : String(cell ?? "")).join(", ")).join("\n");
-    if (!text.trim()) throw new Error(`文件没有可读取文本：${name}`);
+    assertReliableExtractedText(text, name);
     return { sourceName: name, sourceType, text };
   }
   if (imageExtensions.has(extension)) {
     const mod = await import("tesseract.js") as unknown as {
-      recognize: (image: Buffer | string, langs?: string) => Promise<{ data: { text: string } }>;
+      recognize: (image: Buffer | string, langs?: string) => Promise<{ data: { text: string; confidence?: number } }>;
     };
     const result = await mod.recognize(buffer, "chi_sim+eng");
     const text = result.data.text;
-    if (!text.trim()) throw new Error(`图片 OCR 失败：${name}`);
+    assertReliableExtractedText(text, name, "图片 OCR 失败");
+    if (!isReliableOcrResult(text, result.data.confidence)) throw new Error(`图片 OCR 置信度不足：${name}`);
     return { sourceName: name, sourceType, text };
   }
 
@@ -332,6 +363,28 @@ function textFromBuffer(buffer: Buffer): string {
   return text.includes("\u0000") ? buffer.toString("utf16le") : text;
 }
 
+function assertReliableExtractedText(text: string, name: string, emptyReason = "文件没有可读取文本"): void {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error(`${emptyReason}：${name}`);
+  if (!looksLikeReliableText(trimmed)) throw new Error(`文件文本无法可靠解析：${name}`);
+}
+
+function looksLikeReliableText(text: string): boolean {
+  if (text.length < 4) return false;
+  const replacementCount = (text.match(/\uFFFD/g) ?? []).length;
+  if (replacementCount / text.length > 0.02) return false;
+  const controlCount = (text.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g) ?? []).length;
+  if (controlCount / text.length > 0.01) return false;
+  const readableCount = (text.match(/[\p{Script=Han}A-Za-z0-9，。！？、；：,.!?:;()\[\]【】《》\s/-]/gu) ?? []).length;
+  return readableCount / text.length >= 0.55;
+}
+
+export function isReliableOcrResult(text: string, confidence?: number): boolean {
+  if (!looksLikeReliableText(text.trim())) return false;
+  if (typeof confidence !== "number" || Number.isNaN(confidence)) return false;
+  return confidence >= minimumOcrConfidence;
+}
+
 function normalizeText(text: string): string {
   return text
     .replace(/\r/g, "\n")
@@ -346,6 +399,10 @@ function candidateLines(text: string): string[] {
   const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
   const sentenceParts = lines.flatMap((line) => line.split(/[。；;.!?？]+/).map((part) => part.trim()).filter(Boolean));
   return [...new Set([...lines, ...sentenceParts])].filter((line) => line.length <= 280);
+}
+
+function hasDeadlineIntent(text: string): boolean {
+  return /(作业|报告|论文|实验|测验|小测|考试|期中|期末|答辩|面试|汇报|presentation|quiz|essay|paper|homework|assignment|project|ddl|deadline|due|截止|截至|提交|完成|上交|交付|deliverable|turn\s*in|submit)/i.test(text);
 }
 
 export function shortTitle(text: string): string {
@@ -447,7 +504,8 @@ function nextWeekday(dayText: string, text: string, forceNextWeek = false): stri
 }
 
 function parseTime(text: string): { hour: number; minute: number } {
-  const match = text.match(/(上午|下午|晚上|中午)?\s*(\d{1,2})(?:[:：点](\d{2})?)?/);
+  const match = text.match(/(上午|下午|晚上|中午)?\s*(\d{1,2})\s*[:：]\s*(\d{2})/)
+    ?? text.match(/(上午|下午|晚上|中午)?\s*(\d{1,2})\s*点\s*(?:(\d{1,2})\s*分?)?/);
   if (!match) return { hour: 23, minute: 59 };
   let hour = Number(match[2]);
   const minute = match[3] ? Number(match[3]) : 0;
@@ -461,7 +519,34 @@ function toIso(year: number, month: number, day: number, hourText?: string, minu
   const minute = minuteText ? Number(minuteText) : 59;
   if ((period === "下午" || period === "晚上") && hour < 12) hour += 12;
   if (period === "中午" && hour < 11) hour += 12;
+  if (!isValidDateParts(year, month, day, hour, minute)) throw new Error("无法解析截止时间。");
   const date = new Date(year, month - 1, day, hour, minute, 0, 0);
   if (Number.isNaN(date.getTime())) throw new Error("无法解析截止时间。");
   return date.toISOString();
+}
+
+function strictIsoDate(value: string): Date | null {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = match[6] ? Number(match[6]) : 0;
+  if (!isValidDateParts(year, month, day, hour, minute, second)) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isValidDateParts(year: number, month: number, day: number, hour: number, minute: number, second = 0): boolean {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day) || !Number.isInteger(hour) || !Number.isInteger(minute) || !Number.isInteger(second)) return false;
+  if (month < 1 || month > 12 || day < 1 || hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return false;
+  const date = new Date(year, month - 1, day, hour, minute, second, 0);
+  return date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day
+    && date.getHours() === hour
+    && date.getMinutes() === minute
+    && date.getSeconds() === second;
 }

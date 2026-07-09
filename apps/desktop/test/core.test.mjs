@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { extractDdlItemsFromText, processIntake, reprocessSource } from "../dist/intake.js";
+import { extractDdlItemsFromText, itemFromLlmCandidate, isReliableOcrResult, processIntake, reprocessSource } from "../dist/intake.js";
+import { visibleScheduleSummary } from "../dist/shared/schedule.js";
 import { ChroniStore } from "../dist/store.js";
 
 function withStore(fn) {
@@ -69,6 +70,33 @@ test("parses common compact and next-week deadline expressions", () => {
   assert.equal(new Date(nextWeek[0].dueAt).getHours(), 18);
 });
 
+test("relative deadlines use the explicit time rather than unrelated numbers", () => {
+  const items = extractDdlItemsFromText("阅读第2章，明天 18:00 提交读书笔记");
+
+  assert.equal(items.length, 1);
+  assert.equal(new Date(items[0].dueAt).getHours(), 18);
+  assert.equal(new Date(items[0].dueAt).getMinutes(), 0);
+});
+
+test("invalid calendar dates are not rolled into a different date", () => {
+  const items = extractDdlItemsFromText("2月31日 23:59 提交课程报告");
+
+  assert.equal(items.length, 0);
+});
+
+test("plain schedule dates without task intent are not converted to DDL", () => {
+  const items = extractDdlItemsFromText("课程安排：7月12日 第一讲 导论；7月19日 第二讲 阅读方法");
+
+  assert.equal(items.length, 0);
+});
+
+test("coursework dates with task intent are still converted to DDL", () => {
+  const items = extractDdlItemsFromText("7月12日 23:59 课程报告");
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].title, "课程报告");
+});
+
 test("new stores without existing state do not share mutated default data", async () => {
   const firstDir = mkdtempSync(join(tmpdir(), "chroni-test-"));
   const secondDir = mkdtempSync(join(tmpdir(), "chroni-test-"));
@@ -100,6 +128,28 @@ test("invalid item due date patches do not corrupt stored items", async () => {
   });
 });
 
+test("schedule popover summary excludes currently snoozed items", () => {
+  const now = new Date("2026-07-09T10:00:00.000Z");
+  const base = {
+    id: "ddl-1",
+    title: "课程报告",
+    importance: "medium",
+    dueAt: "2026-07-09T12:00:00.000Z",
+    sourceSummary: "测试",
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    completed: false,
+  };
+  const summary = visibleScheduleSummary([
+    { ...base, id: "visible" },
+    { ...base, id: "snoozed", snoozedUntil: "2026-07-09T13:00:00.000Z" },
+    { ...base, id: "completed", completed: true },
+  ], now);
+
+  assert.deepEqual(summary, { active: 1, completed: 1, overdue: 0, today: 1, upcoming: 1 });
+});
+
+
 test("empty local text files fail with a specific source record", async () => {
   await withStore(async (store) => {
     const result = await processIntake({
@@ -113,6 +163,67 @@ test("empty local text files fail with a specific source record", async () => {
     assert.equal(result.snapshot.sources[0].extractionStatus, "failed");
     assert.match(result.snapshot.sources[0].lastError ?? "", /没有可读取文本/);
   });
+});
+
+test("garbled text files fail instead of creating schedules from unreliable text", async () => {
+  await withStore(async (store) => {
+    const result = await processIntake({
+      kind: "files",
+      files: [{ name: "garbled.txt", contentBase64: Buffer.from([0xff, 0xfe, 0xfd, 0x00, 0xff, 0xfe]).toString("base64") }],
+    }, store);
+
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /无法可靠解析|没有可读取文本/);
+    assert.equal(result.snapshot.sources[0].sourceName, "garbled.txt");
+    assert.equal(result.snapshot.sources[0].extractionStatus, "failed");
+  });
+});
+
+test("ocr text must be readable and confident enough before schedule extraction", () => {
+  assert.equal(isReliableOcrResult("明天 18:00 提交课程报告", 82), true);
+  assert.equal(isReliableOcrResult("明天 18:00 提交课程报告", 69), false);
+  assert.equal(isReliableOcrResult("明天 18:00 提交课程报告", 32), false);
+  assert.equal(isReliableOcrResult("����\u0000??", 91), false);
+});
+
+test("llm candidates must still look like real deadline tasks", () => {
+  assert.equal(itemFromLlmCandidate({
+    title: "第一讲导论",
+    dueAt: "2026-07-12T23:59:00.000Z",
+    importance: "medium",
+    sourceSummary: "课程安排：7月12日 第一讲 导论",
+  }), null);
+
+  assert.equal(itemFromLlmCandidate({
+    title: "课程报告",
+    dueAt: "2026-02-31T23:59:00.000Z",
+    importance: "medium",
+    sourceSummary: "2月31日 23:59 提交课程报告",
+  }), null);
+
+  assert.notEqual(itemFromLlmCandidate({
+    title: "课程报告",
+    dueAt: "2026-07-12T23:59:00.000Z",
+    importance: "medium",
+    sourceSummary: "7月12日 23:59 提交课程报告",
+  }), null);
+});
+
+test("llm candidates must be grounded in the extracted source text", () => {
+  const sourceText = "课程通知：7月12日 23:59 提交课程报告。";
+  assert.equal(itemFromLlmCandidate({
+    title: "课程报告",
+    dueAt: "2026-07-12T23:59:00.000Z",
+    importance: "medium",
+    sourceSummary: "老师提醒月底还有一个课程展示",
+  }, sourceText), null);
+
+  assert.notEqual(itemFromLlmCandidate({
+    title: "课程报告",
+    dueAt: "2026-07-12T23:59:00.000Z",
+    importance: "medium",
+    sourceSummary: "7月12日 23:59 提交课程报告",
+  }, sourceText), null);
 });
 
 test("invalid quiet hour preference patches are rejected", () => {
@@ -141,5 +252,60 @@ test("mixed file intake keeps valid schedules and records failed files", async (
     const sources = result.snapshot.sources;
     assert.equal(sources.some((source) => source.sourceName === "course.txt" && source.extractionStatus === "success"), true);
     assert.equal(sources.some((source) => source.sourceName === "archive.zip" && source.extractionStatus === "failed" && /文件类型不支持/.test(source.lastError ?? "")), true);
+  });
+});
+
+test("multi-file intake links each created item to the matching source text", async () => {
+  await withStore(async (store) => {
+    const result = await processIntake({
+      kind: "files",
+      files: [
+        { name: "course-a.txt", contentBase64: Buffer.from("7月12日 23:59 提交课程报告").toString("base64") },
+        { name: "course-b.txt", contentBase64: Buffer.from("7月15日 18:00 提交实验报告").toString("base64") },
+      ],
+    }, store);
+
+    assert.equal(result.ok, true);
+    const sourceA = result.snapshot.sources.find((source) => source.sourceName === "course-a.txt");
+    const sourceB = result.snapshot.sources.find((source) => source.sourceName === "course-b.txt");
+    assert.equal(sourceA?.itemIds.length, 1);
+    assert.equal(sourceB?.itemIds.length, 1);
+    assert.notEqual(sourceA?.itemIds[0], sourceB?.itemIds[0]);
+  });
+});
+
+test("source linking can match llm evidence snippets without source-name prefixes", () => {
+  withStore((store) => {
+    const now = new Date().toISOString();
+    const snapshot = store.addItems([
+      {
+        id: "ddl-a",
+        title: "课程报告",
+        importance: "medium",
+        dueAt: "2026-07-12T23:59:00.000Z",
+        sourceSummary: "7月12日 23:59 提交课程报告",
+        createdAt: now,
+        updatedAt: now,
+        completed: false,
+      },
+      {
+        id: "ddl-b",
+        title: "实验报告",
+        importance: "medium",
+        dueAt: "2026-07-15T18:00:00.000Z",
+        sourceSummary: "7月15日 18:00 提交实验报告",
+        createdAt: now,
+        updatedAt: now,
+        completed: false,
+      },
+    ], "已加入 2 条日程。", [
+      { sourceName: "course-a.txt", sourceType: "txt", text: "7月12日 23:59 提交课程报告" },
+      { sourceName: "course-b.txt", sourceType: "txt", text: "7月15日 18:00 提交实验报告" },
+    ]);
+
+    const sourceA = snapshot.sources.find((source) => source.sourceName === "course-a.txt");
+    const sourceB = snapshot.sources.find((source) => source.sourceName === "course-b.txt");
+    assert.deepEqual(sourceA?.itemIds, ["ddl-a"]);
+    assert.deepEqual(sourceB?.itemIds, ["ddl-b"]);
   });
 });

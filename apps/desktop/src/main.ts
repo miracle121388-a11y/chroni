@@ -54,7 +54,7 @@ function installIpc(): void {
     broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
     const result = await processIntake(payload, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
-    refreshScheduleAfterUpdate();
+    revealScheduleAfterIntake(result.ok);
     return result;
   });
   ipcMain.handle("chroni:companion-clicked", () => {
@@ -85,9 +85,11 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:preferences-update", (_event, patch: ChroniPreferencesPatch) => {
-    const snapshot = store.updatePreferences(patch);
+    let snapshot = store.updatePreferences(patch);
     applyPreferences(snapshot.preferences);
-    registerHotkey();
+    if (!registerHotkey() && snapshot.preferences.hotkey.trim()) {
+      snapshot = store.setCompanion("confused", `快捷键 ${snapshot.preferences.hotkey} 注册失败，可能已被占用。`);
+    }
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
@@ -95,6 +97,7 @@ function installIpc(): void {
     broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
     const result = await processIntake({ kind: "text", text }, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
+    revealScheduleAfterIntake(result.ok);
     return result;
   });
   ipcMain.handle("chroni:open-control", () => showControlCenter());
@@ -119,6 +122,14 @@ function refreshCompanionFromSchedule(): void {
   const snapshot = refreshCompanionSnapshot();
   broadcast("chroni:snapshot-updated", snapshot);
   setTimeout(refreshCompanionFromSchedule, 60_000);
+}
+
+function revealScheduleAfterIntake(ok: boolean): void {
+  if (ok) {
+    showSchedule(true);
+    return;
+  }
+  refreshScheduleAfterUpdate();
 }
 
 function refreshCompanionSnapshot() {
@@ -178,13 +189,16 @@ function timeUntil(value: string): string {
   return `剩余 ${Math.ceil(hours / 24)} 天`;
 }
 
-function registerHotkey(): void {
+function registerHotkey(): boolean {
   globalShortcut.unregisterAll();
   const hotkey = store.snapshot().preferences.hotkey.trim();
-  if (!hotkey) return;
+  if (!hotkey) return true;
   try {
-    globalShortcut.register(hotkey, () => toggleScheduleSurface());
+    const registered = globalShortcut.register(hotkey, () => toggleScheduleSurface());
+    if (!registered) console.warn(`Unable to register Chroni hotkey: ${hotkey}`);
+    return registered;
   } catch {
     console.warn(`Unable to register Chroni hotkey: ${hotkey}`);
+    return false;
   }
 }

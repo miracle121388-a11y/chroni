@@ -48,6 +48,17 @@ button:active {
   transform: translateY(1px);
 }
 
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+button:disabled:hover {
+  box-shadow: none;
+  transform: none;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -157,6 +168,16 @@ summary:focus-visible {
 
 .state-confused .pet-body {
   background: linear-gradient(145deg, #eef2f7, #ffd6a5);
+}
+
+.state-sleeping .pet-body {
+  background: linear-gradient(145deg, #eef2f7, #dbe4ef);
+  box-shadow: 0 14px 30px rgba(36, 59, 83, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  filter: saturate(0.72);
+}
+
+.state-sleeping .bubble {
+  opacity: 0.82;
 }
 
 @keyframes pulse {
@@ -424,6 +445,11 @@ summary:focus-visible {
   color: var(--red);
 }
 
+.inline-feedback.info {
+  background: #edf4fb;
+  color: var(--primary-2);
+}
+
 .upload-box,
 .extract-preview {
   margin: 14px 0;
@@ -445,6 +471,11 @@ summary:focus-visible {
   border-color: var(--primary-2);
   background: #eef7ff;
   box-shadow: 0 0 0 4px rgba(49, 95, 143, 0.08);
+}
+
+.upload-box.busy {
+  border-color: rgba(49, 95, 143, 0.32);
+  background: rgba(237, 244, 251, 0.82);
 }
 
 .upload-box p {
@@ -710,6 +741,51 @@ summary:focus-visible {
 .summary-line span.alert {
   background: #fff1f1;
   color: var(--red);
+}
+
+.start-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 14px 0;
+  padding: 15px;
+  border: 1px solid rgba(219, 228, 239, 0.9);
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 10px 24px rgba(20, 33, 48, 0.06);
+}
+
+.start-panel h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.start-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.start-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.start-actions button {
+  border: 0;
+  border-radius: 10px;
+  background: var(--primary);
+  color: white;
+  padding: 9px 12px;
+  font-weight: 900;
+}
+
+.start-actions button:last-child {
+  background: #edf4fb;
+  color: var(--primary);
 }
 
 .ddl-row.edit {
@@ -1081,6 +1157,15 @@ summary:focus-visible {
   font-weight: 800;
 }
 
+.source-feedback.busy {
+  color: var(--muted);
+}
+
+.source-row.busy,
+.ddl-row.busy {
+  cursor: progress;
+}
+
 .source-row button {
   border: 0;
   border-radius: 10px;
@@ -1180,7 +1265,8 @@ summary:focus-visible {
   }
 
   .list-toolbar,
-  .section-head {
+  .section-head,
+  .start-panel {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -1272,6 +1358,8 @@ summary:focus-visible {
 
   .quick-add button,
   .manual-row button,
+  .start-actions,
+  .start-actions button,
   .upload-box button,
   .extract-preview button,
   .secondary {

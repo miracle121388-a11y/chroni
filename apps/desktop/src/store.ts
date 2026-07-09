@@ -45,11 +45,11 @@ export class ChroniStore {
     const accepted = items
       .filter((item) => !existingKeys.has(dedupeKey(item)))
       .map((item) => {
-        const source = sourceByName.get(sourceNameFromSummary(item.sourceSummary)) ?? sources[0];
+        const source = sourceForItem(item, sources, sourceByName);
         return source ? { ...item, sourceId: source.id } : item;
       });
     for (const source of sources) {
-      const sourceItems = items.filter((item) => (sourceByName.get(sourceNameFromSummary(item.sourceSummary)) ?? sources[0])?.id === source.id);
+      const sourceItems = items.filter((item) => sourceForItem(item, sources, sourceByName)?.id === source.id);
       const acceptedForSource = accepted.filter((item) => item.sourceId === source.id);
       const duplicateIds = sourceItems
         .map((item) => existingByKey.get(dedupeKey(item))?.id)
@@ -335,6 +335,25 @@ function dedupeKey(item: DdlItem): string {
 
 function sourceNameFromSummary(summary: string): string {
   return summary.split(":", 1)[0] || "";
+}
+
+function sourceForItem(item: DdlItem, sources: SourceRecord[], sourceByName: Map<string, SourceRecord>): SourceRecord | undefined {
+  return sourceByName.get(sourceNameFromSummary(item.sourceSummary))
+    ?? sources.find((source) => hasSourceEvidence(item.sourceSummary, source.text))
+    ?? sources[0];
+}
+
+function hasSourceEvidence(summary: string, sourceText: string): boolean {
+  const needle = normalizeEvidence(summary);
+  if (needle.length < 6) return false;
+  return normalizeEvidence(sourceText).includes(needle);
+}
+
+function normalizeEvidence(value: string): string {
+  return value
+    .replace(/\s+/g, "")
+    .replace(/[，。！？、；：,.!?:;()[\]【】《》"'“”‘’]/g, "")
+    .toLowerCase();
 }
 
 function pruneSources(sources: SourceRecord[]): SourceRecord[] {
