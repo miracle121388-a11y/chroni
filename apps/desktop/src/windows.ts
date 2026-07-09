@@ -13,9 +13,9 @@ const windows: WindowSet = {};
 let scheduleExpanded = false;
 let macScheduleHideTimer: NodeJS.Timeout | undefined;
 
-const windowsDrawerWidth = 342;
-const windowsDrawerHandleWidth = 28;
-const windowsDrawerMargin = 10;
+const windowsDrawerWidth = 384;
+const windowsDrawerHandleWidth = 34;
+const windowsDrawerMargin = 8;
 const macPopoverWidth = 348;
 const macPopoverHeight = 418;
 
@@ -198,7 +198,7 @@ function positionScheduleWindow(expanded: boolean): void {
   const area = screen.getPrimaryDisplay().workArea;
   if (process.platform === "win32") {
     const width = win.getBounds().width;
-    const height = Math.min(430, area.height - 48);
+    const height = Math.min(520, area.height - 48);
     if (win.getBounds().height !== height) win.setSize(width, height);
     const x = expanded
       ? area.x + area.width - width - windowsDrawerMargin

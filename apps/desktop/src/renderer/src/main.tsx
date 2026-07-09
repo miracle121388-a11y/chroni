@@ -165,14 +165,15 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
         {busyMessage && <p className="inline-feedback info">{busyMessage}</p>}
         {feedback && <p className={`inline-feedback ${feedback.includes("已加入") ? "ok" : "warn"}`}>{feedback}</p>}
         <DdlList items={items} setSnapshot={setSnapshot} compact emptyText={emptyText} onAction={setFeedback} />
-        {hiddenCount > 0 && <button className="more-link" type="button" onClick={() => void api.openControlCenter()}>还有 {hiddenCount} 条，打开轻量修正</button>}
+        {hiddenCount > 0 && <button className="more-link" type="button" onClick={() => void api.openControlCenter()}>还有 {hiddenCount} 条，打开日程</button>}
       </section>
     </main>
   );
 }
 
 function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
-  const [tab, setTab] = useState<"correction" | "preferences" | "services">("correction");
+  const [tab, setTab] = useState<ControlTab>("schedule");
+  const pendingCount = snapshot.items.filter((item) => !item.completed).length;
   return (
     <main className="control-shell">
       <aside className="sidebar">
@@ -183,16 +184,20 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
             <p>本地 DDL 日程助手</p>
           </div>
         </div>
-        <nav>
-          <button className={tab === "correction" ? "active" : ""} onClick={() => setTab("correction")}>轻量修正</button>
-          <button className={tab === "preferences" ? "active" : ""} onClick={() => setTab("preferences")}>基础偏好</button>
-          <button className={tab === "services" ? "active" : ""} onClick={() => setTab("services")}>服务状态</button>
+        <nav aria-label="控制中心">
+          <button className={tab === "schedule" ? "active" : ""} onClick={() => setTab("schedule")}>日程</button>
+          <button className={tab === "preferences" ? "active" : ""} onClick={() => setTab("preferences")}>偏好</button>
+          <button className={tab === "services" ? "active" : ""} onClick={() => setTab("services")}>运行状态</button>
         </nav>
+        <div className="sidebar-foot">
+          <span>待处理 {pendingCount}</span>
+          <b>{petLabel(snapshot.companion.state)}</b>
+        </div>
       </aside>
       <section className="content">
-        {tab === "correction" && <CorrectionPane snapshot={snapshot} setSnapshot={setSnapshot} />}
+        {tab === "schedule" && <CorrectionPane snapshot={snapshot} setSnapshot={setSnapshot} />}
         {tab === "preferences" && <PreferencesPane preferences={snapshot.preferences} setSnapshot={setSnapshot} />}
-        {tab === "services" && <ServicesPane snapshot={snapshot} />}
+        {tab === "services" && <ServicesPane snapshot={snapshot} setSnapshot={setSnapshot} />}
       </section>
     </main>
   );
@@ -270,8 +275,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
     <div className="pane">
       <header className="pane-head">
         <div>
-          <p>自动结果不对时再来这里</p>
-          <h2>轻量修正</h2>
+          <p>录入、抽取、核对</p>
+          <h2>日程</h2>
         </div>
       </header>
       <div className="summary-line">
@@ -316,9 +321,14 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
         onDrop={(event) => void previewDroppedFiles(event)}
       >
         <input ref={fileInputRef} type="file" multiple hidden disabled={isBusy} onChange={(event) => void extractFiles(event.target.files, fileImportMode.current === "fill")} accept={acceptedFileTypes()} />
-        <button type="button" disabled={isBusy} onClick={() => { fileImportMode.current = "preview"; fileInputRef.current?.click(); }}>上传并预览抽取</button>
-        <button type="button" disabled={isBusy} onClick={() => { fileImportMode.current = "fill"; fileInputRef.current?.click(); }}>直接填入日程</button>
-        <p>可把文件拖到这里预览。支持 TXT、MD、CSV、JSON、ICS、HTML、DOCX、PDF、XLSX、PNG/JPG/WEBP/TIFF。</p>
+        <div className="upload-copy">
+          <b>{draggingFiles ? "松开后开始预览" : "拖入文件或选择上传"}</b>
+          <p>支持 TXT、MD、CSV、JSON、ICS、HTML、DOCX、PDF、XLSX、PNG/JPG/WEBP/TIFF；可先预览，也可直接填入日程。</p>
+        </div>
+        <div className="upload-actions">
+          <button type="button" disabled={isBusy} onClick={() => { fileImportMode.current = "preview"; fileInputRef.current?.click(); }}>预览抽取</button>
+          <button type="button" disabled={isBusy} onClick={() => { fileImportMode.current = "fill"; fileInputRef.current?.click(); }}>直接填入</button>
+        </div>
       </div>
       {preview && (
         <div className="extract-preview">
@@ -387,12 +397,12 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
       <header className="pane-head">
         <div>
           <p>少而清晰</p>
-          <h2>基础偏好</h2>
+          <h2>偏好</h2>
         </div>
       </header>
       <section className="settings-group">
         <div>
-          <h3>桌面入口</h3>
+          <h3>桌宠</h3>
           <p>桌宠负责接收拖拽、短反馈和唤起日程。</p>
         </div>
         <Toggle label="显示桌宠" checked={preferences.companionEnabled} onChange={(value) => void patch({ companionEnabled: value })} />
@@ -409,7 +419,6 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
             </button>
           ))}
         </div>
-        <label className="text-field compact-field">唤起日程快捷键<input value={preferences.hotkey} onChange={(event) => void patch({ hotkey: event.target.value })} /></label>
       </section>
       <section className="settings-group">
         <div>
@@ -424,18 +433,25 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
         </div>
       </section>
       <section className="settings-group">
+        <div>
+          <h3>快捷键</h3>
+          <p>用于快速唤起侧边日程，不影响系统其他输入。</p>
+        </div>
+        <label className="text-field compact-field">唤起日程<input value={preferences.hotkey} onChange={(event) => void patch({ hotkey: event.target.value })} /></label>
+      </section>
+      <section className="settings-group">
         <div className="section-head">
           <div>
-            <h3>智能抽取</h3>
+            <h3>高级</h3>
             <p>默认使用本地规则；配置 API 后优先用 LLM 压缩标题和判断重要性。</p>
           </div>
           <span className="mode-chip">{modelMode}</span>
         </div>
         <Toggle label="启用 LLM 抽取" checked={preferences.llm.enabled} onChange={(value) => void patch({ llm: { enabled: value } })} />
         <details className="advanced-settings">
-          <summary>API 设置</summary>
-          <label className="text-field">Base URL<input value={preferences.llm.baseUrl} placeholder="https://api.openai.com/v1" onChange={(event) => void patch({ llm: { baseUrl: event.target.value } })} /></label>
-          <label className="text-field">模型<input value={preferences.llm.model} placeholder="gpt-4.1-mini" onChange={(event) => void patch({ llm: { model: event.target.value } })} /></label>
+          <summary>大模型 API</summary>
+          <label className="text-field">Base URL<input value={preferences.llm.baseUrl} placeholder="https://api.deepseek.com/v1" onChange={(event) => void patch({ llm: { baseUrl: event.target.value } })} /></label>
+          <label className="text-field">模型<input value={preferences.llm.model} placeholder="deepseek-chat" onChange={(event) => void patch({ llm: { model: event.target.value } })} /></label>
           <label className="text-field">API Key<input type="password" value={preferences.llm.apiKey} placeholder="sk-..." onChange={(event) => void patch({ llm: { apiKey: event.target.value } })} /></label>
         </details>
       </section>
@@ -443,25 +459,37 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
   );
 }
 
-function ServicesPane({ snapshot }: { snapshot: ChroniSnapshot }) {
+function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
+  const [refreshing, setRefreshing] = useState(false);
   const unavailableCount = [snapshot.services.parser, snapshot.services.ocr, snapshot.services.model].filter((state) => state === "unavailable").length;
+  async function refreshServices() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      setSnapshot(await api.getSnapshot());
+    } finally {
+      setRefreshing(false);
+    }
+  }
   return (
     <div className="pane narrow service-pane">
       <header className="pane-head">
         <div>
           <p>基础排错</p>
-          <h2>服务状态</h2>
+          <h2>运行状态</h2>
         </div>
+        <button className="secondary slim" type="button" disabled={refreshing} onClick={() => void refreshServices()}>{refreshing ? "检查中" : "重新检查"}</button>
       </header>
       <p className={`service-summary ${unavailableCount ? "warn" : ""}`}>
         {unavailableCount ? `${unavailableCount} 项能力不可用，仍可使用可用部分。` : "核心本地能力可用。"}
       </p>
       <div className="service-list">
-        <StatusRow label="文本解析" state={snapshot.services.parser} />
-        <StatusRow label="图片 OCR" state={snapshot.services.ocr} />
-        <StatusRow label="大模型抽取" state={snapshot.services.model} />
+        <StatusRow label="文本解析" state={snapshot.services.parser} detail="TXT、MD、CSV、JSON、ICS、DOCX、PDF、XLSX 等本地解析" />
+        <StatusRow label="图片 OCR" state={snapshot.services.ocr} detail="截图和图片中的截止时间识别" />
+        <StatusRow label="大模型抽取" state={snapshot.services.model} detail="配置 API 后用于标题压缩、重要性判断和复杂语句整理" />
+        <StatusRow label="本地数据" state="ready" detail="日程、来源和偏好保存到本机应用数据目录" />
+        <StatusRow label="隐私状态" state="ready" detail={snapshot.services.privacy} />
       </div>
-      <p className="privacy">{snapshot.services.privacy}</p>
       <details className="advanced-settings">
         <summary>排错说明</summary>
         <ul className="notes">{snapshot.services.notes.map((note) => <li key={note}>{note}</li>)}</ul>
@@ -477,24 +505,26 @@ function SourceHistory({ sources, setSnapshot }: { sources: SourceRecord[]; setS
   const visibleSources = sources.filter((source) => filter === "all" || source.extractionStatus === filter).slice(0, 16);
   if (!sources.length) {
     return (
-      <section className="source-history">
-        <div className="section-head">
+      <details className="source-history">
+        <summary className="section-head">
           <div>
             <h3>来源记录</h3>
             <p>拖拽、上传或文本输入后会保存在这里。</p>
           </div>
-        </div>
+        </summary>
         <div className="empty compact-empty">暂无来源记录。</div>
-      </section>
+      </details>
     );
   }
   return (
-    <section className="source-history">
-      <div className="section-head">
+    <details className="source-history">
+      <summary className="section-head">
         <div>
           <h3>来源记录</h3>
           <p>{sources.length} 条 · 成功 {stats.success} · 已存在 {stats.duplicate} · 失败 {stats.failed}</p>
         </div>
+      </summary>
+      <div className="source-controls">
         <div className="segmented">
           <button className={filter === "all" ? "active" : ""} type="button" onClick={() => setFilter("all")}>全部</button>
           <button className={filter === "failed" ? "active" : ""} type="button" onClick={() => setFilter("failed")}>失败</button>
@@ -506,7 +536,7 @@ function SourceHistory({ sources, setSnapshot }: { sources: SourceRecord[]; setS
         {visibleSources.map((source) => <SourceRow key={source.id} source={source} setSnapshot={setSnapshot} />)}
       </div>
       {!visibleSources.length && <div className="empty compact-empty">没有符合条件的来源。</div>}
-    </section>
+    </details>
   );
 }
 
@@ -679,10 +709,13 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-function StatusRow({ label, state }: { label: string; state: string }) {
+function StatusRow({ label, state, detail }: { label: string; state: string; detail?: string }) {
   return (
     <div className="status-row">
-      <span>{label}</span>
+      <span>
+        <b>{label}</b>
+        {detail && <em>{detail}</em>}
+      </span>
       <b className={`service-${state}`}>{state === "ready" ? "可用" : state === "limited" ? "基础可用" : "不可用"}</b>
     </div>
   );
@@ -692,6 +725,8 @@ type ViewProps = {
   snapshot: ChroniSnapshot;
   setSnapshot: React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>;
 };
+
+type ControlTab = "schedule" | "preferences" | "services";
 
 const companionStyleOptions: { value: CompanionStyle; label: string }[] = [
   { value: "classic", label: "经典" },
