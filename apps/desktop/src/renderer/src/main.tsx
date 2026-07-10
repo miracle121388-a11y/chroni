@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { fullScheduleSummary, visibleScheduleSummary } from "../../shared/schedule";
-import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, SourceRecord } from "../../shared/types";
+import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
+import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
+import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, SourceRecord } from "../../shared/types";
 import "./styles.css";
 
 const api = window.chroni;
@@ -35,19 +36,39 @@ const petAnimationLoops: Record<PetAction, boolean> = {
   sleep: false,
 };
 
-function useSnapshot(): [ChroniSnapshot | null, React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>] {
+function useSnapshot(): [ChroniSnapshot | null, React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>, string] {
   const [snapshot, setSnapshot] = useState<ChroniSnapshot | null>(null);
+  const [loadError, setLoadError] = useState("");
   useEffect(() => {
-    void api.getSnapshot().then(setSnapshot);
-    return api.onSnapshotUpdated(setSnapshot);
+    let active = true;
+    const unsubscribe = api.onSnapshotUpdated(setSnapshot);
+    void api.getSnapshot()
+      .then((next) => {
+        if (active) setSnapshot(next);
+      })
+      .catch(() => {
+        if (active) setLoadError("暂时无法读取本地日程，请重试。");
+      });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
-  return [snapshot, setSnapshot];
+  return [snapshot, setSnapshot, loadError];
 }
 
 function App() {
   const view = new URLSearchParams(window.location.search).get("view") ?? "control";
-  const [snapshot, setSnapshot] = useSnapshot();
-  if (!snapshot) return <div className="loading">Chroni</div>;
+  const [snapshot, setSnapshot, loadError] = useSnapshot();
+  if (!snapshot && loadError) {
+    return (
+      <div className="loading loading-error" role="alert">
+        <b>{loadError}</b>
+        <button type="button" onClick={() => window.location.reload()}>重新载入</button>
+      </div>
+    );
+  }
+  if (!snapshot) return <div className="loading" role="status" aria-live="polite">正在读取 Chroni…</div>;
   if (view === "pet") return <PetView snapshot={snapshot} setSnapshot={setSnapshot} />;
   if (view === "schedule") return <ScheduleView snapshot={snapshot} setSnapshot={setSnapshot} />;
   return <ControlCenter snapshot={snapshot} setSnapshot={setSnapshot} />;
@@ -59,9 +80,18 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
   const [hovering, setHovering] = useState(false);
   const [movingPet, setMovingPet] = useState(false);
   const [bubbleVisible, setBubbleVisible] = useState(false);
+  const [localBubble, setLocalBubble] = useState("");
   const visualAction = movingPet ? "drag" : petAction(snapshot.companion.state);
 
   useEffect(() => {
+    if (localBubble) {
+      setBubbleVisible(true);
+      const timeout = window.setTimeout(() => {
+        setBubbleVisible(false);
+        setLocalBubble("");
+      }, 4200);
+      return () => window.clearTimeout(timeout);
+    }
     if (isPersistentPetFeedback(snapshot.companion.state)) {
       setBubbleVisible(true);
       return;
@@ -73,19 +103,23 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
     setBubbleVisible(true);
     const timeout = window.setTimeout(() => setBubbleVisible(false), 3600);
     return () => window.clearTimeout(timeout);
-  }, [snapshot.companion.bubble, snapshot.companion.state]);
+  }, [localBubble, snapshot.companion.bubble, snapshot.companion.state]);
 
   async function handleDrop(event: React.DragEvent) {
     event.preventDefault();
-    const droppedFiles = Array.from(event.dataTransfer.files);
-    const droppedText = event.dataTransfer.getData("text/plain");
     setHovering(false);
-    const files = await filesFromFileList(droppedFiles);
-    await api.companionHover(false);
-    const result = files.length
-      ? await api.intake({ kind: "files", files })
-      : await api.intake({ kind: "text", text: droppedText });
-    setSnapshot(result.snapshot);
+    try {
+      const droppedFiles = Array.from(event.dataTransfer.files);
+      const droppedText = event.dataTransfer.getData("text/plain");
+      const files = await filesFromFileList(droppedFiles);
+      await api.companionHover(false).catch(() => undefined);
+      const result = files.length
+        ? await api.intake({ kind: "files", files })
+        : await api.intake({ kind: "text", text: droppedText });
+      setSnapshot(result.snapshot);
+    } catch {
+      setLocalBubble("没有成功读取这次拖入，请稍后重试。");
+    }
   }
 
   return (
@@ -95,12 +129,12 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         event.preventDefault();
         if (!hovering) {
           setHovering(true);
-          void api.companionHover(true).then(setSnapshot);
+          void api.companionHover(true).then(setSnapshot).catch(() => setLocalBubble("暂时无法接收拖入。"));
         }
       }}
       onDragLeave={() => {
         setHovering(false);
-        void api.companionHover(false).then(setSnapshot);
+        void api.companionHover(false).then(setSnapshot).catch(() => undefined);
       }}
       onDrop={(event) => void handleDrop(event)}
       onContextMenu={(event) => {
@@ -138,49 +172,83 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
             suppressClick.current = false;
             return;
           }
-          void api.companionClicked().then(setSnapshot);
+          void api.companionClicked().then(setSnapshot).catch(() => setLocalBubble("暂时无法打开日程。"));
         }}
         aria-label="Chroni 桌宠"
       >
         <PetSprite action={visualAction} />
       </button>
-      <div className={`bubble ${bubbleVisible ? "show" : ""}`}>{snapshot.companion.bubble}</div>
+      <div className={`bubble ${bubbleVisible ? "show" : ""}`} role="status" aria-live="polite">{localBubble || snapshot.companion.bubble}</div>
     </main>
   );
 }
 
 function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
-  const items = useMemo(() => topVisibleItems(snapshot.items), [snapshot.items]);
-  const summary = useMemo(() => visibleScheduleSummary(snapshot.items), [snapshot.items]);
-  const hiddenCount = activeVisibleCount(snapshot.items) - items.length;
-  const emptyText = activeVisibleCount(snapshot.items)
-    ? "近期没有需要提醒的 DDL，远期事项可在控制中心查看。"
-    : "暂无 DDL。把文件、截图或文字拖给桌宠，或在这里快速添加。";
+  const scheduleClock = useScheduleClock();
+  const surface = useMemo(() => buildScheduleSurface(snapshot.items, new Date(scheduleClock)), [scheduleClock, snapshot.items]);
   const [quickText, setQuickText] = useState("");
-  const [feedback, setFeedback] = useState("");
+  const [feedback, setFeedback] = useState<ActionNotice | null>(null);
+  const [feedbackHovered, setFeedbackHovered] = useState(false);
+  const [feedbackFocused, setFeedbackFocused] = useState(false);
   const [busyMessage, setBusyMessage] = useState("");
+  const [undoing, setUndoing] = useState(false);
+  const undoButtonRef = useRef<HTMLButtonElement>(null);
   const isWindowsDrawer = api.platform === "win32";
   const isBusy = !!busyMessage;
+  const feedbackPaused = feedbackHovered || feedbackFocused;
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape") void api.showSchedule(false);
+      if (event.key === "Escape" && !document.querySelector(".snooze-menu")) void api.showSchedule(false);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  useEffect(() => {
+    if (!feedback || feedbackPaused) return;
+    const timeout = window.setTimeout(() => setFeedback(null), feedback.undo ? 12000 : 5200);
+    return () => window.clearTimeout(timeout);
+  }, [feedback, feedbackPaused]);
+
+  useEffect(() => {
+    if (!feedback?.undo) return;
+    const frame = window.requestAnimationFrame(() => undoButtonRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [feedback]);
+
+  function showFeedback(notice: ActionNotice | null): void {
+    setFeedbackHovered(false);
+    setFeedbackFocused(false);
+    setFeedback(notice);
+  }
+
   async function quickAdd() {
     if (!quickText.trim() || isBusy) return;
     setBusyMessage("正在识别...");
-    setFeedback("");
+    showFeedback(null);
     try {
       const result = await api.quickAdd(quickText);
       setSnapshot(result.snapshot);
-      setFeedback(result.ok ? result.message : result.reason);
+      showFeedback({ message: result.ok ? result.message : result.reason, tone: result.ok ? "ok" : "warn" });
       if (result.ok) setQuickText("");
+    } catch {
+      showFeedback({ message: "快速添加失败，请稍后重试。", tone: "warn" });
     } finally {
       setBusyMessage("");
+    }
+  }
+
+  async function undoLastAction(): Promise<void> {
+    if (!feedback?.undo || undoing) return;
+    setUndoing(true);
+    try {
+      await feedback.undo.run();
+      showFeedback({ message: feedback.undo.doneMessage, tone: "ok" });
+    } catch {
+      showFeedback({ message: "撤销失败，请到控制中心检查事项。", tone: "warn" });
+    } finally {
+      setUndoing(false);
     }
   }
 
@@ -195,38 +263,71 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
       }}
     >
       {isWindowsDrawer && <div className="drawer-handle"><span>DDL</span></div>}
-      <section className="schedule-panel">
+      <section className="schedule-panel" aria-busy={isBusy || undoing}>
         <header className="panel-head">
           <div>
             <p>Chroni</p>
             <h1>最近要注意</h1>
           </div>
           <div className="panel-actions">
-            <button className="icon-btn" type="button" onClick={() => void api.openControlCenter()} title="控制中心">⚙</button>
-            <button className="icon-btn quiet" type="button" onClick={() => void api.showSchedule(false)} title="收起日程">×</button>
+            <button className="icon-btn" type="button" onClick={() => void api.openControlCenter()} title="控制中心" aria-label="打开控制中心">⚙</button>
+            <button className="icon-btn quiet" type="button" onClick={() => void api.showSchedule(false)} title="收起日程" aria-label="收起日程">×</button>
           </div>
         </header>
-        <div className="mini-stats">
-          <span><b>{summary.overdue}</b> 逾期</span>
-          <span><b>{summary.today}</b> 今日</span>
-          <span><b>{summary.upcoming}</b> 近期</span>
+        <div className="mini-stats" aria-label="日程概览">
+          <span className={surface.counts.overdue ? "alert" : ""}><b>{surface.counts.overdue}</b> 逾期</span>
+          <span><b>{surface.counts.today}</b> 今天</span>
+          <span><b>{surface.counts.upcoming + surface.counts.later}</b> 接下来</span>
         </div>
         <div className="quick-add">
           <input
             value={quickText}
             disabled={isBusy}
+            aria-label="快速添加日程"
             onChange={(event) => setQuickText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") void quickAdd();
             }}
             placeholder="快速添加：7月12日 23:59 课程报告"
           />
-          <button type="button" disabled={isBusy} onClick={() => void quickAdd()}>＋</button>
+          <button type="button" disabled={isBusy || !quickText.trim()} onClick={() => void quickAdd()} aria-label="识别并添加日程">＋</button>
         </div>
-        {busyMessage && <p className="inline-feedback info">{busyMessage}</p>}
-        {feedback && <p className={`inline-feedback ${feedback.includes("已加入") ? "ok" : "warn"}`}>{feedback}</p>}
-        <DdlList items={items} setSnapshot={setSnapshot} compact emptyText={emptyText} onAction={setFeedback} />
-        {hiddenCount > 0 && <button className="more-link" type="button" onClick={() => void api.openControlCenter()}>还有 {hiddenCount} 条，打开日程</button>}
+        {busyMessage && <p className="inline-feedback info" role="status" aria-live="polite">{busyMessage}</p>}
+        {feedback && (
+          <div
+            className={`inline-feedback action-feedback ${feedback.tone}`}
+            role={feedback.tone === "warn" ? "alert" : "status"}
+            aria-live="polite"
+            onMouseEnter={() => setFeedbackHovered(true)}
+            onMouseLeave={() => setFeedbackHovered(false)}
+            onFocusCapture={() => setFeedbackFocused(true)}
+            onBlurCapture={() => setFeedbackFocused(false)}
+          >
+            <span>{feedback.message}</span>
+            {feedback.undo && <button ref={undoButtonRef} type="button" disabled={undoing} onClick={() => void undoLastAction()}>{undoing ? "撤销中" : "撤销"}</button>}
+          </div>
+        )}
+        {surface.groups.length ? (
+          <div className="schedule-groups">
+            {surface.groups.map((group) => (
+              <section className={`schedule-group bucket-${group.key}`} key={group.key} aria-labelledby={`schedule-group-${group.key}`}>
+                <header className="schedule-group-head" id={`schedule-group-${group.key}`}>
+                  <span>{group.label}</span>
+                  <b>{group.items.length}</b>
+                </header>
+                <DdlList items={group.items} setSnapshot={setSnapshot} compact onAction={showFeedback} ariaLabel={`${group.label}日程`} />
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="empty schedule-empty" role="status">{surface.emptyMessage}</div>
+        )}
+        {surface.hiddenParts.length > 0 && (
+          <button className="schedule-hidden-summary" type="button" onClick={() => void api.openControlCenter()}>
+            <span>另有 {surface.hiddenParts.join(" · ")}</span>
+            <b>在控制中心查看</b>
+          </button>
+        )}
       </section>
     </main>
   );
@@ -246,9 +347,9 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
           </div>
         </div>
         <nav aria-label="控制中心">
-          <button className={tab === "schedule" ? "active" : ""} onClick={() => setTab("schedule")}>日程</button>
-          <button className={tab === "preferences" ? "active" : ""} onClick={() => setTab("preferences")}>偏好</button>
-          <button className={tab === "services" ? "active" : ""} onClick={() => setTab("services")}>运行状态</button>
+          <button className={tab === "schedule" ? "active" : ""} aria-current={tab === "schedule" ? "page" : undefined} onClick={() => setTab("schedule")}>日程</button>
+          <button className={tab === "preferences" ? "active" : ""} aria-current={tab === "preferences" ? "page" : undefined} onClick={() => setTab("preferences")}>偏好</button>
+          <button className={tab === "services" ? "active" : ""} aria-current={tab === "services" ? "page" : undefined} onClick={() => setTab("services")}>运行状态</button>
         </nav>
         <div className="sidebar-foot">
           <span>待处理 {pendingCount}</span>
@@ -265,6 +366,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
 }
 
 function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
+  const scheduleClock = useScheduleClock();
   const [manual, setManual] = useState("");
   const [preview, setPreview] = useState<ExtractResult | null>(null);
   const [previewPayload, setPreviewPayload] = useState<IntakePayload | null>(null);
@@ -277,12 +379,11 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
   const fileImportMode = useRef<"preview" | "fill">("preview");
   const isBusy = !!busyMessage;
   const isFirstRun = !snapshot.items.length && !snapshot.sources.length && !preview;
-  const summary = useMemo(() => fullScheduleSummary(snapshot.items), [snapshot.items]);
-  const filteredItems = useMemo(() => {
-    if (itemFilter === "completed") return snapshot.items.filter((item) => item.completed);
-    if (itemFilter === "all") return snapshot.items;
-    return snapshot.items.filter((item) => !item.completed);
-  }, [itemFilter, snapshot.items]);
+  const summary = useMemo(() => fullScheduleSummary(snapshot.items, new Date(scheduleClock)), [scheduleClock, snapshot.items]);
+  const actionableSummary = useMemo(() => visibleScheduleSummary(snapshot.items, new Date(scheduleClock)), [scheduleClock, snapshot.items]);
+  const snoozedCount = summary.active - actionableSummary.active;
+  const itemGroups = useMemo(() => buildControlScheduleGroups(snapshot.items, itemFilter, new Date(scheduleClock)), [itemFilter, scheduleClock, snapshot.items]);
+  const filteredCount = itemGroups.reduce((count, group) => count + group.items.length, 0);
 
   async function addManual() {
     if (!manual.trim() || isBusy) return;
@@ -293,6 +394,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
       if (result.ok) setManual("");
+    } catch {
+      setFeedback("快速添加失败，请稍后重试。");
     } finally {
       setBusyMessage("");
     }
@@ -300,7 +403,13 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
 
   async function extractFiles(fileList: FileList | null, fill: boolean) {
     if (isBusy) return;
-    const files = await filesFromFileList(fileList);
+    let files: ChroniInputFile[];
+    try {
+      files = await filesFromFileList(fileList);
+    } catch {
+      setFeedback("文件读取失败，请重新选择。");
+      return;
+    }
     if (!files.length) return;
     const payload: IntakePayload = { kind: "files", files };
     setBusyMessage(fill ? "正在填入日程..." : "正在预览抽取...");
@@ -312,6 +421,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
         setFeedback(result.ok ? result.message : result.reason);
         setPreview(null);
         setPreviewPayload(null);
+      } catch {
+        setFeedback("文件填入失败，请稍后重试。");
       } finally {
         setBusyMessage("");
       }
@@ -320,6 +431,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
     try {
       setPreview(await api.extract(payload));
       setPreviewPayload(payload);
+    } catch {
+      setFeedback("抽取预览失败，请检查文件后重试。");
     } finally {
       setBusyMessage("");
     }
@@ -342,8 +455,9 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
       </header>
       <div className="summary-line">
         <span>{summary.active} 待处理</span>
-        <span className={summary.overdue ? "alert" : ""}>{summary.overdue} 逾期</span>
-        <span>{summary.today} 今日</span>
+        <span className={actionableSummary.overdue ? "alert" : ""}>{actionableSummary.overdue} 逾期</span>
+        <span>{actionableSummary.today} 今日</span>
+        {snoozedCount > 0 && <span>{snoozedCount} 稍后</span>}
       </div>
       {isFirstRun && (
         <section className="start-panel">
@@ -362,18 +476,20 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
           ref={manualInputRef}
           value={manual}
           disabled={isBusy}
+          aria-label="快速添加日程"
           onChange={(event) => setManual(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") void addManual();
           }}
           placeholder="快速添加或重新识别：明天 18:00 交实验报告"
         />
-        <button type="button" disabled={isBusy} onClick={() => void addManual()}>识别</button>
+        <button type="button" disabled={isBusy || !manual.trim()} onClick={() => void addManual()}>识别</button>
       </div>
-      {busyMessage && <p className="inline-feedback info">{busyMessage}</p>}
-      {feedback && <p className={`inline-feedback ${feedback.includes("已加入") ? "ok" : "warn"}`}>{feedback}</p>}
+      {busyMessage && <p className="inline-feedback info" role="status" aria-live="polite">{busyMessage}</p>}
+      {feedback && <p className={`inline-feedback ${isPositiveFeedback(feedback) ? "ok" : "warn"}`} role={isPositiveFeedback(feedback) ? "status" : "alert"} aria-live="polite">{feedback}</p>}
       <div
         className={`upload-box ${draggingFiles ? "dragging" : ""} ${isBusy ? "busy" : ""}`}
+        aria-busy={isBusy}
         onDragOver={(event) => {
           event.preventDefault();
           if (!draggingFiles && !isBusy) setDraggingFiles(true);
@@ -381,7 +497,18 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
         onDragLeave={() => setDraggingFiles(false)}
         onDrop={(event) => void previewDroppedFiles(event)}
       >
-        <input ref={fileInputRef} type="file" multiple hidden disabled={isBusy} onChange={(event) => void extractFiles(event.target.files, fileImportMode.current === "fill")} accept={acceptedFileTypes()} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          disabled={isBusy}
+          onChange={(event) => {
+            const input = event.currentTarget;
+            void extractFiles(input.files, fileImportMode.current === "fill").finally(() => { input.value = ""; });
+          }}
+          accept={acceptedFileTypes()}
+        />
         <div className="upload-copy">
           <b>{draggingFiles ? "松开后开始预览" : "拖入文件或选择上传"}</b>
           <p>支持 TXT、MD、CSV、JSON、ICS、HTML、DOCX、PDF、XLSX、PNG/JPG/WEBP/TIFF；可先预览，也可直接填入日程。</p>
@@ -424,6 +551,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
                 setFeedback(result.ok ? result.message : result.reason);
                 setPreview(null);
                 setPreviewPayload(null);
+              } catch {
+                setFeedback("填入日程失败，请稍后重试。");
               } finally {
                 setBusyMessage("");
               }
@@ -434,15 +563,36 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
       <div className="list-toolbar">
         <div>
           <h3>日程列表</h3>
-          <p>{filteredItems.length} 条</p>
+          <p>{filteredCount} 条</p>
         </div>
         <div className="segmented">
-          <button className={itemFilter === "active" ? "active" : ""} type="button" onClick={() => setItemFilter("active")}>待处理</button>
-          <button className={itemFilter === "completed" ? "active" : ""} type="button" onClick={() => setItemFilter("completed")}>已完成</button>
-          <button className={itemFilter === "all" ? "active" : ""} type="button" onClick={() => setItemFilter("all")}>全部</button>
+          <button className={itemFilter === "active" ? "active" : ""} type="button" aria-pressed={itemFilter === "active"} onClick={() => setItemFilter("active")}>待处理</button>
+          <button className={itemFilter === "completed" ? "active" : ""} type="button" aria-pressed={itemFilter === "completed"} onClick={() => setItemFilter("completed")}>已完成</button>
+          <button className={itemFilter === "all" ? "active" : ""} type="button" aria-pressed={itemFilter === "all"} onClick={() => setItemFilter("all")}>全部</button>
         </div>
       </div>
-      <DdlList items={filteredItems} sources={snapshot.sources} setSnapshot={setSnapshot} editable emptyText={itemFilter === "completed" ? "还没有完成记录。" : "暂时没有需要处理的 DDL。"} onAction={setFeedback} />
+      {itemGroups.length ? (
+        <div className="control-schedule-groups">
+          {itemGroups.map((group) => (
+            <section className={`control-schedule-group group-${group.key}`} key={group.key} aria-labelledby={`control-group-${group.key}`}>
+              <header className="control-group-head" id={`control-group-${group.key}`}>
+                <div><h4>{group.label}</h4><span>{group.hint}</span></div>
+                <b>{group.items.length}</b>
+              </header>
+              <DdlList
+                items={group.items}
+                sources={snapshot.sources}
+                setSnapshot={setSnapshot}
+                editable
+                ariaLabel={`${group.label}日程`}
+                onAction={(notice) => setFeedback(notice.message)}
+              />
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="empty">{itemFilter === "completed" ? "还没有完成记录。" : "暂时没有需要处理的 DDL。"}</div>
+      )}
       <SourceHistory sources={snapshot.sources} setSnapshot={setSnapshot} />
     </div>
   );
@@ -621,6 +771,8 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const snapshot = await api.updateSourceText(source.id, draftText);
       setSnapshot(snapshot);
       setFeedback("原文已保存。");
+    } catch {
+      setFeedback("原文保存失败，请稍后重试。");
     } finally {
       setBusyMessage("");
     }
@@ -636,6 +788,8 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const result = await api.reprocessSource(source.id);
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
+    } catch {
+      setFeedback("保存或重新识别失败，请稍后重试。");
     } finally {
       setBusyMessage("");
     }
@@ -649,6 +803,8 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const result = await api.reprocessSource(source.id);
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
+    } catch {
+      setFeedback("重新识别失败，请稍后重试。");
     } finally {
       setBusyMessage("");
     }
@@ -665,12 +821,12 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
         {source.lastError && <strong className="source-error">{source.lastError}</strong>}
         <details>
           <summary>{source.text.slice(0, 120) || "查看原文"}</summary>
-          <textarea className="source-textarea" value={draftText} disabled={isBusy} onChange={(event) => setDraftText(event.target.value)} />
+          <textarea className="source-textarea" aria-label={`编辑 ${source.sourceName} 的抽取文本`} value={draftText} disabled={isBusy} onChange={(event) => setDraftText(event.target.value)} />
           <div className="source-detail-actions">
             <button type="button" disabled={isBusy} onClick={() => void saveText()}>{busyMessage === "正在保存..." ? "保存中" : "保存原文"}</button>
             <button type="button" disabled={isBusy} onClick={() => void saveAndReprocess()}>{busyMessage === "正在重新识别..." ? "识别中" : "保存并重新识别"}</button>
           </div>
-          {(busyMessage || feedback) && <p className={`source-feedback ${busyMessage ? "busy" : ""}`}>{busyMessage || feedback}</p>}
+          {(busyMessage || feedback) && <p className={`source-feedback ${busyMessage ? "busy" : ""}`} role={busyMessage ? "status" : feedback.includes("失败") ? "alert" : "status"} aria-live="polite">{busyMessage || feedback}</p>}
         </details>
       </div>
       <button type="button" disabled={isBusy} onClick={() => void reprocessOnly()}>{busyMessage === "正在重新识别..." ? "识别中" : "重新识别"}</button>
@@ -678,11 +834,11 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
   );
 }
 
-function DdlList({ items, sources = [], setSnapshot, compact = false, editable = false, emptyText = "暂时没有需要马上处理的 DDL。", onAction }: { items: DdlItem[]; sources?: SourceRecord[]; setSnapshot: ViewProps["setSnapshot"]; compact?: boolean; editable?: boolean; emptyText?: string; onAction?(message: string): void }) {
+function DdlList({ items, sources = [], setSnapshot, compact = false, editable = false, emptyText = "暂时没有需要马上处理的 DDL。", onAction, ariaLabel }: { items: DdlItem[]; sources?: SourceRecord[]; setSnapshot: ViewProps["setSnapshot"]; compact?: boolean; editable?: boolean; emptyText?: string; onAction?(notice: ActionNotice): void; ariaLabel?: string }) {
   if (!items.length) return <div className="empty">{emptyText}</div>;
   const sourceMap = new Map(sources.map((source) => [source.id, source]));
   return (
-    <div className={`ddl-list ${compact ? "compact" : ""}`}>
+    <div className={`ddl-list ${compact ? "compact" : ""}`} role="list" aria-label={ariaLabel}>
       {items.map((item) => (
         <DdlRow key={item.id} item={item} source={item.sourceId ? sourceMap.get(item.sourceId) : undefined} setSnapshot={setSnapshot} editable={editable} onAction={onAction} />
       ))}
@@ -690,69 +846,220 @@ function DdlList({ items, sources = [], setSnapshot, compact = false, editable =
   );
 }
 
-function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlItem; source?: SourceRecord; setSnapshot: ViewProps["setSnapshot"]; editable?: boolean; onAction?(message: string): void }) {
+function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlItem; source?: SourceRecord; setSnapshot: ViewProps["setSnapshot"]; editable?: boolean; onAction?(notice: ActionNotice): void }) {
   const urgency = urgencyTone(item);
   const [draft, setDraft] = useState(item);
   const [busyAction, setBusyAction] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
+  const [rowError, setRowError] = useState("");
+  const snoozeControlRef = useRef<HTMLDivElement>(null);
+  const snoozeToggleRef = useRef<HTMLButtonElement>(null);
+  const snoozeMenuId = useId();
   const fresh = isFreshItem(item);
-  const snoozed = isSnoozed(item);
+  const snoozed = isScheduleItemSnoozed(item);
   const isBusy = !!busyAction;
-  useEffect(() => setDraft(item), [item]);
+  useEffect(() => {
+    if (!editing) setDraft(item);
+  }, [editing, item]);
 
-  async function update(patch: Partial<DdlItem>) {
-    if (isBusy) return;
+  useEffect(() => {
+    if (!snoozeMenuOpen) return;
+    function closeOnPointerDown(event: PointerEvent): void {
+      if (!snoozeControlRef.current?.contains(event.target as Node)) setSnoozeMenuOpen(false);
+    }
+    function closeOnEscape(event: KeyboardEvent): void {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        setSnoozeMenuOpen(false);
+        window.requestAnimationFrame(() => snoozeToggleRef.current?.focus());
+      }
+    }
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [snoozeMenuOpen]);
+
+  async function update(patch: ItemPatch): Promise<void> {
     const snapshot = await api.updateItem(item.id, patch);
     setSnapshot(snapshot);
   }
 
-  function updateDueAt(value: string): void {
-    if (!value) return;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return;
-    void update({ dueAt: date.toISOString() });
-  }
-
-  async function runItemAction(message: string, action: () => Promise<void>, doneMessage?: string) {
-    if (isBusy) return;
+  async function runItemAction(message: string, action: () => Promise<void>, notice?: ActionNotice, failureMessage = "操作失败，请稍后重试。"): Promise<boolean> {
+    if (isBusy) return false;
     setBusyAction(message);
+    setRowError("");
     try {
       await action();
-      if (doneMessage) onAction?.(doneMessage);
+      if (notice) onAction?.(notice);
+      return true;
+    } catch {
+      setRowError(failureMessage);
+      onAction?.({ message: failureMessage, tone: "warn" });
+      return false;
     } finally {
       setBusyAction("");
     }
   }
 
   async function completeItem() {
-    await runItemAction("正在完成", () => update({ completed: true }), "已完成。");
+    const nextCompleted = !item.completed;
+    const message = nextCompleted ? `已完成「${item.title}」。` : `已恢复「${item.title}」。`;
+    await runItemAction(
+      nextCompleted ? "正在完成" : "正在恢复",
+      () => update({ completed: nextCompleted }),
+      {
+        message,
+        tone: "ok",
+        ...(!editable ? {
+          undo: {
+            run: () => update({ completed: item.completed }),
+            doneMessage: nextCompleted ? "已恢复为待处理。" : "已重新标记为完成。",
+          },
+        } : {}),
+      },
+      nextCompleted ? "没有成功完成事项，请重试。" : "没有成功恢复事项，请重试。",
+    );
   }
 
-  async function snoozeItem() {
-    await runItemAction("正在稍后", () => update({ snoozedUntil: new Date(Date.now() + 2 * 3_600_000).toISOString() }), "已稍后提醒 2 小时。");
+  async function snoozeItem(preset: SnoozePreset) {
+    const option = snoozeOptions.find((candidate) => candidate.value === preset)!;
+    const snoozedUntil = snoozeUntil(preset).toISOString();
+    setSnoozeMenuOpen(false);
+    await runItemAction(
+      "正在稍后",
+      () => update({ snoozedUntil }),
+      {
+        message: `已稍后至 ${option.feedback}。`,
+        tone: "ok",
+        undo: {
+          run: () => update({ snoozedUntil: item.snoozedUntil }),
+          doneMessage: "已取消这次稍后提醒。",
+        },
+      },
+      "稍后提醒设置失败，请重试。",
+    );
+  }
+
+  async function cancelSnooze(): Promise<void> {
+    await runItemAction(
+      "正在取消",
+      () => update({ snoozedUntil: undefined }),
+      { message: "已取消稍后提醒。", tone: "ok" },
+      "取消稍后提醒失败，请重试。",
+    );
+  }
+
+  async function saveDraft(): Promise<void> {
+    const title = draft.title.trim();
+    const dueAt = new Date(draft.dueAt);
+    if (!title) {
+      setRowError("标题不能为空。");
+      return;
+    }
+    if (Number.isNaN(dueAt.getTime())) {
+      setRowError("请选择有效的截止时间。");
+      return;
+    }
+    const success = await runItemAction(
+      "正在保存",
+      () => update({ title, importance: draft.importance, dueAt: dueAt.toISOString() }),
+      { message: `已保存「${title}」。`, tone: "ok" },
+      "保存失败，请检查内容后重试。",
+    );
+    if (success) {
+      setEditing(false);
+      setConfirmingDelete(false);
+    }
+  }
+
+  async function deleteItem(): Promise<void> {
+    const success = await runItemAction(
+      "正在删除",
+      async () => setSnapshot(await api.deleteItem(item.id)),
+      { message: `已删除「${item.title}」。`, tone: "ok" },
+      "删除失败，请稍后重试。",
+    );
+    if (success) setConfirmingDelete(false);
   }
 
   if (editable) {
     return (
-      <article className={`ddl-row edit tone-${urgency} ${snoozed ? "snoozed" : ""} ${item.completed ? "completed" : ""} ${isBusy ? "busy" : ""}`}>
-        <input value={draft.title} disabled={isBusy} onChange={(event) => setDraft({ ...draft, title: event.target.value })} onBlur={() => void update({ title: draft.title })} />
-        <select value={draft.importance} disabled={isBusy} onChange={(event) => void update({ importance: event.target.value as Importance })}>
-          <option value="high">高</option>
-          <option value="medium">中</option>
-          <option value="low">低</option>
-        </select>
-        <input type="datetime-local" value={toInputDate(draft.dueAt)} disabled={isBusy} onChange={(event) => void updateDueAt(event.target.value)} />
-        <span className={`source-chip ${snoozed ? "snoozed-chip" : ""}`} title={item.sourceSummary}>{snoozed && item.snoozedUntil ? `稍后至 ${formatDue(item.snoozedUntil)}` : source?.sourceName ?? "手动"}</span>
-        {snoozed && <button type="button" disabled={isBusy} onClick={() => void runItemAction("正在取消", () => update({ snoozedUntil: undefined }), "已取消稍后提醒。")}>{busyAction === "正在取消" ? "取消中" : "取消稍后"}</button>}
-        <button type="button" disabled={isBusy} onClick={() => void runItemAction("正在更新", () => update({ completed: !item.completed }), item.completed ? "已恢复为待处理。" : "已完成。")}>{busyAction === "正在更新" ? "处理中" : item.completed ? "恢复" : "完成"}</button>
-        <button type="button" disabled={isBusy} onClick={() => void runItemAction("正在删除", async () => setSnapshot(await api.deleteItem(item.id)), "已删除误识别事项。")}>{busyAction === "正在删除" ? "删除中" : "删除"}</button>
+      <article className={`ddl-row editor-row tone-${urgency} ${snoozed ? "snoozed" : ""} ${item.completed ? "completed" : ""} ${editing ? "editing" : ""} ${isBusy ? "busy" : ""}`} role="listitem" aria-busy={isBusy}>
+        <div className="editor-summary">
+          <button className={`completion-toggle ${item.completed ? "done" : ""}`} type="button" disabled={isBusy} onClick={() => void completeItem()} aria-label={item.completed ? `恢复 ${item.title}` : `完成 ${item.title}`}>
+            {item.completed ? "↶" : "✓"}
+          </button>
+          <div className="editor-copy">
+            <div className="editor-title-line">
+              <strong>{item.title}</strong>
+              <span className={`importance-chip importance-${item.importance}`}>{importanceLabel(item.importance)}</span>
+              {fresh && <b className="new-chip">新</b>}
+            </div>
+            <div className="editor-meta">
+              <time>{formatDue(item.dueAt)}</time>
+              <span className={`remaining tone-${urgency}`}>{item.completed ? "已完成" : remainingText(item.dueAt)}</span>
+              <span className={`source-chip ${snoozed ? "snoozed-chip" : ""}`} title={item.sourceSummary}>
+                {snoozed && item.snoozedUntil ? `稍后至 ${formatDue(item.snoozedUntil)}` : source?.sourceName ?? "手动录入"}
+              </span>
+            </div>
+          </div>
+          <div className="editor-actions">
+            {snoozed && <button type="button" disabled={isBusy} onClick={() => void cancelSnooze()}>{busyAction === "正在取消" ? "取消中" : "取消稍后"}</button>}
+            <button type="button" disabled={isBusy} aria-expanded={editing} onClick={() => {
+              setEditing((current) => !current);
+              setConfirmingDelete(false);
+              setRowError("");
+            }}>{editing ? "收起" : "编辑"}</button>
+          </div>
+        </div>
+        {editing && (
+          <form className="ddl-edit-form" onSubmit={(event) => { event.preventDefault(); void saveDraft(); }}>
+            <div className="ddl-edit-fields">
+              <label className="edit-field title-field">标题<input value={draft.title} disabled={isBusy} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
+              <label className="edit-field">重要性<select value={draft.importance} disabled={isBusy} onChange={(event) => setDraft({ ...draft, importance: event.target.value as Importance })}>
+                <option value="high">高</option>
+                <option value="medium">中</option>
+                <option value="low">低</option>
+              </select></label>
+              <label className="edit-field date-field">截止时间<input type="datetime-local" value={toInputDate(draft.dueAt)} disabled={isBusy} onChange={(event) => {
+                const date = new Date(event.target.value);
+                setDraft({ ...draft, dueAt: Number.isNaN(date.getTime()) ? "" : date.toISOString() });
+              }} /></label>
+            </div>
+            <div className="ddl-edit-actions">
+              <button className="save-edit" type="submit" disabled={isBusy || !draft.title.trim()}>保存</button>
+              <button type="button" disabled={isBusy} onClick={() => {
+                setDraft(item);
+                setEditing(false);
+                setConfirmingDelete(false);
+                setRowError("");
+              }}>取消</button>
+              {!confirmingDelete ? (
+                <button className="danger-link" type="button" disabled={isBusy} onClick={() => setConfirmingDelete(true)}>删除</button>
+              ) : (
+                <div className="delete-confirm" role="alert">
+                  <span>确定删除？</span>
+                  <button className="danger" type="button" disabled={isBusy} onClick={() => void deleteItem()}>{busyAction === "正在删除" ? "删除中" : "确认删除"}</button>
+                  <button type="button" disabled={isBusy} onClick={() => setConfirmingDelete(false)}>保留</button>
+                </div>
+              )}
+            </div>
+          </form>
+        )}
+        {rowError && <p className="row-error" role="alert">{rowError}</p>}
       </article>
     );
   }
 
   return (
-    <article className={`ddl-row tone-${urgency} ${isBusy ? "busy" : ""}`}>
-      <button className="check" type="button" title="完成" disabled={isBusy} onClick={() => void completeItem()}>✓</button>
-      <button className="row-main" type="button" onClick={() => void api.openControlCenter()}>
+    <article className={`ddl-row compact-row tone-${urgency} ${snoozeMenuOpen ? "menu-open" : ""} ${isBusy ? "busy" : ""}`} role="listitem" aria-busy={isBusy}>
+      <button className="check" type="button" title="完成" aria-label={`完成 ${item.title}`} disabled={isBusy} onClick={() => void completeItem()}>✓</button>
+      <button className="row-main" type="button" onClick={() => void api.openControlCenter().catch(() => onAction?.({ message: "暂时无法打开控制中心。", tone: "warn" }))}>
         <span className="title-line">
           <strong>{item.title}</strong>
           {fresh && <b className="new-chip">新</b>}
@@ -761,7 +1068,17 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
         <time>{formatDue(item.dueAt)}</time>
         <em>{remainingText(item.dueAt)}</em>
       </button>
-      <button className="snooze" type="button" title="稍后提醒" disabled={isBusy} onClick={() => void snoozeItem()}>⏱</button>
+      <div className="snooze-control" ref={snoozeControlRef}>
+        <button ref={snoozeToggleRef} className="snooze" type="button" title="稍后提醒" aria-label={`稍后提醒 ${item.title}`} aria-expanded={snoozeMenuOpen} aria-controls={snoozeMenuId} disabled={isBusy} onClick={() => setSnoozeMenuOpen((current) => !current)}>⏱</button>
+        {snoozeMenuOpen && (
+          <div className="snooze-menu" id={snoozeMenuId} role="group" aria-label="选择稍后提醒时间">
+            {snoozeOptions.map((option) => (
+              <button key={option.value} type="button" disabled={isBusy} onClick={() => void snoozeItem(option.value)}>{option.label}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      {rowError && <p className="row-error compact-error" role="alert">{rowError}</p>}
     </article>
   );
 }
@@ -792,6 +1109,41 @@ type ViewProps = {
   setSnapshot: React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>;
 };
 
+type ActionNotice = {
+  message: string;
+  tone: "ok" | "warn" | "info";
+  undo?: {
+    run: () => Promise<void>;
+    doneMessage: string;
+  };
+};
+
+const snoozeOptions: Array<{ value: SnoozePreset; label: string; feedback: string }> = [
+  { value: "two-hours", label: "2 小时", feedback: "2 小时后" },
+  { value: "tomorrow-morning", label: "明早 9 点", feedback: "明早 9 点" },
+  { value: "one-day", label: "1 天", feedback: "1 天后" },
+];
+
+type ScheduleGroup = {
+  key: ScheduleBucket;
+  label: string;
+  items: DdlItem[];
+};
+
+type ScheduleSurface = {
+  groups: ScheduleGroup[];
+  counts: Record<ScheduleBucket, number>;
+  hiddenParts: string[];
+  emptyMessage: string;
+};
+
+type ControlScheduleGroup = {
+  key: string;
+  label: string;
+  hint: string;
+  items: DdlItem[];
+};
+
 type ControlTab = "schedule" | "preferences" | "services";
 
 const companionStyleOptions: { value: CompanionStyle; label: string }[] = [
@@ -800,22 +1152,68 @@ const companionStyleOptions: { value: CompanionStyle; label: string }[] = [
   { value: "sunrise", label: "晨光" },
 ];
 
-function topVisibleItems(items: DdlItem[]): DdlItem[] {
-  const now = Date.now();
-  return [...items]
-    .filter((item) => !item.completed)
-    .filter((item) => !item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= now)
-    .filter((item) => isSchedulePopoverItem(item, now))
-    .sort(compareItems)
-    .slice(0, 6);
+function buildScheduleSurface(items: DdlItem[], now = new Date()): ScheduleSurface {
+  const active = visibleActiveScheduleItems(items, now);
+  const shown = lightweightScheduleItems(items, now, 6);
+  const counts: Record<ScheduleBucket, number> = { overdue: 0, today: 0, upcoming: 0, later: 0 };
+  for (const item of active) counts[scheduleBucket(item, now)] += 1;
+
+  const labels: Record<ScheduleBucket, string> = {
+    overdue: "已逾期",
+    today: "今天",
+    upcoming: "接下来 7 天",
+    later: "下一项",
+  };
+  const groups = (["overdue", "today", "upcoming", "later"] as ScheduleBucket[])
+    .map((key) => ({ key, label: labels[key], items: shown.filter((item) => scheduleBucket(item, now) === key) }))
+    .filter((group) => group.items.length > 0);
+
+  const shownIds = new Set(shown.map((item) => item.id));
+  const hidden = active.filter((item) => !shownIds.has(item.id));
+  const hiddenNearby = hidden.filter((item) => scheduleBucket(item, now) !== "later").length;
+  const hiddenLater = hidden.length - hiddenNearby;
+  const snoozedCount = items.filter((item) => !item.completed && isScheduleItemSnoozed(item, now)).length;
+  const hiddenParts: string[] = [];
+  if (hiddenNearby) hiddenParts.push(`${hiddenNearby} 条未展开`);
+  if (hiddenLater) hiddenParts.push(`${hiddenLater} 条远期`);
+  if (snoozedCount) hiddenParts.push(`${snoozedCount} 条稍后中`);
+
+  const incompleteCount = items.filter((item) => !item.completed).length;
+  const emptyMessage = snoozedCount
+    ? `当前没有需要提醒的事项，${snoozedCount} 条会在稍后回来。`
+    : items.length && !incompleteCount
+      ? "待处理事项已全部完成。"
+      : "暂无 DDL。把文件、截图或文字拖给桌宠，或在这里快速添加。";
+
+  return { groups, counts, hiddenParts, emptyMessage };
 }
 
-function activeVisibleCount(items: DdlItem[]): number {
-  const now = Date.now();
-  return items
-    .filter((item) => !item.completed)
-    .filter((item) => !item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= now)
-    .length;
+function buildControlScheduleGroups(items: DdlItem[], filter: "active" | "completed" | "all", now = new Date()): ControlScheduleGroup[] {
+  const labels: Record<ScheduleBucket, { label: string; hint: string }> = {
+    overdue: { label: "已逾期", hint: "优先处理" },
+    today: { label: "今天", hint: "今日截止" },
+    upcoming: { label: "接下来 7 天", hint: "近期安排" },
+    later: { label: "更晚", hint: "远期事项" },
+  };
+  const groups: ControlScheduleGroup[] = [];
+  if (filter !== "completed") {
+    const active = visibleActiveScheduleItems(items, now);
+    for (const key of ["overdue", "today", "upcoming", "later"] as ScheduleBucket[]) {
+      const bucketItems = active.filter((item) => scheduleBucket(item, now) === key);
+      if (bucketItems.length) groups.push({ key, ...labels[key], items: bucketItems });
+    }
+    const snoozed = items
+      .filter((item) => !item.completed && isScheduleItemSnoozed(item, now))
+      .sort((left, right) => new Date(left.snoozedUntil!).getTime() - new Date(right.snoozedUntil!).getTime());
+    if (snoozed.length) groups.push({ key: "snoozed", label: "稍后提醒", hint: "暂时隐藏", items: snoozed });
+  }
+  if (filter !== "active") {
+    const completed = items
+      .filter((item) => item.completed)
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+    if (completed.length) groups.push({ key: "completed", label: "已完成", hint: "可随时恢复", items: completed });
+  }
+  return groups;
 }
 
 function sourceStats(sources: SourceRecord[]) {
@@ -825,27 +1223,25 @@ function sourceStats(sources: SourceRecord[]) {
   }, { success: 0, duplicate: 0, failed: 0 });
 }
 
+function useScheduleClock(): number {
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const refresh = () => setClock(Date.now());
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+  return clock;
+}
+
 function isFreshItem(item: DdlItem): boolean {
-  return Date.now() - new Date(item.createdAt).getTime() <= 10 * 60_000;
-}
-
-function isSchedulePopoverItem(item: DdlItem, now: number): boolean {
-  const dueTime = new Date(item.dueAt).getTime();
-  if (Number.isNaN(dueTime)) return false;
-  return dueTime <= now + 7 * 86_400_000 || isFreshItem(item);
-}
-
-function isSnoozed(item: DdlItem): boolean {
-  return !!item.snoozedUntil && new Date(item.snoozedUntil).getTime() > Date.now();
-}
-
-function compareItems(a: DdlItem, b: DdlItem): number {
-  const toneOrder = { red: 3, orange: 2, gray: 1 };
-  const toneDiff = toneOrder[urgencyTone(b)] - toneOrder[urgencyTone(a)];
-  if (toneDiff) return toneDiff;
-  const importanceDiff = importanceScore(b.importance) - importanceScore(a.importance);
-  if (importanceDiff) return importanceDiff;
-  return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
+  const age = Date.now() - new Date(item.createdAt).getTime();
+  return age >= 0 && age <= 10 * 60_000;
 }
 
 function urgencyTone(item: DdlItem): "red" | "orange" | "gray" {
@@ -853,10 +1249,6 @@ function urgencyTone(item: DdlItem): "red" | "orange" | "gray" {
   if (hours <= 24) return "red";
   if (hours <= 72) return "orange";
   return "gray";
-}
-
-function importanceScore(value: Importance): number {
-  return value === "high" ? 3 : value === "medium" ? 2 : 1;
 }
 
 function importanceLabel(value: Importance): string {
@@ -877,20 +1269,30 @@ function formatSourceTime(value: string): string {
 
 function formatDue(value: string): string {
   const date = new Date(value);
-  return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
+  if (Number.isNaN(date.getTime())) return "时间无效";
+  const year = date.getFullYear() === new Date().getFullYear() ? "" : `${date.getFullYear()}年`;
+  return `${year}${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
 }
 
 function remainingText(value: string): string {
-  const hours = Math.ceil((new Date(value).getTime() - Date.now()) / 3_600_000);
-  if (hours < 0) return "已逾期";
+  const remaining = new Date(value).getTime() - Date.now();
+  if (!Number.isFinite(remaining)) return "时间无效";
+  if (remaining < 0) return "已逾期";
+  if (remaining < 3_600_000) return "剩余不到 1 小时";
+  const hours = Math.ceil(remaining / 3_600_000);
   if (hours <= 24) return `剩余 ${hours} 小时`;
   return `剩余 ${Math.ceil(hours / 24)} 天`;
 }
 
 function toInputDate(value: string): string {
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function isPositiveFeedback(message: string): boolean {
+  return /^(已|成功|完成)/.test(message);
 }
 
 function acceptedFileTypes(): string {
@@ -983,7 +1385,7 @@ function isPersistentPetFeedback(state: CompanionState): boolean {
 }
 
 function isTransientPetFeedback(state: CompanionState): boolean {
-  return state === "clicked" || state === "success" || state === "confused";
+  return state === "clicked" || state === "success" || state === "confused" || state === "celebrating";
 }
 
 function petLabel(state: CompanionState): string {

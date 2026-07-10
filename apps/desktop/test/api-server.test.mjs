@@ -8,11 +8,11 @@ import test from "node:test";
 import { startChroniApiServer } from "../dist/api-server.js";
 import { ChroniStore } from "../dist/store.js";
 
-function withStore(fn) {
+async function withStore(fn) {
   const dir = mkdtempSync(join(tmpdir(), "chroni-api-test-"));
   const store = new ChroniStore(dir);
   try {
-    return fn(store);
+    return await fn(store);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -5,14 +5,14 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { extractDdlItemsFromText, itemFromLlmCandidate, isReliableOcrResult, processIntake, reprocessSource } from "../dist/intake.js";
-import { visibleScheduleSummary } from "../dist/shared/schedule.js";
-import { ChroniStore } from "../dist/store.js";
+import { lightweightScheduleItems, scheduleBucket, shouldRemindItem, snoozeUntil, visibleScheduleSummary } from "../dist/shared/schedule.js";
+import { companionStateForItems, ChroniStore } from "../dist/store.js";
 
-function withStore(fn) {
+async function withStore(fn) {
   const dir = mkdtempSync(join(tmpdir(), "chroni-test-"));
   const store = new ChroniStore(dir);
   try {
-    return fn(store);
+    return await fn(store);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -146,7 +146,103 @@ test("schedule popover summary excludes currently snoozed items", () => {
     { ...base, id: "completed", completed: true },
   ], now);
 
-  assert.deepEqual(summary, { active: 1, completed: 1, overdue: 0, today: 1, upcoming: 1 });
+  assert.deepEqual(summary, { active: 1, completed: 1, overdue: 0, today: 1, upcoming: 0 });
+});
+
+test("lightweight schedule shows one nearest later item instead of a misleading empty state", () => {
+  const now = new Date("2026-07-10T10:00:00.000Z");
+  const base = {
+    importance: "medium",
+    sourceSummary: "测试",
+    createdAt: "2026-07-01T00:00:00.000Z",
+    updatedAt: "2026-07-01T00:00:00.000Z",
+    completed: false,
+  };
+  const items = [
+    { ...base, id: "later", title: "两周后的报告", dueAt: "2026-07-24T12:00:00.000Z" },
+    { ...base, id: "nearest", title: "下周后的报告", dueAt: "2026-07-19T12:00:00.000Z" },
+  ];
+
+  assert.deepEqual(lightweightScheduleItems(items, now).map((item) => item.id), ["nearest"]);
+  assert.equal(scheduleBucket(items[1], now), "later");
+});
+
+test("snooze presets produce predictable reminder times", () => {
+  const now = new Date(2026, 6, 10, 15, 30, 0, 0);
+  assert.equal(snoozeUntil("two-hours", now).getTime() - now.getTime(), 2 * 3_600_000);
+  assert.equal(snoozeUntil("one-day", now).getDate(), 11);
+  const tomorrowMorning = snoozeUntil("tomorrow-morning", now);
+  assert.equal(tomorrowMorning.getDate(), 11);
+  assert.equal(tomorrowMorning.getHours(), 9);
+  assert.equal(tomorrowMorning.getMinutes(), 0);
+});
+
+test("an expired snooze triggers once even when the deadline is more than 24 hours away", () => {
+  const now = new Date("2026-07-10T10:00:00.000Z");
+  const item = {
+    completed: false,
+    dueAt: "2026-07-15T10:00:00.000Z",
+    snoozedUntil: "2026-07-10T09:59:00.000Z",
+    lastRemindedAt: "2026-07-10T07:00:00.000Z",
+  };
+
+  assert.equal(shouldRemindItem(item, now), true);
+  assert.equal(shouldRemindItem({ ...item, lastRemindedAt: now.toISOString() }, now), false);
+  assert.equal(shouldRemindItem({ ...item, snoozedUntil: "2026-07-10T11:00:00.000Z" }, now), false);
+});
+
+test("schedule summary buckets do not double-count an overdue item from today", () => {
+  const now = new Date("2026-07-10T10:00:00.000Z");
+  const summary = visibleScheduleSummary([{
+    id: "overdue-today",
+    title: "今日已逾期",
+    importance: "high",
+    dueAt: "2026-07-10T09:00:00.000Z",
+    sourceSummary: "测试",
+    createdAt: "2026-07-09T10:00:00.000Z",
+    updatedAt: "2026-07-09T10:00:00.000Z",
+    completed: false,
+  }], now);
+
+  assert.equal(summary.overdue, 1);
+  assert.equal(summary.today, 0);
+  assert.equal(summary.upcoming, 0);
+});
+
+test("snoozed items do not keep the companion in an urgent state", () => {
+  const now = new Date();
+  const overdue = {
+    id: "overdue",
+    title: "已稍后提醒的报告",
+    importance: "high",
+    dueAt: new Date(now.getTime() - 3_600_000).toISOString(),
+    sourceSummary: "测试",
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    completed: false,
+    snoozedUntil: new Date(now.getTime() + 2 * 3_600_000).toISOString(),
+  };
+
+  assert.deepEqual(companionStateForItems([overdue]), {
+    state: "idle",
+    bubble: "稍后提醒的事项会按时回来。",
+  });
+});
+
+test("item updates preserve completion feedback and immediately refresh after snoozing", async () => {
+  await withStore(async (store) => {
+    const created = await processIntake({ kind: "text", text: "明天 20:00 提交课程报告" }, store);
+    const item = created.snapshot.items[0];
+
+    const completed = store.updateItem(item.id, { completed: true });
+    assert.equal(completed.companion.state, "celebrating");
+    assert.match(completed.companion.bubble, /完成/);
+
+    store.updateItem(item.id, { completed: false });
+    const snoozed = store.updateItem(item.id, { snoozedUntil: new Date(Date.now() + 3_600_000).toISOString() });
+    assert.equal(snoozed.companion.state, "idle");
+    assert.match(snoozed.companion.bubble, /稍后提醒/);
+  });
 });
 
 
@@ -226,8 +322,8 @@ test("llm candidates must be grounded in the extracted source text", () => {
   }, sourceText), null);
 });
 
-test("invalid quiet hour preference patches are rejected", () => {
-  withStore((store) => {
+test("invalid quiet hour preference patches are rejected", async () => {
+  await withStore((store) => {
     const before = store.snapshot().preferences;
     const snapshot = store.updatePreferences({ quietHoursStart: "25:99" });
 
@@ -274,8 +370,8 @@ test("multi-file intake links each created item to the matching source text", as
   });
 });
 
-test("source linking can match llm evidence snippets without source-name prefixes", () => {
-  withStore((store) => {
+test("source linking can match llm evidence snippets without source-name prefixes", async () => {
+  await withStore((store) => {
     const now = new Date().toISOString();
     const snapshot = store.addItems([
       {

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Notification, shell } from "electron";
 import { startChroniApiServer } from "./api-server.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
+import { shouldRemindItem } from "./shared/schedule.js";
 import type { ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
 import { companionStateForItems, ChroniStore } from "./store.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
@@ -73,14 +74,12 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:item-update", (_event, id: string, patch: ItemPatch) => {
-    store.updateItem(id, patch);
-    const snapshot = refreshCompanionSnapshot();
+    const snapshot = store.updateItem(id, patch);
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
   ipcMain.handle("chroni:item-delete", (_event, id: string) => {
-    store.deleteItem(id);
-    const snapshot = refreshCompanionSnapshot();
+    const snapshot = store.deleteItem(id);
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
@@ -143,10 +142,18 @@ function refreshCompanionSnapshot() {
 function refreshReminders(): void {
   const snapshot = store.snapshot();
   if (snapshot.preferences.remindersEnabled && !inQuietHours(snapshot.preferences.quietHoursEnabled, snapshot.preferences.quietHoursStart, snapshot.preferences.quietHoursEnd)) {
-    const item = snapshot.items.find((candidate) => shouldRemind(candidate));
+    const item = snapshot.items.find((candidate) => shouldRemindItem(candidate));
     if (item && Notification.isSupported()) {
+      const now = Date.now();
+      const snoozedUntil = item.snoozedUntil ? new Date(item.snoozedUntil).getTime() : Number.NaN;
+      const lastRemindedAt = item.lastRemindedAt ? new Date(item.lastRemindedAt).getTime() : Number.NaN;
+      const isSnoozeWakeUp = Number.isFinite(snoozedUntil)
+        && snoozedUntil <= now
+        && (!Number.isFinite(lastRemindedAt) || snoozedUntil > lastRemindedAt);
       new Notification({
-        title: item.dueAt < new Date().toISOString() ? "Chroni：DDL 已逾期" : "Chroni：DDL 临近",
+        title: isSnoozeWakeUp
+          ? "Chroni：稍后提醒"
+          : new Date(item.dueAt).getTime() < now ? "Chroni：DDL 已逾期" : "Chroni：DDL 临近",
         body: `${item.title} · ${timeUntil(item.dueAt)}`,
         silent: false,
       }).show();
@@ -155,17 +162,6 @@ function refreshReminders(): void {
     }
   }
   setTimeout(refreshReminders, 60_000);
-}
-
-function shouldRemind(item: { completed: boolean; dueAt: string; snoozedUntil?: string; lastRemindedAt?: string }): boolean {
-  if (item.completed) return false;
-  const now = Date.now();
-  if (item.snoozedUntil && new Date(item.snoozedUntil).getTime() > now) return false;
-  const due = new Date(item.dueAt).getTime();
-  const hours = (due - now) / 3_600_000;
-  if (hours > 24) return false;
-  if (!item.lastRemindedAt) return true;
-  return now - new Date(item.lastRemindedAt).getTime() > 6 * 3_600_000;
 }
 
 function inQuietHours(enabled: boolean, start: string, end: string): boolean {
@@ -186,8 +182,11 @@ function minutesOfDay(value: string): number {
 }
 
 function timeUntil(value: string): string {
-  const hours = Math.ceil((new Date(value).getTime() - Date.now()) / 3_600_000);
-  if (hours < 0) return "已逾期";
+  const remaining = new Date(value).getTime() - Date.now();
+  if (!Number.isFinite(remaining)) return "截止时间无效";
+  if (remaining < 0) return "已逾期";
+  if (remaining < 3_600_000) return "剩余不到 1 小时";
+  const hours = Math.ceil(remaining / 3_600_000);
   if (hours <= 24) return `剩余 ${hours} 小时`;
   return `剩余 ${Math.ceil(hours / 24)} 天`;
 }
