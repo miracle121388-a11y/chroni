@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { formatOperationError } from "../../shared/errors";
 import { fullScheduleSummary, visibleScheduleSummary } from "../../shared/schedule";
 import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, SourceRecord } from "../../shared/types";
 import "./styles.css";
@@ -60,6 +61,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
   const [hovering, setHovering] = useState(false);
   const [movingPet, setMovingPet] = useState(false);
   const [bubbleVisible, setBubbleVisible] = useState(false);
+  const [dropFeedback, setDropFeedback] = useState("");
   const visualAction = movingPet ? "drag" : petAction(snapshot.companion.state);
 
   useEffect(() => {
@@ -76,17 +78,28 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
     return () => window.clearTimeout(timeout);
   }, [snapshot.companion.bubble, snapshot.companion.state]);
 
+  useEffect(() => {
+    if (!dropFeedback) return;
+    const timeout = window.setTimeout(() => setDropFeedback(""), 4200);
+    return () => window.clearTimeout(timeout);
+  }, [dropFeedback]);
+
   async function handleDrop(event: React.DragEvent) {
     event.preventDefault();
     const droppedFiles = Array.from(event.dataTransfer.files);
     const droppedText = event.dataTransfer.getData("text/plain");
     setHovering(false);
-    const files = await filesFromFileList(droppedFiles);
-    await api.companionHover(false);
-    const result = files.length
-      ? await api.intake({ kind: "files", files })
-      : await api.intake({ kind: "text", text: droppedText });
-    setSnapshot(result.snapshot);
+    setDropFeedback("");
+    try {
+      await api.companionHover(false);
+      const files = await filesFromFileList(droppedFiles);
+      const result = files.length
+        ? await api.intake({ kind: "files", files })
+        : await api.intake({ kind: "text", text: droppedText });
+      setSnapshot(result.snapshot);
+    } catch (error) {
+      setDropFeedback(formatOperationError(error, "拖放处理失败"));
+    }
   }
 
   return (
@@ -158,7 +171,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
       >
         <PetSprite action={visualAction} />
       </button>
-      <div className={`bubble ${bubbleVisible ? "show" : ""}`}>{snapshot.companion.bubble}</div>
+      <div className={`bubble ${bubbleVisible || dropFeedback ? "show" : ""}`}>{dropFeedback || snapshot.companion.bubble}</div>
     </main>
   );
 }
@@ -193,6 +206,8 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
       if (result.ok) setQuickText("");
+    } catch (error) {
+      setFeedback(formatOperationError(error, "识别失败"));
     } finally {
       setBusyMessage("");
     }
@@ -307,6 +322,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
       if (result.ok) setManual("");
+    } catch (error) {
+      setFeedback(formatOperationError(error, "识别失败"));
     } finally {
       setBusyMessage("");
     }
@@ -314,28 +331,31 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
 
   async function extractFiles(fileList: FileList | null, fill: boolean) {
     if (isBusy) return;
-    const files = await filesFromFileList(fileList);
-    if (!files.length) return;
-    const payload: IntakePayload = { kind: "files", files };
-    setBusyMessage(fill ? "正在填入日程..." : "正在预览抽取...");
+    setBusyMessage("正在读取文件...");
     setFeedback("");
-    if (fill) {
-      try {
+    try {
+      const files = await filesFromFileList(fileList);
+      if (!files.length) {
+        setFeedback("没有收到可读取的文件。");
+        return;
+      }
+      const payload: IntakePayload = { kind: "files", files };
+      setBusyMessage(fill ? "正在填入日程..." : "正在预览抽取...");
+      if (fill) {
         const result = await api.intake(payload);
         setSnapshot(result.snapshot);
         setFeedback(result.ok ? result.message : result.reason);
         setPreview(null);
         setPreviewPayload(null);
-      } finally {
-        setBusyMessage("");
+      } else {
+        setPreview(await api.extract(payload));
+        setPreviewPayload(payload);
       }
-      return;
-    }
-    try {
-      setPreview(await api.extract(payload));
-      setPreviewPayload(payload);
+    } catch (error) {
+      setFeedback(formatOperationError(error, "文件处理失败"));
     } finally {
       setBusyMessage("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -438,6 +458,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
                 setFeedback(result.ok ? result.message : result.reason);
                 setPreview(null);
                 setPreviewPayload(null);
+              } catch (error) {
+                setFeedback(formatOperationError(error, "填入日程失败"));
               } finally {
                 setBusyMessage("");
               }
@@ -525,8 +547,8 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
         <Toggle label="启用 LLM 抽取" checked={preferences.llm.enabled} onChange={(value) => void patch({ llm: { enabled: value } })} />
         <details className="advanced-settings">
           <summary>大模型 API</summary>
-          <label className="text-field">Base URL<input value={preferences.llm.baseUrl} placeholder="https://api.deepseek.com/v1" onChange={(event) => void patch({ llm: { baseUrl: event.target.value } })} /></label>
-          <label className="text-field">模型<input value={preferences.llm.model} placeholder="deepseek-chat" onChange={(event) => void patch({ llm: { model: event.target.value } })} /></label>
+          <label className="text-field">Base URL<input value={preferences.llm.baseUrl} placeholder="https://api.deepseek.com" onChange={(event) => void patch({ llm: { baseUrl: event.target.value } })} /></label>
+          <label className="text-field">模型<input value={preferences.llm.model} placeholder="deepseek-v4-flash" onChange={(event) => void patch({ llm: { model: event.target.value } })} /></label>
           <label className="text-field">API Key<input type="password" value={preferences.llm.apiKey} placeholder="sk-..." onChange={(event) => void patch({ llm: { apiKey: event.target.value } })} /></label>
         </details>
       </section>
@@ -635,6 +657,8 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const snapshot = await api.updateSourceText(source.id, draftText);
       setSnapshot(snapshot);
       setFeedback("原文已保存。");
+    } catch (error) {
+      setFeedback(formatOperationError(error, "保存失败"));
     } finally {
       setBusyMessage("");
     }
@@ -650,6 +674,8 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const result = await api.reprocessSource(source.id);
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
+    } catch (error) {
+      setFeedback(formatOperationError(error, "重新识别失败"));
     } finally {
       setBusyMessage("");
     }
@@ -663,6 +689,8 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const result = await api.reprocessSource(source.id);
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
+    } catch (error) {
+      setFeedback(formatOperationError(error, "重新识别失败"));
     } finally {
       setBusyMessage("");
     }
@@ -713,10 +741,16 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
   const isBusy = !!busyAction;
   useEffect(() => setDraft(item), [item]);
 
-  async function update(patch: Partial<DdlItem>) {
-    if (isBusy) return;
-    const snapshot = await api.updateItem(item.id, patch);
-    setSnapshot(snapshot);
+  async function update(patch: Partial<DdlItem>): Promise<boolean> {
+    if (isBusy) return false;
+    try {
+      const snapshot = await api.updateItem(item.id, patch);
+      setSnapshot(snapshot);
+      return true;
+    } catch (error) {
+      onAction?.(formatOperationError(error, "更新失败"));
+      return false;
+    }
   }
 
   function updateDueAt(value: string): void {
@@ -726,12 +760,14 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
     void update({ dueAt: date.toISOString() });
   }
 
-  async function runItemAction(message: string, action: () => Promise<void>, doneMessage?: string) {
+  async function runItemAction(message: string, action: () => Promise<void | boolean>, doneMessage?: string) {
     if (isBusy) return;
     setBusyAction(message);
     try {
-      await action();
-      if (doneMessage) onAction?.(doneMessage);
+      const succeeded = await action();
+      if (succeeded !== false && doneMessage) onAction?.(doneMessage);
+    } catch (error) {
+      onAction?.(formatOperationError(error, "操作失败"));
     } finally {
       setBusyAction("");
     }
