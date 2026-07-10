@@ -33,6 +33,13 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+html,
+#root {
+  min-width: 100vw;
+  min-height: 100vh;
+  background: transparent;
+}
+
 button,
 input,
 select {
@@ -76,69 +83,69 @@ summary:focus-visible {
 }
 
 .pet-shell {
-  display: grid;
-  grid-template-rows: 132px auto;
-  gap: 8px;
+  position: relative;
+  display: block;
   width: 100vw;
   height: 100vh;
-  place-items: center;
   user-select: none;
+  background: transparent;
 }
 
 .pet-body {
-  position: relative;
-  width: 116px;
-  height: 116px;
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 144px;
+  height: 144px;
+  margin: 0;
+  padding: 0;
   border: 0;
-  border-radius: 32px;
-  background:
-    linear-gradient(145deg, rgba(255, 250, 221, 0.98), rgba(179, 216, 255, 0.98));
-  box-shadow: 0 20px 44px rgba(36, 59, 83, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  border-radius: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  box-shadow: none;
   color: var(--primary);
   display: grid;
   place-items: center;
+  overflow: visible;
+  transform: translateX(-50%);
   transition: transform 160ms ease, filter 160ms ease;
 }
 
 .pet-body:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 24px 52px rgba(36, 59, 83, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  transform: translateX(-50%) translateY(-4px);
 }
 
-.style-mint .pet-body {
-  background: linear-gradient(145deg, #e8fff4, #9fd9ff);
+.pet-body:active {
+  transform: translateX(-50%);
 }
 
-.style-sunrise .pet-body {
-  background: linear-gradient(145deg, #fff1c2, #ffb0a1);
+.pet-body:focus,
+.pet-body:focus-visible {
+  outline: none;
 }
 
-.pet-face {
-  display: flex;
-  gap: 20px;
+.pet-art {
+  width: 144px;
+  height: 144px;
+  object-fit: contain;
+  pointer-events: none;
+  image-rendering: auto;
 }
 
-.pet-eye {
-  width: 13px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--ink);
-  box-shadow: 0 20px 0 -6px var(--ink);
+.style-mint .pet-art {
+  filter: saturate(1.08);
 }
 
-.pet-mark {
-  position: absolute;
-  bottom: 14px;
-  min-width: 42px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.72);
-  font-size: 12px;
-  font-weight: 900;
+.style-sunrise .pet-art {
+  filter: saturate(1.08) sepia(0.08);
 }
 
 .bubble {
+  position: absolute;
+  top: 146px;
+  left: 50%;
   max-width: 164px;
   padding: 9px 11px;
   border: 1px solid rgba(255, 255, 255, 0.72);
@@ -148,36 +155,39 @@ summary:focus-visible {
   font-size: 12px;
   line-height: 1.4;
   text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-6px) scale(0.96);
+  transition: opacity 160ms ease, transform 160ms ease;
 }
 
-.state-hover_accept .pet-body,
-.state-processing .pet-body {
+.bubble.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.state-hover_accept .pet-art,
+.state-processing .pet-art {
   filter: saturate(1.2);
   animation: pulse 1s infinite ease-in-out;
 }
 
-.state-overdue .pet-body,
-.state-deadline_near .pet-body {
-  background: linear-gradient(145deg, #ffe1df, #ffd36f);
+.state-overdue .pet-art,
+.state-deadline_near .pet-art {
+  filter: saturate(1.12);
 }
 
-.state-success .pet-body,
-.state-celebrating .pet-body {
-  background: linear-gradient(145deg, #dcfce7, #93e6c1);
+.state-success .pet-art,
+.state-celebrating .pet-art {
+  filter: saturate(1.12);
 }
 
-.state-confused .pet-body {
-  background: linear-gradient(145deg, #eef2f7, #ffd6a5);
+.state-confused .pet-art {
+  filter: saturate(0.9);
 }
 
-.state-sleeping .pet-body {
-  background: linear-gradient(145deg, #eef2f7, #dbe4ef);
-  box-shadow: 0 14px 30px rgba(36, 59, 83, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+.state-sleeping .pet-art {
   filter: saturate(0.72);
-}
-
-.state-sleeping .bubble {
-  opacity: 0.82;
 }
 
 @keyframes pulse {
@@ -271,9 +281,76 @@ summary:focus-visible {
 .popover-shell .schedule-panel {
   width: 100%;
   max-height: 100%;
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.94);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.2);
+  border: 0;
+  border-radius: 14px;
+  background: #fffefa;
+  box-shadow: none;
+  color: #17212f;
+  backdrop-filter: none;
+}
+
+.popover-shell .panel-head p,
+.popover-shell .row-main span,
+.popover-shell .row-main time,
+.popover-shell .row-main em {
+  color: #516171;
+}
+
+.popover-shell .panel-head h1,
+.popover-shell .row-main strong {
+  color: #17212f;
+}
+
+.popover-shell .mini-stats span,
+.popover-shell .quick-add input,
+.popover-shell .ddl-row {
+  border-color: #dfe5ec;
+  background: #ffffff;
+  color: #17212f;
+  box-shadow: none;
+}
+
+.popover-shell .mini-stats b {
+  color: #17212f;
+}
+
+.popover-shell .quick-add input::placeholder {
+  color: #7b8794;
+}
+
+.popover-shell .ddl-row:hover {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.popover-shell .check,
+.popover-shell .snooze,
+.popover-shell .icon-btn,
+.popover-shell .quick-add button {
+  border: 1px solid #d8e2ea;
+  background: #f5f8fa;
+  color: #1f3347;
+}
+
+.popover-shell .quick-add button {
+  background: #e8f1ee;
+  color: #254f43;
+}
+
+.popover-shell .icon-btn.quiet {
+  background: #f7f8fa;
+  color: #526170;
+}
+
+.popover-shell .check:hover,
+.popover-shell .snooze:hover,
+.popover-shell .icon-btn:hover,
+.popover-shell .quick-add button:hover {
+  border-color: #c5d3dc;
+  background: #eef4f7;
+  color: #17212f;
+  box-shadow: none;
 }
 
 .panel-head,
@@ -1663,6 +1740,38 @@ details.source-history[open] > summary::after {
   font-size: 12px;
   font-style: normal;
   line-height: 1.4;
+}
+
+.third-party-credit {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid #e8e2d8;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.third-party-credit h3 {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.third-party-credit p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.third-party-credit a {
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.third-party-credit a:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 860px) {

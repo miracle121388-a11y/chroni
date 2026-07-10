@@ -10,6 +10,7 @@ artifactName: Chroni-${version}-${os}-${arch}.${ext}
 
 files:
   - dist/**
+  - third_party/**
   - preload.cjs
   - package.json
 

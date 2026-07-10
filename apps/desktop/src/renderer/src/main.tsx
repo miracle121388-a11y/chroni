@@ -5,6 +5,35 @@ import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniPr
 import "./styles.css";
 
 const api = window.chroni;
+type PetAction = "idle" | "drag" | "wake" | "study" | "pet" | "cat" | "sleep";
+const petFrameModules = import.meta.glob("./assets/tongluv/frames/*/*.png", { eager: true, query: "?url", import: "default" }) as Record<string, string>;
+const petAnimationFrames: Record<PetAction, string[]> = {
+  idle: collectPetFrames("idle"),
+  drag: collectPetFrames("drag"),
+  wake: collectPetFrames("wake"),
+  study: collectPetFrames("study"),
+  pet: collectPetFrames("pet"),
+  cat: collectPetFrames("cat"),
+  sleep: collectPetFrames("sleep"),
+};
+const petAnimationFps: Record<PetAction, number> = {
+  idle: 1,
+  drag: 1,
+  wake: 12,
+  study: 12,
+  pet: 12,
+  cat: 10,
+  sleep: 10,
+};
+const petAnimationLoops: Record<PetAction, boolean> = {
+  idle: true,
+  drag: true,
+  wake: false,
+  study: true,
+  pet: false,
+  cat: false,
+  sleep: false,
+};
 
 function useSnapshot(): [ChroniSnapshot | null, React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>] {
   const [snapshot, setSnapshot] = useState<ChroniSnapshot | null>(null);
@@ -26,8 +55,25 @@ function App() {
 
 function PetView({ snapshot, setSnapshot }: ViewProps) {
   const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
   const [hovering, setHovering] = useState(false);
-  const label = petLabel(snapshot.companion.state);
+  const [movingPet, setMovingPet] = useState(false);
+  const [bubbleVisible, setBubbleVisible] = useState(false);
+  const visualAction = movingPet ? "drag" : petAction(snapshot.companion.state);
+
+  useEffect(() => {
+    if (isPersistentPetFeedback(snapshot.companion.state)) {
+      setBubbleVisible(true);
+      return;
+    }
+    if (!isTransientPetFeedback(snapshot.companion.state)) {
+      setBubbleVisible(false);
+      return;
+    }
+    setBubbleVisible(true);
+    const timeout = window.setTimeout(() => setBubbleVisible(false), 3600);
+    return () => window.clearTimeout(timeout);
+  }, [snapshot.companion.bubble, snapshot.companion.state]);
 
   async function handleDrop(event: React.DragEvent) {
     event.preventDefault();
@@ -63,27 +109,42 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
       }}
       onPointerDown={(event) => {
         dragStart.current = { x: event.screenX, y: event.screenY };
+        suppressClick.current = false;
       }}
       onPointerMove={(event) => {
         if (!dragStart.current || event.buttons !== 1) return;
         const dx = event.screenX - dragStart.current.x;
         const dy = event.screenY - dragStart.current.y;
         dragStart.current = { x: event.screenX, y: event.screenY };
+        if (Math.abs(dx) + Math.abs(dy) > 1) {
+          suppressClick.current = true;
+          setMovingPet(true);
+        }
         api.dragWindow(dx, dy);
       }}
       onPointerUp={() => {
         dragStart.current = null;
+        setMovingPet(false);
         api.snapWindow();
       }}
+      onPointerLeave={() => setMovingPet(false)}
     >
-      <button className="pet-body" type="button" onClick={() => void api.companionClicked().then(setSnapshot)} aria-label="Chroni 桌宠">
-        <span className="pet-face">
-          <span className="pet-eye" />
-          <span className="pet-eye" />
-        </span>
-        <span className="pet-mark">{label}</span>
+      <button
+        className="pet-body"
+        type="button"
+        onClick={(event) => {
+          if (suppressClick.current) {
+            event.preventDefault();
+            suppressClick.current = false;
+            return;
+          }
+          void api.companionClicked().then(setSnapshot);
+        }}
+        aria-label="Chroni 桌宠"
+      >
+        <PetSprite action={visualAction} />
       </button>
-      <div className="bubble">{snapshot.companion.bubble}</div>
+      <div className={`bubble ${bubbleVisible ? "show" : ""}`}>{snapshot.companion.bubble}</div>
     </main>
   );
 }
@@ -490,6 +551,11 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
         <StatusRow label="本地数据" state="ready" detail="日程、来源和偏好保存到本机应用数据目录" />
         <StatusRow label="隐私状态" state="ready" detail={snapshot.services.privacy} />
       </div>
+      <section className="third-party-credit">
+        <h3>桌宠形象</h3>
+        <p>当前桌宠形象基于开源项目 XIAOTONG Desktop Pet / 蓝色小嗵，Chroni 已保留其许可证和附加条款副本。</p>
+        <a href="https://github.com/gildingmazzonimo621-design/XIAOTONG-Desktop-pet" target="_blank" rel="noreferrer">原始项目仓库</a>
+      </section>
       <details className="advanced-settings">
         <summary>排错说明</summary>
         <ul className="notes">{snapshot.services.notes.map((note) => <li key={note}>{note}</li>)}</ul>
@@ -859,6 +925,65 @@ function fileToBase64(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
+}
+
+function PetSprite({ action }: { action: PetAction }) {
+  const frames = petAnimationFrames[action].length ? petAnimationFrames[action] : petAnimationFrames.idle;
+  const [frameIndex, setFrameIndex] = useState(0);
+  const [finished, setFinished] = useState(false);
+
+  useEffect(() => {
+    setFrameIndex(0);
+    setFinished(false);
+    if (frames.length <= 1) return;
+    const loop = petAnimationLoops[action];
+    const interval = window.setInterval(() => {
+      setFrameIndex((current) => {
+        const next = current + 1;
+        if (next < frames.length) return next;
+        if (loop) return 0;
+        window.clearInterval(interval);
+        setFinished(true);
+        return current;
+      });
+    }, 1000 / petAnimationFps[action]);
+    return () => window.clearInterval(interval);
+  }, [action, frames]);
+
+  const displayFrames = finished && action !== "sleep" ? petAnimationFrames.idle : frames;
+  return <img className="pet-art" src={displayFrames[Math.min(frameIndex, displayFrames.length - 1)]} alt="" draggable={false} />;
+}
+
+function collectPetFrames(action: PetAction): string[] {
+  const needle = `/frames/${action}/`;
+  return Object.entries(petFrameModules)
+    .filter(([path]) => path.includes(needle))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, url]) => url);
+}
+
+function petAction(state: CompanionState): PetAction {
+  const map: Record<CompanionState, PetAction> = {
+    idle: "idle",
+    clicked: "wake",
+    hover_accept: "drag",
+    processing: "study",
+    success: "pet",
+    confused: "cat",
+    deadline_near: "study",
+    overdue: "study",
+    celebrating: "pet",
+    sleeping: "sleep",
+  };
+  return map[state];
+}
+
+function isPersistentPetFeedback(state: CompanionState): boolean {
+  return state === "hover_accept" || state === "processing" || state === "deadline_near" || state === "overdue";
+}
+
+function isTransientPetFeedback(state: CompanionState): boolean {
+  return state === "clicked" || state === "success" || state === "confused";
 }
 
 function petLabel(state: CompanionState): string {

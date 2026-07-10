@@ -119,8 +119,11 @@ function installIpc(): void {
 }
 
 function refreshCompanionFromSchedule(): void {
-  const snapshot = refreshCompanionSnapshot();
-  broadcast("chroni:snapshot-updated", snapshot);
+  const current = store.snapshot();
+  if (current.companion.state !== "processing" && current.companion.state !== "hover_accept") {
+    const snapshot = refreshCompanionSnapshot();
+    broadcast("chroni:snapshot-updated", snapshot);
+  }
   setTimeout(refreshCompanionFromSchedule, 60_000);
 }
 
