@@ -97,12 +97,16 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
       }
       return { ok: false, reason: "没有识别到明确 DDL。", extracted, failures, items: [] };
     }
+    const count = Math.min(items.length, 12);
+    const message = llmError && isLlmEnabled(options.llm)
+      ? `模型服务不可用，已使用本地规则加入 ${count} 条日程。`
+      : count === 1 ? "已加入 1 条日程。" : `已加入 ${count} 条日程。`;
     return {
       ok: true,
       extracted,
       failures,
       items: mergeDuplicateItems(items).slice(0, 12),
-      message: items.length === 1 ? "已加入 1 条日程。" : `已加入 ${Math.min(items.length, 12)} 条日程。`,
+      message,
     };
   } catch (error) {
     return {
