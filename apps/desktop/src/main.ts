@@ -14,6 +14,9 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
+  app.on("second-instance", () => {
+    if (app.isReady()) showControlCenter();
+  });
   app.whenReady().then(() => {
     app.setName("Chroni");
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");

@@ -8,9 +8,11 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "dev": "pnpm run build && electron .",
+    "dev": "pnpm run dev:desktop",
+    "start": "pnpm run build && node scripts/run-electron.cjs .",
     "dev:renderer": "vite --host 127.0.0.1",
-    "dev:desktop": "concurrently -k -n renderer,electron -c cyan,magenta \"pnpm run dev:renderer\" \"wait-on http://127.0.0.1:5173 && cross-env CHRONI_RENDERER_URL=http://127.0.0.1:5173 pnpm run build:main && electron .\"",
+    "dev:electron": "wait-on http://127.0.0.1:5173 && pnpm run build:main && cross-env CHRONI_RENDERER_URL=http://127.0.0.1:5173 node scripts/run-electron.cjs .",
+    "dev:desktop": "concurrently -k -s command-electron -n renderer,electron -c cyan,magenta \"pnpm run dev:renderer\" \"pnpm run dev:electron\"",
     "build:main": "tsc -p tsconfig.json",
     "build:renderer": "vite build",
     "build": "pnpm run build:main && pnpm run build:renderer",

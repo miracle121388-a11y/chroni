@@ -11,6 +11,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @chroni/desktop run dev",
+    "start": "pnpm --filter @chroni/desktop run start",
     "build": "pnpm --filter @chroni/desktop run build",
     "typecheck": "pnpm --filter @chroni/desktop run typecheck",
     "test": "pnpm --filter @chroni/desktop run test",
