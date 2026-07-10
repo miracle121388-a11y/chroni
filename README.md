@@ -1,57 +1,148 @@
 # Chroni
 
-Chroni 是一个以桌宠为入口的本地 DDL 日程助手。当前阶段以本机开发运行和体验验证为主，暂不优先打包成正式应用。
+Chroni 是一个以桌宠为入口的本地 DDL 日程助手。用户可以拖入文字、文档、表格或图片，Chroni 会进行本地解析/OCR，并可调用 DeepSeek 等 OpenAI 兼容模型抽取明确的截止事项。
 
-## 本机运行
+## 环境要求
 
-前置环境：
-
+- Windows 10/11、macOS 或 Linux
 - Node.js 20 或更高版本
-- pnpm
+- pnpm 11.7.0（也可以直接使用下方的 `npx pnpm@11.7.0`）
 
-如果本机还没有 pnpm，可用 Homebrew 安装：
+## Windows 开发运行
 
-```bash
-brew install node pnpm
+在 PowerShell 中执行：
+
+```powershell
+cd D:\Users\Lenovo\Desktop\Chroni
+npx pnpm@11.7.0 install
+npx pnpm@11.7.0 run dev
 ```
 
-安装依赖：
+`dev` 会同时启动 Vite renderer 和 Electron。看到以下信息表示启动完成：
 
-```bash
-pnpm install
+```text
+VITE ready
+Chroni desktop shell ready.
+Chroni API listening at http://127.0.0.1:8765
 ```
 
-启动应用：
+Chroni 主要通过桌宠、屏幕右侧 DDL 抽屉和系统托盘运行。关闭控制中心不会退出应用；需要退出时请在托盘图标菜单中选择“退出 Chroni”。开发终端可按 `Ctrl+C` 停止。
 
-```bash
-pnpm run dev
+生产构建后本机启动：
+
+```powershell
+npx pnpm@11.7.0 run start
 ```
 
-开发调试时也可以启动带 Vite renderer 的模式：
+分开排查 renderer 和 Electron：
 
-```bash
-pnpm --filter @chroni/desktop run dev:desktop
+```powershell
+# 终端 1
+npx pnpm@11.7.0 --filter @chroni/desktop run dev:renderer
+
+# 终端 2
+npx pnpm@11.7.0 --filter @chroni/desktop run dev:electron
 ```
 
-## 常用命令
+项目启动器会主动删除父终端中的 `ELECTRON_RUN_AS_NODE`，避免 Electron 被误当作普通 Node.js 执行。
 
-```bash
-pnpm run typecheck
-pnpm run test
-pnpm run build
-pnpm run check
+## DeepSeek 配置
+
+推荐在 Chroni 控制中心填写：
+
+1. 从托盘菜单打开“控制中心”。
+2. 进入“偏好”并展开“高级 -> 大模型 API”。
+3. `Base URL` 填写 `https://api.deepseek.com`。
+4. `模型`填写 `deepseek-v4-flash`；需要更强模型时可填写 `deepseek-v4-pro`。
+5. `API Key` 填写 DeepSeek 控制台生成的 Key。
+6. 开启“启用 LLM 抽取”。
+
+API Key 使用 Electron `safeStorage` 交给操作系统安全存储加密，不会以明文写入 `chroni-state.json`。如果系统安全存储不可用，界面填写的 Key 只在当前运行期间有效。
+
+也可以在启动 Chroni 的同一个 PowerShell 窗口中使用环境变量：
+
+```powershell
+$env:CHRONI_LLM_ENABLED="1"
+$env:CHRONI_LLM_BASE_URL="https://api.deepseek.com"
+$env:CHRONI_LLM_MODEL="deepseek-v4-flash"
+$env:CHRONI_LLM_API_KEY="你的 DeepSeek API Key"
+npx pnpm@11.7.0 run dev
 ```
 
-macOS 上如果需要从命令行关闭已打开的 Chroni：
+启用 LLM 后，文件仍先在本机解析，但抽取出的文本会发送到所配置的模型服务。模型不可用时，如果本地规则仍能可靠识别，Chroni 会保留结果并明确提示已回退；无法可靠识别时不会生成可疑日程。
 
-```bash
-pnpm run stop:mac
+## 支持的输入
+
+- 文本与结构化文本：TXT、MD、CSV、TSV、JSON、ICS、LOG、HTML、XML、YAML、RTF
+- 文档与表格：DOCX、PDF、XLSX
+- 图片 OCR：PNG、JPG/JPEG、WEBP、BMP、TIF/TIFF
+- 直接文本：桌宠拖放、控制中心快速添加、本地 HTTP API
+
+单个文档最大 18 MiB，纯文本最大 2 MiB。图片 OCR 的自动入日程置信度阈值为 70。空文件、乱码、非法日期和没有明确任务语义的内容会返回具体失败原因。
+
+## 本地 HTTP API
+
+API 默认只监听 `127.0.0.1:8765`。每次启动会生成会话令牌；除健康检查外的所有接口都要求 Bearer 鉴权。
+
+PowerShell 示例：
+
+```powershell
+$health = Invoke-RestMethod http://127.0.0.1:8765/api/health
+$headers = @{ Authorization = "Bearer $($health.apiToken)" }
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8765/api/extract `
+  -Headers $headers `
+  -ContentType "application/json" `
+  -Body (@{
+    kind = "text"
+    text = "7月12日 23:59 提交课程报告"
+  } | ConvertTo-Json)
 ```
 
-## 当前产品形态
+主要接口：
 
-- 桌宠是主入口，负责拖拽输入、短反馈和唤起日程。
-- Windows 日程表以侧边抽屉形式展示。
-- macOS 日程表以可隐藏轻量浮层展示。
-- 控制中心只做轻量修正、基础偏好和服务状态。
-- 文件、图片和文本输入会自动识别 DDL，不设置人工确认步骤；识别不可靠时会失败并保留来源记录。
+```text
+GET    /api/health
+GET    /api/snapshot
+POST   /api/extract
+POST   /api/intake
+PATCH  /api/items/:id
+DELETE /api/items/:id
+PATCH  /api/preferences
+POST   /api/sources/:id/reprocess
+```
+
+需要固定 API 令牌时，在启动前设置 `CHRONI_API_TOKEN`。浏览器跨域默认关闭；只有设置精确的 `CHRONI_API_ALLOWED_ORIGIN` 后，该 Origin 才能访问。HTTP JSON 请求体上限为 32 MiB，所有 HTTP snapshot 都会移除 LLM API Key。
+
+## 检查与打包
+
+```powershell
+npx pnpm@11.7.0 run check
+npx pnpm@11.7.0 run package:desktop
+```
+
+`check` 依次执行 TypeScript 检查、自动化测试和 renderer/main 构建。Windows 安装包和便携版输出到 `apps/desktop/dist-electron/`。
+
+## 常见问题
+
+### `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`
+
+该行只是 pnpm 的汇总，真实原因在它上方。当前开发脚本会以 Electron 子进程的退出码为准，正常关闭应用不会因为 Vite 被联动停止而误报失败。如果仍有错误，请从第一条 `[electron]` 或 `[renderer]` 错误开始检查。
+
+### 文件显示为空或没有识别结果
+
+- 确认文件扩展名在支持列表中且文件不是 0 字节。
+- TXT 建议使用 UTF-8 或 UTF-16LE 编码。
+- 扫描 PDF 本身没有文本层时，请先转成图片或使用截图 OCR。
+- 控制中心会显示“文件无法读取”“文本无法可靠解析”“OCR 置信度不足”或“没有明确截止时间”等具体原因。
+- 同一个文件修正后可以直接再次选择，文件输入会在每次处理后重置。
+
+### 端口 8765 被占用
+
+Chroni 会自动改用一个随机空闲端口，并在启动终端打印实际地址。也可以在启动前设置 `CHRONI_API_PORT`，例如 `$env:CHRONI_API_PORT="8877"`。
+
+## 数据与许可证
+
+日程、来源和偏好保存在 Electron 用户数据目录，可在“运行状态”中点击“打开本地数据位置”。项目采用 MIT License。桌宠视觉资产来自 XIAOTONG Desktop Pet，相关许可证与附加条款保存在 `apps/desktop/third_party/xiaotong/`。

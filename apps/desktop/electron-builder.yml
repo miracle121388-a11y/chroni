@@ -28,6 +28,7 @@ mac:
   gatekeeperAssess: false
 
 win:
+  icon: src/renderer/src/assets/tongluv/frames/idle/0000.png
   target:
     - nsis
     - portable

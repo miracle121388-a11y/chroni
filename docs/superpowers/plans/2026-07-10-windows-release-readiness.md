@@ -124,7 +124,7 @@
 **Files:**
 - Review: all changed files and tracked release metadata.
 
-- [ ] Scan tracked files and built renderer text for legacy OpenPets identifiers.
+- [ ] Scan tracked files and built renderer text for legacy project identifiers.
 - [ ] Run `npx pnpm@11.7.0 run check`.
 - [ ] Run Windows portable packaging and inspect produced artifact names.
 - [ ] Start `dev:desktop` with `ELECTRON_RUN_AS_NODE=1`, verify Electron remains alive, then close it cleanly and verify exit zero.
