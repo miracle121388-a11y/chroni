@@ -54,7 +54,8 @@ function App() {
 }
 
 function PetView({ snapshot, setSnapshot }: ViewProps) {
-  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const dragPointerId = useRef<number | null>(null);
+  const dragStartPoint = useRef<{ x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
   const [hovering, setHovering] = useState(false);
   const [movingPet, setMovingPet] = useState(false);
@@ -108,26 +109,39 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         void api.openPetMenu();
       }}
       onPointerDown={(event) => {
-        dragStart.current = { x: event.screenX, y: event.screenY };
+        if (!event.isPrimary || event.button !== 0) return;
+        dragPointerId.current = event.pointerId;
+        dragStartPoint.current = { x: event.screenX, y: event.screenY };
+        event.currentTarget.setPointerCapture(event.pointerId);
         suppressClick.current = false;
+        api.startWindowDrag();
       }}
       onPointerMove={(event) => {
-        if (!dragStart.current || event.buttons !== 1) return;
-        const dx = event.screenX - dragStart.current.x;
-        const dy = event.screenY - dragStart.current.y;
-        dragStart.current = { x: event.screenX, y: event.screenY };
-        if (Math.abs(dx) + Math.abs(dy) > 1) {
+        if (dragPointerId.current !== event.pointerId || (event.buttons & 1) === 0) return;
+        const start = dragStartPoint.current;
+        if (start && Math.abs(event.screenX - start.x) + Math.abs(event.screenY - start.y) > 2) {
           suppressClick.current = true;
           setMovingPet(true);
         }
-        api.dragWindow(dx, dy);
+        api.moveWindowDrag();
       }}
-      onPointerUp={() => {
-        dragStart.current = null;
+      onPointerUp={(event) => {
+        if (dragPointerId.current !== event.pointerId) return;
+        dragPointerId.current = null;
+        dragStartPoint.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
         setMovingPet(false);
-        api.snapWindow();
+        api.endWindowDrag();
       }}
-      onPointerLeave={() => setMovingPet(false)}
+      onPointerCancel={(event) => {
+        if (dragPointerId.current !== event.pointerId) return;
+        dragPointerId.current = null;
+        dragStartPoint.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        suppressClick.current = false;
+        setMovingPet(false);
+        api.endWindowDrag();
+      }}
     >
       <button
         className="pet-body"

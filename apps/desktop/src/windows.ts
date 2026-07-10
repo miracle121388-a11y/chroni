@@ -1,6 +1,7 @@
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type NativeImage } from "electron";
 import { join } from "node:path";
 import type { ChroniPreferences, ChroniView } from "./shared/types.js";
+import { draggedWindowPosition, interpolatedPosition, snappedWindowPosition, windowsDrawerPosition, type WindowPosition } from "./window-geometry.js";
 
 type WindowSet = {
   pet?: BrowserWindow;
@@ -12,10 +13,10 @@ type WindowSet = {
 const windows: WindowSet = {};
 let scheduleExpanded = false;
 let macScheduleHideTimer: NodeJS.Timeout | undefined;
+const windowDragSessions = new Map<number, { startWindow: WindowPosition; startCursor: WindowPosition }>();
+let scheduleAnimationGeneration = 0;
 
 const windowsDrawerWidth = 384;
-const windowsDrawerHandleWidth = 34;
-const windowsDrawerMargin = 8;
 const macPopoverWidth = 348;
 const macPopoverHeight = 418;
 
@@ -33,6 +34,8 @@ export function createAppWindows(): void {
   const display = screen.getPrimaryDisplay().workArea;
   windows.pet.setPosition(display.x + display.width - 220, display.y + display.height - 280);
   windows.pet.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  const petWebContentsId = windows.pet.webContents.id;
+  windows.pet.webContents.once("destroyed", () => windowDragSessions.delete(petWebContentsId));
 
   windows.schedule = createViewWindow("schedule", scheduleWindowOptions());
   positionScheduleWindow(false);
@@ -46,13 +49,29 @@ export function createAppWindows(): void {
     });
   }
 
-  ipcMain.on("chroni:drag-window", (event, dx: number, dy: number) => {
+  ipcMain.on("chroni:start-window-drag", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) return;
+    if (!win || win !== windows.pet) return;
     const [x, y] = win.getPosition();
-    win.setPosition(Math.round(x + dx), Math.round(y + dy));
+    windowDragSessions.set(event.sender.id, {
+      startWindow: { x, y },
+      startCursor: screen.getCursorScreenPoint(),
+    });
   });
-  ipcMain.on("chroni:snap-window", (event) => {
+  ipcMain.on("chroni:move-window-drag", (event) => {
+    const session = windowDragSessions.get(event.sender.id);
+    if (!session) return;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win !== windows.pet) {
+      windowDragSessions.delete(event.sender.id);
+      return;
+    }
+    const position = draggedWindowPosition(session.startWindow, session.startCursor, screen.getCursorScreenPoint());
+    win.setPosition(Math.round(position.x), Math.round(position.y));
+  });
+  ipcMain.on("chroni:end-window-drag", (event) => {
+    if (!windowDragSessions.has(event.sender.id)) return;
+    windowDragSessions.delete(event.sender.id);
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win) snapWindowToEdge(win);
   });
@@ -197,17 +216,15 @@ async function loadView(win: BrowserWindow, view: ChroniView): Promise<void> {
 function positionScheduleWindow(expanded: boolean): void {
   const win = windows.schedule;
   if (!win) return;
-  const area = screen.getPrimaryDisplay().workArea;
   if (process.platform === "win32") {
-    const width = win.getBounds().width;
+    const area = windowsDrawerWorkArea();
+    const bounds = win.getBounds();
     const height = Math.min(520, area.height - 48);
-    if (win.getBounds().height !== height) win.setSize(width, height);
-    const x = expanded
-      ? area.x + area.width - width - windowsDrawerMargin
-      : area.x + area.width - windowsDrawerHandleWidth;
-    const y = area.y + Math.round((area.height - height) / 2);
-    animateWindowTo(win, x, y);
+    if (bounds.height !== height) win.setSize(bounds.width, height);
+    const target = windowsDrawerPosition(area, { width: bounds.width, height }, expanded);
+    animateWindowTo(win, target.x, target.y);
   } else if (process.platform === "darwin") {
+    const area = screen.getPrimaryDisplay().workArea;
     const petBounds = windows.pet?.getBounds();
     const bounds = win.getBounds();
     const nearPetLeft = petBounds ? petBounds.x - bounds.width - 14 : Number.NaN;
@@ -220,6 +237,7 @@ function positionScheduleWindow(expanded: boolean): void {
     const y = Math.min(Math.max(targetY, area.y + 12), area.y + area.height - bounds.height - 12);
     win.setPosition(Math.round(x), Math.round(y));
   } else {
+    const area = screen.getPrimaryDisplay().workArea;
     win.setPosition(area.x + area.width - win.getBounds().width - 28, area.y + 72);
   }
 }
@@ -227,31 +245,32 @@ function positionScheduleWindow(expanded: boolean): void {
 function animateWindowTo(win: BrowserWindow, targetX: number, targetY: number): void {
   const [startX, startY] = win.getPosition();
   const steps = 6;
-  for (let step = 1; step <= steps; step += 1) {
-    setTimeout(() => {
-      const progress = step / steps;
-      const eased = 1 - Math.pow(1 - progress, 3);
-      win.setPosition(
-        Math.round(startX + (targetX - startX) * eased),
-        Math.round(startY + (targetY - startY) * eased),
-      );
-    }, step * 12);
-  }
+  const generation = ++scheduleAnimationGeneration;
+  let step = 0;
+  const advance = () => {
+    if (generation !== scheduleAnimationGeneration || win.isDestroyed()) return;
+    step += 1;
+    const progress = step / steps;
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const position = interpolatedPosition({ x: startX, y: startY }, { x: targetX, y: targetY }, eased);
+    win.setPosition(Math.round(position.x), Math.round(position.y));
+    if (step < steps) setTimeout(advance, 12);
+  };
+  setTimeout(advance, 12);
+}
+
+function windowsDrawerWorkArea() {
+  const petBounds = windows.pet && !windows.pet.isDestroyed() ? windows.pet.getBounds() : undefined;
+  return petBounds
+    ? screen.getDisplayMatching(petBounds).workArea
+    : screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
 }
 
 function snapWindowToEdge(win: BrowserWindow): void {
   const bounds = win.getBounds();
   const display = screen.getDisplayMatching(bounds).workArea;
-  const threshold = 36;
-  let x = bounds.x;
-  let y = bounds.y;
-  if (Math.abs(bounds.x - display.x) < threshold) x = display.x;
-  if (Math.abs(bounds.y - display.y) < threshold) y = display.y;
-  if (Math.abs(bounds.x + bounds.width - (display.x + display.width)) < threshold) x = display.x + display.width - bounds.width;
-  if (Math.abs(bounds.y + bounds.height - (display.y + display.height)) < threshold) y = display.y + display.height - bounds.height;
-  x = Math.min(Math.max(x, display.x), display.x + display.width - bounds.width);
-  y = Math.min(Math.max(y, display.y), display.y + display.height - bounds.height);
-  win.setPosition(Math.round(x), Math.round(y));
+  const position = snappedWindowPosition(bounds, display, 36);
+  win.setPosition(Math.round(position.x), Math.round(position.y));
 }
 
 function createTrayIcon(): NativeImage {

@@ -21,8 +21,9 @@ declare global {
       reprocessSource(sourceId: string): Promise<IntakeResult>;
       updateSourceText(sourceId: string, text: string): Promise<ChroniSnapshot>;
       openStorage(): Promise<void>;
-      dragWindow(dx: number, dy: number): void;
-      snapWindow(): void;
+      startWindowDrag(): void;
+      moveWindowDrag(): void;
+      endWindowDrag(): void;
       filePath(file: File): string;
       onSnapshotUpdated(callback: (snapshot: ChroniSnapshot) => void): () => void;
     };
