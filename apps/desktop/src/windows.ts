@@ -49,14 +49,18 @@ export function createAppWindows(): void {
     });
   }
 
-  ipcMain.on("chroni:start-window-drag", (event) => {
+  ipcMain.on("chroni:start-window-drag", (event, screenX: number, screenY: number) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win || win !== windows.pet) return;
+    if (!win || win !== windows.pet || !Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+      event.returnValue = false;
+      return;
+    }
     const [x, y] = win.getPosition();
     windowDragSessions.set(event.sender.id, {
       startWindow: { x, y },
-      startCursor: screen.getCursorScreenPoint(),
+      startCursor: { x: screenX, y: screenY },
     });
+    event.returnValue = true;
   });
   ipcMain.on("chroni:move-window-drag", (event) => {
     const session = windowDragSessions.get(event.sender.id);

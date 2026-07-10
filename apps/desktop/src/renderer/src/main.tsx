@@ -127,7 +127,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         dragStartPoint.current = { x: event.screenX, y: event.screenY };
         event.currentTarget.setPointerCapture(event.pointerId);
         suppressClick.current = false;
-        api.startWindowDrag();
+        api.startWindowDrag(event.screenX, event.screenY);
       }}
       onPointerMove={(event) => {
         if (dragPointerId.current !== event.pointerId || (event.buttons & 1) === 0) return;
