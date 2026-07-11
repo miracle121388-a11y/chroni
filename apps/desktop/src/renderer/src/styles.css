@@ -1058,6 +1058,32 @@ summary:focus-visible {
   font-weight: 900;
 }
 
+.llm-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+}
+
+.llm-settings-actions span,
+.llm-feedback {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.llm-feedback {
+  margin: 9px 0 0 !important;
+}
+
+.llm-feedback.ok {
+  color: var(--green);
+}
+
+.llm-feedback.warn {
+  color: var(--red);
+}
+
 .source-history {
   margin: 20px 0;
   padding-top: 16px;

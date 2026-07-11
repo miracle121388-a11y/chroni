@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { formatOperationError } from "../../shared/errors";
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
-import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, SourceRecord } from "../../shared/types";
+import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, SourceRecord } from "../../shared/types";
 import "./styles.css";
 
 const api = window.chroni;
@@ -607,8 +607,49 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
 }
 
 function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPreferences; setSnapshot: ViewProps["setSnapshot"] }) {
+  const [llmDraft, setLlmDraft] = useState<Pick<ChroniLlmSettings, "baseUrl" | "model" | "apiKey">>({
+    baseUrl: preferences.llm.baseUrl,
+    model: preferences.llm.model,
+    apiKey: preferences.llm.apiKey,
+  });
+  const [llmDirty, setLlmDirty] = useState(false);
+  const [llmBusy, setLlmBusy] = useState(false);
+  const [llmFeedback, setLlmFeedback] = useState<{ message: string; tone: "ok" | "warn" } | null>(null);
+
+  useEffect(() => {
+    if (llmDirty) return;
+    setLlmDraft({
+      baseUrl: preferences.llm.baseUrl,
+      model: preferences.llm.model,
+      apiKey: preferences.llm.apiKey,
+    });
+  }, [llmDirty, preferences.llm.apiKey, preferences.llm.baseUrl, preferences.llm.model]);
+
   async function patch(next: ChroniPreferencesPatch) {
     setSnapshot(await api.updatePreferences(next));
+  }
+
+  function updateLlmDraft(field: keyof typeof llmDraft, value: string): void {
+    setLlmDraft((current) => ({ ...current, [field]: value }));
+    setLlmDirty(true);
+    setLlmFeedback(null);
+  }
+
+  async function saveAndTestLlm(): Promise<void> {
+    if (llmBusy) return;
+    setLlmBusy(true);
+    setLlmFeedback(null);
+    try {
+      const snapshot = await api.updatePreferences({ llm: llmDraft });
+      setSnapshot(snapshot);
+      setLlmDirty(false);
+      const result = await api.testLlmConnection(snapshot.preferences.llm);
+      setLlmFeedback({ message: result.message, tone: result.ok ? "ok" : "warn" });
+    } catch (error) {
+      setLlmFeedback({ message: formatOperationError(error, "保存或连接测试失败"), tone: "warn" });
+    } finally {
+      setLlmBusy(false);
+    }
   }
   const modelMode = preferences.llm.enabled && preferences.llm.apiKey ? "LLM 优先" : "本地规则";
   return (
@@ -669,9 +710,16 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
         <Toggle label="启用 LLM 抽取" checked={preferences.llm.enabled} onChange={(value) => void patch({ llm: { enabled: value } })} />
         <details className="advanced-settings">
           <summary>大模型 API</summary>
-          <label className="text-field">Base URL<input value={preferences.llm.baseUrl} placeholder="https://api.deepseek.com" onChange={(event) => void patch({ llm: { baseUrl: event.target.value } })} /></label>
-          <label className="text-field">模型<input value={preferences.llm.model} placeholder="deepseek-v4-flash" onChange={(event) => void patch({ llm: { model: event.target.value } })} /></label>
-          <label className="text-field">API Key<input type="password" value={preferences.llm.apiKey} placeholder="sk-..." onChange={(event) => void patch({ llm: { apiKey: event.target.value } })} /></label>
+          <label className="text-field">Base URL<input value={llmDraft.baseUrl} placeholder="https://api.deepseek.com" onChange={(event) => updateLlmDraft("baseUrl", event.target.value)} /></label>
+          <label className="text-field">模型<input value={llmDraft.model} placeholder="deepseek-v4-flash" onChange={(event) => updateLlmDraft("model", event.target.value)} /></label>
+          <label className="text-field">API Key<input type="password" value={llmDraft.apiKey} placeholder="sk-..." autoComplete="off" onChange={(event) => updateLlmDraft("apiKey", event.target.value)} /></label>
+          <div className="llm-settings-actions">
+            <button className="secondary" type="button" disabled={llmBusy} onClick={() => void saveAndTestLlm()}>
+              {llmBusy ? "正在连接..." : llmDirty ? "保存并测试" : "测试连接"}
+            </button>
+            {llmDirty && <span>有未保存的修改</span>}
+          </div>
+          {llmFeedback && <p className={`llm-feedback ${llmFeedback.tone}`} role="status" aria-live="polite">{llmFeedback.message}</p>}
         </details>
       </section>
     </div>
