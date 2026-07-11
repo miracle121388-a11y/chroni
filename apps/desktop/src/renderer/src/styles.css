@@ -1139,8 +1139,8 @@ summary:focus-visible {
   font-size: 14px;
 }
 
-.agent-status.status-critical b:first-of-type,
-.agent-status.status-attention b:first-of-type {
+.agent-status.status-critical > div:first-child b,
+.agent-status.status-attention > div:first-child b {
   color: var(--red);
 }
 

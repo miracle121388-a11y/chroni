@@ -76,11 +76,12 @@ export class DeadlineAgent {
       trace.record("act", "当前计划无需调用重新规划工具。", { tool: "replan", skipped: true });
     }
 
-    if (highRisk.length && memory.reminderFrequency !== "off") {
+    const reminderTarget = memory.reminderFrequency === "daily" ? priorities[0] : highRisk[0];
+    if (reminderTarget && memory.reminderFrequency !== "off") {
       try {
-        await this.tools.sendReminder(highRisk[0]);
-        actions.push({ tool: "reminder", status: "success", summary: `已提醒：${highRisk[0].title}` });
-        trace.record("act", "已调用提醒工具通知最高风险任务。", { tool: "reminder", taskId: highRisk[0].taskId });
+        await this.tools.sendReminder(reminderTarget);
+        actions.push({ tool: "reminder", status: "success", summary: `已提醒：${reminderTarget.title}` });
+        trace.record("act", memory.reminderFrequency === "daily" ? "已调用每日提醒工具通知最高优先任务。" : "已调用提醒工具通知最高风险任务。", { tool: "reminder", taskId: reminderTarget.taskId });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         actions.push({ tool: "reminder", status: "failed", summary: message });

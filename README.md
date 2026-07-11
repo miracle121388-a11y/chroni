@@ -82,6 +82,23 @@ npx pnpm@11.7.0 run dev
 
 启用 LLM 后，文件仍先在本机解析，但抽取出的文本会发送到所配置的模型服务。模型不可用时，如果本地规则仍能可靠识别，Chroni 会保留结果并明确提示已回退；无法可靠识别时不会生成可疑日程。
 
+## DeadlineAgent
+
+控制中心的 `Agent` 标签页提供一个不依赖大模型的今日巡检闭环：
+
+```text
+Observe 读取真实任务和当前时间
+  -> Plan 计算风险、今日优先级和工作块
+  -> Act 在高风险或容量不足时调用重新规划，并按设置发送提醒
+  -> Verify 复查高风险、未安排任务和时间缺口
+```
+
+点击“运行巡检”后，页面会显示今日建议、高风险 DDL、工作块以及 Observe / Plan / Act / Verify Trace。Agent 不会擅自修改截止时间、完成状态或来源内容；相同任务、时间和 Memory 会产生一致结果。
+
+Agent Memory 包含每日最大工作分钟、工作开始/结束时间和提醒频率。默认每日容量为 240 分钟，工作时段为 09:00–18:00。Memory、最新巡检和最多十份 Trace 历史保存在 `chroni-state.json`，Trace 只记录结构化摘要和工具结果，不包含 API Key、原始文档或隐藏推理。
+
+“导出 ICS”会把当前未完成 DDL 写入 Electron 用户数据目录下的 `exports/`。任务抽取、风险检查、规划、重新规划、提醒和日历导出均作为 Agent 工具提供，其中巡检闭环至少会实际调用风险检查和规划，高风险时实际调用重新规划。
+
 ## 支持的输入
 
 - 文本与结构化文本：TXT、MD、CSV、TSV、JSON、ICS、LOG、HTML、XML、YAML、RTF
@@ -118,6 +135,10 @@ Invoke-RestMethod `
 ```text
 GET    /api/health
 GET    /api/snapshot
+POST   /api/agent/run
+GET    /api/agent/latest
+PATCH  /api/agent/memory
+POST   /api/agent/export-ics
 POST   /api/extract
 POST   /api/intake
 PATCH  /api/items/:id

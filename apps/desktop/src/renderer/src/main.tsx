@@ -407,7 +407,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
     try {
       const next = await api.runDeadlineAgent();
       setSnapshot(next);
-      setFeedback("今日 Agent 巡检已完成。");
+      setFeedback("已完成今日 Agent 巡检。");
     } catch (error) {
       setFeedback(formatOperationError(error, "Agent 巡检失败"));
     } finally {

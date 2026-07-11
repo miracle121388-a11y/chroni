@@ -18,7 +18,7 @@ function task(id, dueAt, importance = "medium") {
   };
 }
 
-function harness(items) {
+function harness(items, memoryPatch = {}) {
   const calls = { read: 0, plan: 0, replan: 0, reminder: 0, save: 0 };
   let saved;
   const tools = {
@@ -41,7 +41,7 @@ function harness(items) {
   };
   const agent = new DeadlineAgent({
     tools,
-    getMemory: () => createAgentMemory(),
+    getMemory: () => createAgentMemory(memoryPatch),
     saveRun: async (result) => {
       calls.save += 1;
       saved = result;
@@ -98,4 +98,15 @@ test("DeadlineAgent shares one in-flight inspection between duplicate requests",
   release();
   await first;
   assert.equal(harnessResult.calls.read, 1);
+});
+
+test("daily reminder frequency notifies the highest priority non-high-risk task", async () => {
+  const { agent, calls } = harness([
+    task("later", new Date(2026, 6, 20, 18, 0, 0, 0).toISOString(), "low"),
+  ], { reminderFrequency: "daily" });
+
+  await agent.run();
+
+  assert.equal(calls.replan, 0);
+  assert.equal(calls.reminder, 1);
 });
