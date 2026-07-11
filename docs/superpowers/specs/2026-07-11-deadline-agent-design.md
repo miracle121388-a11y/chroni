@@ -151,4 +151,4 @@ Focused tests cover:
 - Memory survives restart and invalid updates cannot corrupt it.
 - Agent decisions are deterministic for the same tasks, time, and memory.
 - Existing extraction, schedule, pet, reminder, API security, and packaging behavior remains intact.
-- The implementation contains no Python sidecar, chat interface, fake sample tasks, or OpenPets branding.
+- The implementation contains no Python sidecar, chat interface, fake sample tasks, or legacy project branding.
