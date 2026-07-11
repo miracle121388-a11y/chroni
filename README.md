@@ -46,6 +46,14 @@ npx pnpm@11.7.0 --filter @chroni/desktop run dev:electron
 
 项目启动器会主动删除父终端中的 `ELECTRON_RUN_AS_NODE`，避免 Electron 被误当作普通 Node.js 执行。
 
+如果从 PowerShell 直接运行打包后的 `.exe`，且当前终端曾设置过 `ELECTRON_RUN_AS_NODE=1`，请先执行：
+
+```powershell
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+```
+
+从资源管理器或开始菜单正常启动时通常不受该终端变量影响。
+
 ## DeepSeek 配置
 
 推荐在 Chroni 控制中心填写：

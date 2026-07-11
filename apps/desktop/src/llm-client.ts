@@ -41,9 +41,9 @@ export async function requestChatCompletion(
         "content-type": "application/json",
       },
       body: JSON.stringify({
+        ...options.body,
         model: settings.model,
         messages,
-        ...options.body,
       }),
       signal: controller.signal,
     });
@@ -103,9 +103,13 @@ async function responseErrorDetail(response: Response): Promise<string> {
   try {
     const text = (await response.text()).slice(0, 2_000);
     if (!text) return "";
-    const parsed = JSON.parse(text) as { error?: { message?: unknown }; message?: unknown };
-    const detail = parsed.error?.message ?? parsed.message;
-    return typeof detail === "string" ? detail.slice(0, 300) : text.slice(0, 300);
+    try {
+      const parsed = JSON.parse(text) as { error?: { message?: unknown }; message?: unknown };
+      const detail = parsed.error?.message ?? parsed.message;
+      return typeof detail === "string" ? detail.slice(0, 300) : text.slice(0, 300);
+    } catch {
+      return text.slice(0, 300);
+    }
   } catch {
     return "";
   }
