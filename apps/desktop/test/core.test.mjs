@@ -290,7 +290,7 @@ test("garbled text files fail instead of creating schedules from unreliable text
 
 test("ocr text must be readable and confident enough before schedule extraction", () => {
   assert.equal(isReliableOcrResult("明天 18:00 提交课程报告", 82), true);
-  assert.equal(isReliableOcrResult("明天 18:00 提交课程报告", 69), false);
+  assert.equal(isReliableOcrResult("明天 18:00 提交课程报告", 69), true);
   assert.equal(isReliableOcrResult("明天 18:00 提交课程报告", 32), false);
   assert.equal(isReliableOcrResult("����\u0000??", 91), false);
 });
@@ -473,6 +473,97 @@ test("enabled model failures are reported when local rules provide a fallback", 
     assert.match(result.message, /模型.*不可用/);
     assert.match(result.message, /本地规则/);
     assert.equal(result.items.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("DeepSeek extraction processes every source independently", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    requests.push(body);
+    const prompt = body.messages.at(-1).content;
+    const isCourse = prompt.includes("course-a.txt");
+    const item = isCourse
+      ? { title: "课程报告", dueAt: "2026-07-20T23:59:00+08:00", importance: "medium", sourceSummary: "7月20日 23:59 提交课程报告" }
+      : { title: "实验报告", dueAt: "2026-07-22T18:00:00+08:00", importance: "high", sourceSummary: "7月22日 18:00 提交实验报告" };
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ items: [item] }) }, finish_reason: "stop" }] }), { status: 200 });
+  };
+  try {
+    const result = await extractPayload({
+      kind: "files",
+      files: [
+        { name: "course-a.txt", contentBase64: Buffer.from("通知：7月20日 23:59 提交课程报告。", "utf8").toString("base64") },
+        { name: "lab-b.txt", contentBase64: Buffer.from("通知：7月22日 18:00 提交实验报告。", "utf8").toString("base64") },
+      ],
+    }, {
+      llm: { enabled: true, provider: "openai-compatible", baseUrl: "https://api.deepseek.com", apiKey: "sk-test-only", model: "deepseek-v4-flash" },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(requests.length, 2);
+    assert.equal(requests[0].messages.at(-1).content.includes("lab-b.txt"), false);
+    assert.equal(requests[1].messages.at(-1).content.includes("course-a.txt"), false);
+    assert.deepEqual(result.items.map((item) => item.title).sort(), ["实验报告", "课程报告"]);
+    assert.match(result.items.find((item) => item.title === "课程报告").sourceSummary, /^course-a\.txt:/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("DeepSeek extraction chunks long sources without dropping the end", async () => {
+  const originalFetch = globalThis.fetch;
+  const prompts = [];
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    const prompt = body.messages.at(-1).content;
+    prompts.push(prompt);
+    const items = prompt.includes("7月30日 20:00 提交最终报告")
+      ? [{ title: "最终报告", dueAt: "2026-07-30T20:00:00+08:00", importance: "high", sourceSummary: "7月30日 20:00 提交最终报告" }]
+      : [];
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ items }) }, finish_reason: "stop" }] }), { status: 200 });
+  };
+  try {
+    const longText = `${"课程背景材料。".repeat(10_000)}\n7月30日 20:00 提交最终报告`;
+    const result = await extractPayload({ kind: "text", text: longText }, {
+      llm: { enabled: true, provider: "openai-compatible", baseUrl: "https://api.deepseek.com", apiKey: "sk-test-only", model: "deepseek-v4-flash" },
+    });
+
+    assert.equal(result.ok, true);
+    assert.ok(prompts.length > 1);
+    assert.ok(prompts.some((prompt) => prompt.includes("7月30日 20:00 提交最终报告")));
+    assert.equal(result.items.some((item) => item.title === "最终报告"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("GBK and GB18030 text files are decoded before extraction", async () => {
+  const result = await extractPayload({
+    kind: "files",
+    files: [{ name: "gbk.txt", contentBase64: "w/fM7CAxODowMCDM4b27v86zzLGouOY=" }],
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.extracted[0].text, "明天 18:00 提交课程报告");
+  assert.equal(result.items.length, 1);
+});
+
+test("empty or rejected DeepSeek output is visible when local rules are used", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    choices: [{ message: { content: JSON.stringify({ items: [] }) }, finish_reason: "stop" }],
+  }), { status: 200 });
+  try {
+    const result = await extractPayload({ kind: "text", text: "明天 18:00 提交课程报告" }, {
+      llm: { enabled: true, provider: "openai-compatible", baseUrl: "https://api.deepseek.com", apiKey: "sk-test-only", model: "deepseek-v4-flash" },
+    });
+
+    assert.equal(result.ok, true);
+    assert.match(result.message, /模型.*未返回有效日程/);
+    assert.match(result.message, /本地规则/);
   } finally {
     globalThis.fetch = originalFetch;
   }

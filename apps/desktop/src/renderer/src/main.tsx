@@ -596,7 +596,10 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
         return;
       }
       const payload: IntakePayload = { kind: "files", files };
-      setBusyMessage(fill ? "正在填入日程..." : "正在预览抽取...");
+      const usingLlm = snapshot.preferences.llm.enabled && !!snapshot.preferences.llm.apiKey;
+      setBusyMessage(usingLlm
+        ? (fill ? "正在解析文件并交给 DeepSeek..." : "正在解析文件并由 DeepSeek 抽取...")
+        : (fill ? "正在填入日程..." : "正在预览抽取..."));
       if (fill) {
         const result = await api.intake(payload);
         setSnapshot(result.snapshot);
@@ -699,6 +702,7 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
         <div className="extract-preview">
           <h3>抽取预览</h3>
           {!preview.ok && <p className="preview-error">{preview.reason}</p>}
+          {preview.ok && <p className={`inline-feedback ${isPositiveFeedback(preview.message) ? "ok" : "warn"}`}>{preview.message}</p>}
           {preview.extracted.map((input) => (
             <article key={`${input.sourceName}-${input.sourceType}`}>
               <b>{input.sourceName}</b>
@@ -872,7 +876,7 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
         <div className="section-head">
           <div>
             <h3>高级</h3>
-            <p>默认使用本地规则；配置 API 后优先用 LLM 压缩标题和判断重要性。</p>
+            <p>配置后，文件解析与 OCR 结果会逐来源交给 DeepSeek 提取；失败来源使用本地规则补位。</p>
           </div>
           <span className="mode-chip">{modelMode}</span>
         </div>
@@ -921,8 +925,8 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
       </p>
       <div className="service-list">
         <StatusRow label="文本解析" state={snapshot.services.parser} detail="TXT、MD、CSV、JSON、ICS、DOCX、PDF、XLSX 等本地解析" />
-        <StatusRow label="图片 OCR" state={snapshot.services.ocr} detail="截图和图片中的截止时间识别" />
-        <StatusRow label="大模型抽取" state={snapshot.services.model} detail="配置 API 后用于标题压缩、重要性判断和复杂语句整理" />
+        <StatusRow label="图片 OCR" state={snapshot.services.ocr} detail="图片与扫描 PDF 先转为文字，再进入提取流程" />
+        <StatusRow label="大模型抽取" state={snapshot.services.model} detail="逐文件分块理解截止事项，并保留来源证据" />
         <StatusRow label="本地数据" state="ready" detail="日程、来源和偏好保存到本机应用数据目录" />
         <StatusRow label="隐私状态" state="ready" detail={snapshot.services.privacy} />
       </div>
@@ -1538,7 +1542,7 @@ function toInputDate(value: string): string {
 }
 
 function isPositiveFeedback(message: string): boolean {
-  return /^(已|成功|完成)/.test(message);
+  return /^(已|成功|完成|DeepSeek 已|模型已)/.test(message);
 }
 
 function acceptedFileTypes(): string {

@@ -14,7 +14,9 @@ const unsupportedExtensions = new Set([".exe", ".dll", ".zip", ".rar", ".7z", ".
 
 const maxTextBytes = 2 * 1024 * 1024;
 const maxDocumentBytes = 18 * 1024 * 1024;
-const minimumOcrConfidence = 70;
+const minimumOcrConfidence = 55;
+const llmChunkCharacters = 60_000;
+const llmChunkOverlap = 800;
 
 type ExtractOptions = {
   llm?: ChroniLlmSettings;
@@ -25,6 +27,13 @@ type LlmDdlCandidate = {
   dueAt?: unknown;
   importance?: unknown;
   sourceSummary?: unknown;
+};
+
+type LlmExtraction = {
+  items: DdlItem[];
+  attempted: number;
+  rejected: number;
+  errors: string[];
 };
 
 export async function processIntake(payload: IntakePayload, store: ChroniStore): Promise<IntakeResult> {
@@ -82,16 +91,17 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
       }
     }
 
-    const ruleItems = extracted.flatMap((input) => extractDdlItemsFromText(input.text, input.sourceName));
-    let llmError = "";
-    const llmItems = await extractWithLlmIfAvailable(extracted, options.llm).catch((error) => {
-      llmError = error instanceof Error ? error.message : String(error);
-      return [];
-    });
-    const items = llmItems.length ? llmItems : ruleItems;
+    const llm = await extractWithLlmIfAvailable(extracted, options.llm);
+    const modelSources = new Set(extracted
+      .filter((input) => llm.items.some((item) => item.sourceSummary.startsWith(`${input.sourceName}:`)))
+      .map((input) => input.sourceName));
+    const ruleItems = extracted.flatMap((input) => modelSources.has(input.sourceName)
+      ? []
+      : extractDdlItemsFromText(input.text, input.sourceName));
+    const items = mergeDuplicateItems([...llm.items, ...ruleItems]);
     if (!items.length) {
-      if (llmError && isLlmEnabled(options.llm)) {
-        return { ok: false, reason: `模型或本地服务不可用：${llmError}`, extracted, failures, items: [] };
+      if (llm.errors.length && isLlmEnabled(options.llm)) {
+        return { ok: false, reason: `模型服务不可用：${llm.errors[0]}`, extracted, failures, items: [] };
       }
       if (hasPossibleTaskWithoutDeadline(extracted.map((input) => input.text).join("\n"))) {
         return { ok: false, reason: "关键信息不足：没有明确截止时间。", extracted, failures, items: [] };
@@ -99,9 +109,7 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
       return { ok: false, reason: "没有识别到明确 DDL。", extracted, failures, items: [] };
     }
     const count = Math.min(items.length, 12);
-    const message = llmError && isLlmEnabled(options.llm)
-      ? `模型服务不可用，已使用本地规则加入 ${count} 条日程。`
-      : count === 1 ? "已加入 1 条日程。" : `已加入 ${count} 条日程。`;
+    const message = extractionMessage(count, llm);
     return {
       ok: true,
       extracted,
@@ -118,6 +126,16 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
       items: [],
     };
   }
+}
+
+function extractionMessage(count: number, llm: LlmExtraction): string {
+  if (!llm.attempted) return count === 1 ? "已加入 1 条日程。" : `已加入 ${count} 条日程。`;
+  if (llm.items.length && llm.errors.length) {
+    return `模型已提取日程，另有 ${llm.errors.length} 个分块失败；共加入 ${count} 条日程。`;
+  }
+  if (llm.items.length) return `DeepSeek 已参与提取，共加入 ${count} 条日程。`;
+  if (llm.errors.length) return `模型服务不可用，已使用本地规则加入 ${count} 条日程：${llm.errors[0]}`;
+  return `模型未返回有效日程，已使用本地规则加入 ${count} 条日程。`;
 }
 
 function recordExtractionFailures(store: ChroniStore, failures: ExtractedFailure[]) {
@@ -153,23 +171,24 @@ function fallbackExtractedInputs(payload: IntakePayload, extracted: ExtractedInp
   });
 }
 
-async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?: ChroniLlmSettings): Promise<DdlItem[]> {
+async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?: ChroniLlmSettings): Promise<LlmExtraction> {
   const envApiKey = process.env.CHRONI_LLM_API_KEY ?? "";
   const enabled = settings?.enabled || process.env.CHRONI_LLM_ENABLED === "1";
   const apiKey = settings?.apiKey || envApiKey;
   const baseUrl = settings?.baseUrl || process.env.CHRONI_LLM_BASE_URL || "https://api.openai.com/v1";
   const model = settings?.model || process.env.CHRONI_LLM_MODEL || "gpt-4.1-mini";
-  if (!enabled || !apiKey || !model) return [];
+  const result: LlmExtraction = { items: [], attempted: 0, rejected: 0, errors: [] };
+  if (!enabled || !apiKey || !model) return result;
 
-  const allText = extracted.map((input) => `来源：${input.sourceName}\n${input.text}`).join("\n\n---\n\n").slice(0, 24_000);
+  const resolvedSettings: ChroniLlmSettings = { enabled: true, provider: "openai-compatible", baseUrl, apiKey, model };
   const today = new Date().toISOString();
-  const content = await requestChatCompletion({
-    enabled: true,
-    provider: "openai-compatible",
-    baseUrl,
-    apiKey,
-    model,
-  }, [
+  for (const [sourceIndex, input] of extracted.entries()) {
+    const sourceId = `source-${sourceIndex + 1}`;
+    const chunks = splitTextForLlm(input.text);
+    for (const [chunkIndex, chunk] of chunks.entries()) {
+      result.attempted += 1;
+      try {
+        const content = await requestChatCompletion(resolvedSettings, [
       {
         role: "system",
         content: [
@@ -178,27 +197,65 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
           "从输入中抽取明确的截止事项。",
           "字段结构固定：{\"items\":[{\"title\":\"短标题\",\"dueAt\":\"ISO-8601时间\",\"importance\":\"high|medium|low\",\"sourceSummary\":\"一句来源摘要\"}]}。",
           "title 控制在 16 个中文字符以内。",
-          "dueAt 必须是可被 JavaScript Date 解析的 ISO-8601 字符串。",
+          "dueAt 必须是包含时区的 ISO-8601 字符串。",
           "sourceSummary 必须直接截取自原文中的短片段，不要改写或总结。",
           "没有明确截止时间的内容不要输出。",
+          "即使没有日程，也必须输出 JSON：{\"items\":[]}。",
         ].join("\n"),
       },
       {
         role: "user",
-        content: `当前时间：${today}\n\n请抽取以下内容中的 DDL：\n${allText}`,
+        content: [
+          `当前时间：${today}`,
+          `来源 ID：${sourceId}`,
+          `来源文件：${input.sourceName}`,
+          `分块：${chunkIndex + 1}/${chunks.length}`,
+          "请从以下原文中抽取 DDL，并输出 JSON：",
+          chunk,
+        ].join("\n"),
       },
     ], {
       body: {
-      temperature: 0.1,
-      response_format: { type: "json_object" },
+        temperature: 0.1,
+        max_tokens: 4_096,
+        response_format: { type: "json_object" },
+        ...(baseUrl.includes("deepseek.com") ? { thinking: { type: "disabled" } } : {}),
       },
-  });
-  const parsed = parseLlmJson(content);
-  const candidates = Array.isArray(parsed.items) ? parsed.items as LlmDdlCandidate[] : [];
-  const evidenceText = extracted.map((input) => input.text).join("\n");
-  return candidates
-    .map((candidate) => itemFromLlmCandidate(candidate, evidenceText))
-    .filter((item): item is DdlItem => !!item);
+        });
+        const parsed = parseLlmJson(content);
+        const candidates = Array.isArray(parsed.items) ? parsed.items as LlmDdlCandidate[] : [];
+        for (const candidate of candidates) {
+          const item = itemFromLlmCandidate(candidate, input.text, input.sourceName);
+          if (item) result.items.push(item);
+          else result.rejected += 1;
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        result.errors.push(`${input.sourceName} 第 ${chunkIndex + 1}/${chunks.length} 段：${detail}`);
+      }
+    }
+  }
+  result.items = mergeDuplicateItems(result.items);
+  return result;
+}
+
+export function splitTextForLlm(text: string): string[] {
+  const normalized = text.trim();
+  if (!normalized) return [];
+  if (normalized.length <= llmChunkCharacters) return [normalized];
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < normalized.length) {
+    let end = Math.min(start + llmChunkCharacters, normalized.length);
+    if (end < normalized.length) {
+      const boundary = Math.max(normalized.lastIndexOf("\n", end), normalized.lastIndexOf("。", end));
+      if (boundary > start + llmChunkCharacters * 0.75) end = boundary + 1;
+    }
+    chunks.push(normalized.slice(start, end));
+    if (end >= normalized.length) break;
+    start = Math.max(start + 1, end - llmChunkOverlap);
+  }
+  return chunks;
 }
 
 function parseLlmJson(content: string): { items?: unknown } {
@@ -212,7 +269,7 @@ function parseLlmJson(content: string): { items?: unknown } {
   }
 }
 
-export function itemFromLlmCandidate(candidate: LlmDdlCandidate, evidenceText = ""): DdlItem | null {
+export function itemFromLlmCandidate(candidate: LlmDdlCandidate, evidenceText = "", sourceName = ""): DdlItem | null {
   const title = String(candidate.title ?? "").trim().slice(0, 16);
   const dueAtRaw = String(candidate.dueAt ?? "").trim();
   const sourceSummary = String(candidate.sourceSummary ?? title).slice(0, 180);
@@ -223,7 +280,7 @@ export function itemFromLlmCandidate(candidate: LlmDdlCandidate, evidenceText = 
   const importance = candidate.importance === "high" || candidate.importance === "medium" || candidate.importance === "low"
     ? candidate.importance
     : importanceFromText(`${title} ${sourceSummary}`);
-  return createItem(title, dueAt.toISOString(), sourceSummary, importance);
+  return createItem(title, dueAt.toISOString(), sourceName ? `${sourceName}: ${sourceSummary}` : sourceSummary, importance);
 }
 
 function hasSourceEvidence(sourceSummary: string, evidenceText: string): boolean {
@@ -321,10 +378,8 @@ async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput>
     return { sourceName: name, sourceType, text: result.value };
   }
   if (extension === ".pdf") {
-    const mod = await import("pdf-parse") as unknown as { default: (data: Buffer) => Promise<{ text: string }> };
-    const result = await mod.default(buffer);
-    assertReliableExtractedText(result.text, name);
-    return { sourceName: name, sourceType, text: result.text };
+    const text = await extractPdfText(buffer, name);
+    return { sourceName: name, sourceType, text };
   }
   if (spreadsheetExtensions.has(extension)) {
     const rows = await readXlsxFile(buffer) as unknown as unknown[][];
@@ -333,17 +388,51 @@ async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput>
     return { sourceName: name, sourceType, text };
   }
   if (imageExtensions.has(extension)) {
-    const mod = await import("tesseract.js") as unknown as {
-      recognize: (image: Buffer | string, langs?: string) => Promise<{ data: { text: string; confidence?: number } }>;
-    };
-    const result = await mod.recognize(buffer, "chi_sim+eng");
-    const text = result.data.text;
+    const result = await recognizeImage(buffer);
+    const text = result.text;
     assertReliableExtractedText(text, name, "图片 OCR 失败");
-    if (!isReliableOcrResult(text, result.data.confidence)) throw new Error(`图片 OCR 置信度不足：${name}`);
+    if (!isReliableOcrResult(text, result.confidence)) throw new Error(`图片 OCR 置信度不足：${name}`);
     return { sourceName: name, sourceType, text };
   }
 
   throw new Error(`文件类型不支持：${name}`);
+}
+
+async function extractPdfText(buffer: Buffer, name: string): Promise<string> {
+  const mod = await import("pdf-parse") as unknown as {
+    PDFParse: new (options: { data: Uint8Array }) => {
+      getText: () => Promise<{ text: string }>;
+      getScreenshot: (options: { scale: number; imageBuffer: boolean; imageDataUrl: boolean }) => Promise<{ pages: Array<{ data: Uint8Array; pageNumber: number }> }>;
+      destroy: () => Promise<void>;
+    };
+  };
+  const parser = new mod.PDFParse({ data: buffer });
+  try {
+    const parsed = await parser.getText();
+    if (parsed.text.trim() && looksLikeReliableText(parsed.text.trim())) return parsed.text;
+
+    const screenshots = await parser.getScreenshot({ scale: 2, imageBuffer: true, imageDataUrl: false });
+    const pageTexts: string[] = [];
+    for (const page of screenshots.pages) {
+      const result = await recognizeImage(Buffer.from(page.data));
+      if (isReliableOcrResult(result.text, result.confidence)) {
+        pageTexts.push(`[第 ${page.pageNumber} 页]\n${result.text.trim()}`);
+      }
+    }
+    const text = pageTexts.join("\n\n");
+    assertReliableExtractedText(text, name, "PDF 没有文本层，页面 OCR 也未识别到可靠文本");
+    return text;
+  } finally {
+    await parser.destroy().catch(() => undefined);
+  }
+}
+
+async function recognizeImage(image: Buffer): Promise<{ text: string; confidence?: number }> {
+  const mod = await import("tesseract.js") as unknown as {
+    recognize: (input: Buffer | string, langs?: string) => Promise<{ data: { text: string; confidence?: number } }>;
+  };
+  const result = await mod.recognize(image, "chi_sim+eng");
+  return result.data;
 }
 
 function readFileBuffer(file: ChroniInputFile): Buffer {
@@ -355,8 +444,38 @@ function readFileBuffer(file: ChroniInputFile): Buffer {
 }
 
 function textFromBuffer(buffer: Buffer): string {
-  const text = buffer.toString("utf8");
-  return text.includes("\u0000") ? buffer.toString("utf16le") : text;
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    return buffer.subarray(3).toString("utf8");
+  }
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    return new TextDecoder("utf-16le").decode(buffer.subarray(2));
+  }
+  if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+    return new TextDecoder("utf-16be").decode(buffer.subarray(2));
+  }
+
+  const oddNulls = countByteAtParity(buffer, 0, 1);
+  const evenNulls = countByteAtParity(buffer, 0, 0);
+  if (oddNulls > buffer.length / 8 && oddNulls > evenNulls * 2) return new TextDecoder("utf-16le").decode(buffer);
+  if (evenNulls > buffer.length / 8 && evenNulls > oddNulls * 2) return new TextDecoder("utf-16be").decode(buffer);
+
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch {
+    try {
+      return new TextDecoder("gb18030", { fatal: true }).decode(buffer);
+    } catch {
+      return buffer.toString("utf8");
+    }
+  }
+}
+
+function countByteAtParity(buffer: Buffer, value: number, parity: 0 | 1): number {
+  let count = 0;
+  for (let index = parity; index < buffer.length; index += 2) {
+    if (buffer[index] === value) count += 1;
+  }
+  return count;
 }
 
 function assertReliableExtractedText(text: string, name: string, emptyReason = "文件没有可读取文本"): void {
