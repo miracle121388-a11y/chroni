@@ -4,6 +4,7 @@ import mammoth from "mammoth";
 import readXlsxFile from "read-excel-file/node";
 import type { DdlItem, ChroniInputFile, ChroniLlmSettings, ExtractResult, ExtractedFailure, ExtractedInput, Importance, IntakePayload, IntakeResult } from "./shared/types.js";
 import type { ChroniStore } from "./store.js";
+import { requestChatCompletion } from "./llm-client.js";
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
 const documentExtensions = new Set([".docx", ".pdf"]);
@@ -156,47 +157,42 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
   const envApiKey = process.env.CHRONI_LLM_API_KEY ?? "";
   const enabled = settings?.enabled || process.env.CHRONI_LLM_ENABLED === "1";
   const apiKey = settings?.apiKey || envApiKey;
-  const baseUrl = normalizeBaseUrl(settings?.baseUrl || process.env.CHRONI_LLM_BASE_URL || "https://api.openai.com/v1");
+  const baseUrl = settings?.baseUrl || process.env.CHRONI_LLM_BASE_URL || "https://api.openai.com/v1";
   const model = settings?.model || process.env.CHRONI_LLM_MODEL || "gpt-4.1-mini";
   if (!enabled || !apiKey || !model) return [];
 
   const allText = extracted.map((input) => `来源：${input.sourceName}\n${input.text}`).join("\n\n---\n\n").slice(0, 24_000);
   const today = new Date().toISOString();
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "authorization": `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
+  const content = await requestChatCompletion({
+    enabled: true,
+    provider: "openai-compatible",
+    baseUrl,
+    apiKey,
+    model,
+  }, [
+      {
+        role: "system",
+        content: [
+          "你是 Chroni 的 DDL 信息抽取器。",
+          "只输出 JSON，不输出解释。",
+          "从输入中抽取明确的截止事项。",
+          "字段结构固定：{\"items\":[{\"title\":\"短标题\",\"dueAt\":\"ISO-8601时间\",\"importance\":\"high|medium|low\",\"sourceSummary\":\"一句来源摘要\"}]}。",
+          "title 控制在 16 个中文字符以内。",
+          "dueAt 必须是可被 JavaScript Date 解析的 ISO-8601 字符串。",
+          "sourceSummary 必须直接截取自原文中的短片段，不要改写或总结。",
+          "没有明确截止时间的内容不要输出。",
+        ].join("\n"),
+      },
+      {
+        role: "user",
+        content: `当前时间：${today}\n\n请抽取以下内容中的 DDL：\n${allText}`,
+      },
+    ], {
+      body: {
       temperature: 0.1,
       response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: [
-            "你是 Chroni 的 DDL 信息抽取器。",
-            "只输出 JSON，不输出解释。",
-            "从输入中抽取明确的截止事项。",
-            "字段结构固定：{\"items\":[{\"title\":\"短标题\",\"dueAt\":\"ISO-8601时间\",\"importance\":\"high|medium|low\",\"sourceSummary\":\"一句来源摘要\"}]}。",
-            "title 控制在 16 个中文字符以内。",
-            "dueAt 必须是可被 JavaScript Date 解析的 ISO-8601 字符串。",
-            "sourceSummary 必须直接截取自原文中的短片段，不要改写或总结。",
-            "没有明确截止时间的内容不要输出。",
-          ].join("\n"),
-        },
-        {
-          role: "user",
-          content: `当前时间：${today}\n\n请抽取以下内容中的 DDL：\n${allText}`,
-        },
-      ],
-    }),
+      },
   });
-
-  if (!response.ok) throw new Error(`LLM 服务不可用：HTTP ${response.status}`);
-  const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-  const content = data.choices?.[0]?.message?.content ?? "";
   const parsed = parseLlmJson(content);
   const candidates = Array.isArray(parsed.items) ? parsed.items as LlmDdlCandidate[] : [];
   const evidenceText = extracted.map((input) => input.text).join("\n");
@@ -228,10 +224,6 @@ export function itemFromLlmCandidate(candidate: LlmDdlCandidate, evidenceText = 
     ? candidate.importance
     : importanceFromText(`${title} ${sourceSummary}`);
   return createItem(title, dueAt.toISOString(), sourceSummary, importance);
-}
-
-function normalizeBaseUrl(value: string): string {
-  return value.replace(/\/+$/, "");
 }
 
 function hasSourceEvidence(sourceSummary: string, evidenceText: string): boolean {

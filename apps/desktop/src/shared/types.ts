@@ -79,6 +79,10 @@ export type ChroniLlmSettings = {
   model: string;
 };
 
+export type LlmConnectionResult =
+  | { ok: true; message: string }
+  | { ok: false; kind: "configuration" | "authentication" | "model" | "rate_limit" | "timeout" | "response" | "network"; message: string };
+
 export type ServiceStatus = {
   parser: ServiceState;
   ocr: ServiceState;

@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch } from "../../shared/types";
+import type { ChroniLlmSettings, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult } from "../../shared/types";
 
 declare global {
   interface Window {
@@ -14,6 +14,7 @@ declare global {
       updateItem(id: string, patch: ItemPatch): Promise<ChroniSnapshot>;
       deleteItem(id: string): Promise<ChroniSnapshot>;
       updatePreferences(patch: ChroniPreferencesPatch): Promise<ChroniSnapshot>;
+      testLlmConnection(settings: ChroniLlmSettings): Promise<LlmConnectionResult>;
       quickAdd(text: string): Promise<IntakeResult>;
       openControlCenter(): Promise<void>;
       openPetMenu(): Promise<void>;

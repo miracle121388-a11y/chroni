@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("chroni", {
   updateItem: (id, patch) => ipcRenderer.invoke("chroni:item-update", id, patch),
   deleteItem: (id) => ipcRenderer.invoke("chroni:item-delete", id),
   updatePreferences: (patch) => ipcRenderer.invoke("chroni:preferences-update", patch),
+  testLlmConnection: (settings) => ipcRenderer.invoke("chroni:llm-test", settings),
   quickAdd: (text) => ipcRenderer.invoke("chroni:quick-add", text),
   openControlCenter: () => ipcRenderer.invoke("chroni:open-control"),
   openPetMenu: () => ipcRenderer.invoke("chroni:open-pet-menu"),

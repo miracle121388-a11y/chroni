@@ -1,8 +1,9 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Notification, safeStorage, shell } from "electron";
 import { startChroniApiServer } from "./api-server.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
+import { testLlmConnection } from "./llm-client.js";
 import { shouldRemindItem } from "./shared/schedule.js";
-import type { ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
+import type { ChroniLlmSettings, ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
 
@@ -95,6 +96,7 @@ function installIpc(): void {
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
+  ipcMain.handle("chroni:llm-test", (_event, settings: ChroniLlmSettings) => testLlmConnection(settings));
   ipcMain.handle("chroni:quick-add", async (_event, text: string) => {
     broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
     const result = await processIntake({ kind: "text", text }, store);
