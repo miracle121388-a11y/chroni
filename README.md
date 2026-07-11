@@ -55,7 +55,8 @@ npx pnpm@11.7.0 --filter @chroni/desktop run dev:electron
 3. `Base URL` 填写 `https://api.deepseek.com`。
 4. `模型`填写 `deepseek-v4-flash`；需要更强模型时可填写 `deepseek-v4-pro`。
 5. `API Key` 填写 DeepSeek 控制台生成的 Key。
-6. 开启“启用 LLM 抽取”。
+6. 点击“保存并测试”，等待界面显示模型连接成功。
+7. 开启“启用 LLM 抽取”。
 
 API Key 使用 Electron `safeStorage` 交给操作系统安全存储加密，不会以明文写入 `chroni-state.json`。如果系统安全存储不可用，界面填写的 Key 只在当前运行期间有效。
 
@@ -68,6 +69,8 @@ $env:CHRONI_LLM_MODEL="deepseek-v4-flash"
 $env:CHRONI_LLM_API_KEY="你的 DeepSeek API Key"
 npx pnpm@11.7.0 run dev
 ```
+
+大模型字段在编辑期间只保留为界面草稿，点击“保存并测试”后才会写入本机。连接测试会真实发送一个最小请求，并区分 API Key、模型名称、限流和超时问题。模型请求默认在 25 秒后终止。
 
 启用 LLM 后，文件仍先在本机解析，但抽取出的文本会发送到所配置的模型服务。模型不可用时，如果本地规则仍能可靠识别，Chroni 会保留结果并明确提示已回退；无法可靠识别时不会生成可疑日程。
 
@@ -82,17 +85,18 @@ npx pnpm@11.7.0 run dev
 
 ## 本地 HTTP API
 
-API 默认只监听 `127.0.0.1:8765`。每次启动会生成会话令牌；除健康检查外的所有接口都要求 Bearer 鉴权。
+API 默认只监听 `127.0.0.1:8765`。每次启动会生成会话令牌；除健康检查外的所有接口都要求 Bearer 鉴权。实际监听地址会写入 Electron 用户数据目录的 `chroni-api.json`，其中包含 `baseUrl`、进程 ID 和启动时间；应用退出后该文件会自动删除。
 
 PowerShell 示例：
 
 ```powershell
-$health = Invoke-RestMethod http://127.0.0.1:8765/api/health
+$discovery = Get-Content "$env:APPDATA\Chroni\chroni-api.json" | ConvertFrom-Json
+$health = Invoke-RestMethod "$($discovery.baseUrl)/api/health"
 $headers = @{ Authorization = "Bearer $($health.apiToken)" }
 
 Invoke-RestMethod `
   -Method Post `
-  -Uri http://127.0.0.1:8765/api/extract `
+  -Uri "$($discovery.baseUrl)/api/extract" `
   -Headers $headers `
   -ContentType "application/json" `
   -Body (@{
@@ -114,7 +118,7 @@ PATCH  /api/preferences
 POST   /api/sources/:id/reprocess
 ```
 
-需要固定 API 令牌时，在启动前设置 `CHRONI_API_TOKEN`。浏览器跨域默认关闭；只有设置精确的 `CHRONI_API_ALLOWED_ORIGIN` 后，该 Origin 才能访问。HTTP JSON 请求体上限为 32 MiB，所有 HTTP snapshot 都会移除 LLM API Key。
+如果系统用户数据目录不是 `%APPDATA%\Chroni`，可在“运行状态”中点击“打开本地数据位置”确认 `chroni-api.json`。需要固定 API 令牌时，在启动前设置 `CHRONI_API_TOKEN`。浏览器跨域默认关闭；只有设置精确的 `CHRONI_API_ALLOWED_ORIGIN` 后，该 Origin 才能访问。HTTP JSON 请求体上限为 32 MiB，所有请求会进行运行时字段校验，所有 HTTP snapshot 都会移除 LLM API Key。
 
 ## 检查与打包
 
@@ -124,6 +128,8 @@ npx pnpm@11.7.0 run package:desktop
 ```
 
 `check` 依次执行 TypeScript 检查、自动化测试和 renderer/main 构建。Windows 安装包和便携版输出到 `apps/desktop/dist-electron/`。
+
+仓库的 `Windows Release Build` 工作流可手动运行，也会在推送 `v*` 标签时构建安装包和便携版并上传 Actions artifact。正式签名时，在 GitHub 仓库 Secrets 中配置 `WINDOWS_CSC_LINK`（PFX 的 Base64 或安全下载地址）和 `WINDOWS_CSC_KEY_PASSWORD`；没有证书时仍可生成未签名的测试构建。
 
 ## 常见问题
 
@@ -141,8 +147,8 @@ npx pnpm@11.7.0 run package:desktop
 
 ### 端口 8765 被占用
 
-Chroni 会自动改用一个随机空闲端口，并在启动终端打印实际地址。也可以在启动前设置 `CHRONI_API_PORT`，例如 `$env:CHRONI_API_PORT="8877"`。
+Chroni 会自动改用一个随机空闲端口，并同时更新 `chroni-api.json` 与启动终端中的实际地址。也可以在启动前设置 `CHRONI_API_PORT`，例如 `$env:CHRONI_API_PORT="8877"`。
 
 ## 数据与许可证
 
-日程、来源和偏好保存在 Electron 用户数据目录，可在“运行状态”中点击“打开本地数据位置”。项目采用 MIT License。桌宠视觉资产来自 XIAOTONG Desktop Pet，相关许可证与附加条款保存在 `apps/desktop/third_party/xiaotong/`。
+日程、来源、偏好和桌宠的显示器相对位置保存在 Electron 用户数据目录。重新启动、分辨率变化或移除显示器后，Chroni 会恢复并校正桌宠位置，保证窗口仍在可见工作区内。可在“运行状态”中点击“打开本地数据位置”。项目采用 MIT License。桌宠视觉资产来自 XIAOTONG Desktop Pet，相关许可证与附加条款保存在 `apps/desktop/third_party/xiaotong/`。
