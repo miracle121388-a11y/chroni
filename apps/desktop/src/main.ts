@@ -1,4 +1,5 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Notification, safeStorage, shell } from "electron";
+import { join } from "node:path";
 import { startChroniApiServer } from "./api-server.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import { testLlmConnection } from "./llm-client.js";
@@ -6,8 +7,10 @@ import { shouldRemindItem } from "./shared/schedule.js";
 import type { ChroniLlmSettings, ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
+import { validateBoolean, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferencesPatch, validateSourceText } from "./validation.js";
 
 let store: ChroniStore;
+let apiServer: ReturnType<typeof startChroniApiServer> | undefined;
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -28,14 +31,14 @@ if (!gotLock) {
     createTray();
     applyPreferences(store.snapshot().preferences);
     registerHotkey();
-    startChroniApiServer(store, (snapshot, reason) => {
+    apiServer = startChroniApiServer(store, (snapshot, reason) => {
       if (reason === "preferences") {
         applyPreferences(snapshot.preferences);
         registerHotkey();
       }
       broadcast("chroni:snapshot-updated", snapshot);
       refreshScheduleAfterUpdate();
-    });
+    }, { discoveryFilePath: join(app.getPath("userData"), "chroni-api.json") });
     refreshCompanionFromSchedule();
     refreshReminders();
     console.log("Chroni desktop shell ready.");
@@ -51,13 +54,17 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => showControlCenter());
 app.on("will-quit", () => globalShortcut.unregisterAll());
+app.on("before-quit", () => {
+  if (apiServer?.listening) apiServer.close();
+});
 
 function installIpc(): void {
   ipcMain.handle("chroni:snapshot", () => store.snapshot());
-  ipcMain.handle("chroni:extract", async (_event, payload: IntakePayload) => extractPayload(payload, { llm: store.snapshot().preferences.llm }));
+  ipcMain.handle("chroni:extract", async (_event, payload: IntakePayload) => extractPayload(validateIntakePayload(payload), { llm: store.snapshot().preferences.llm }));
   ipcMain.handle("chroni:intake", async (_event, payload: IntakePayload) => {
+    const validatedPayload = validateIntakePayload(payload);
     broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
-    const result = await processIntake(payload, store);
+    const result = await processIntake(validatedPayload, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
     revealScheduleAfterIntake(result.ok);
     return result;
@@ -70,6 +77,7 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:companion-hover", (_event, hovering: boolean) => {
+    hovering = validateBoolean(hovering, "hovering");
     const current = companionStateForItems(store.snapshot().items);
     const snapshot = hovering
       ? store.setCompanion("hover_accept", "松手就能自动识别。")
@@ -78,17 +86,17 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:item-update", (_event, id: string, patch: ItemPatch) => {
-    const snapshot = store.updateItem(id, patch);
+    const snapshot = store.updateItem(validateIdentifier(id, "item id"), validateItemPatch(patch));
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
   ipcMain.handle("chroni:item-delete", (_event, id: string) => {
-    const snapshot = store.deleteItem(id);
+    const snapshot = store.deleteItem(validateIdentifier(id, "item id"));
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
   ipcMain.handle("chroni:preferences-update", (_event, patch: ChroniPreferencesPatch) => {
-    let snapshot = store.updatePreferences(patch);
+    let snapshot = store.updatePreferences(validatePreferencesPatch(patch));
     applyPreferences(snapshot.preferences);
     if (!registerHotkey() && snapshot.preferences.hotkey.trim()) {
       snapshot = store.setCompanion("confused", `快捷键 ${snapshot.preferences.hotkey} 注册失败，可能已被占用。`);
@@ -96,10 +104,11 @@ function installIpc(): void {
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
-  ipcMain.handle("chroni:llm-test", (_event, settings: ChroniLlmSettings) => testLlmConnection(settings));
+  ipcMain.handle("chroni:llm-test", (_event, settings: ChroniLlmSettings) => testLlmConnection(validateLlmSettings(settings)));
   ipcMain.handle("chroni:quick-add", async (_event, text: string) => {
+    const payload = validateIntakePayload({ kind: "text", text });
     broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
-    const result = await processIntake({ kind: "text", text }, store);
+    const result = await processIntake(payload, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
     revealScheduleAfterIntake(result.ok);
     return result;
@@ -108,6 +117,7 @@ function installIpc(): void {
   ipcMain.handle("chroni:open-pet-menu", (event) => showPetMenu(BrowserWindow.fromWebContents(event.sender)));
   ipcMain.handle("chroni:show-schedule", (_event, expanded: boolean) => showSchedule(expanded));
   ipcMain.handle("chroni:source-reprocess", async (_event, sourceId: string) => {
+    sourceId = validateIdentifier(sourceId, "source id");
     broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在重新识别来源..."));
     const result = await reprocessSource(sourceId, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
@@ -115,7 +125,7 @@ function installIpc(): void {
     return result;
   });
   ipcMain.handle("chroni:source-update-text", (_event, sourceId: string, text: string) => {
-    const snapshot = store.updateSourceText(sourceId, text);
+    const snapshot = store.updateSourceText(validateIdentifier(sourceId, "source id"), validateSourceText(text));
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });

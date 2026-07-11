@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { request } from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -18,10 +18,10 @@ async function withStore(fn) {
   }
 }
 
-function listenWithRandomPort(store, callback = () => {}) {
+function listenWithRandomPort(store, callback = () => {}, options) {
   const previousPort = process.env.CHRONI_API_PORT;
   process.env.CHRONI_API_PORT = "0";
-  const server = startChroniApiServer(store, callback);
+  const server = startChroniApiServer(store, callback, options);
   process.env.CHRONI_API_PORT = previousPort;
   return new Promise((resolve) => {
     server.on("listening", () => resolve(server));
@@ -74,6 +74,8 @@ test("api port 0 listens on a random available port", async () => {
       const address = server.address();
       assert.equal(typeof address, "object");
       assert.notEqual(address.port, 8765);
+      const health = await apiRequest(server, "GET", "/api/health");
+      assert.equal(health.body.baseUrl, `http://127.0.0.1:${address.port}`);
     } finally {
       await closeServer(server);
     }
@@ -205,5 +207,41 @@ test("api rejects oversized JSON before buffering the request", async () => {
     } finally {
       await closeServer(server);
     }
+  });
+});
+
+test("api rejects malformed typed payloads without mutating state", async () => {
+  await withStore(async (store) => {
+    const server = await listenWithRandomPort(store);
+    try {
+      const token = await getApiToken(server);
+      const result = await apiRequest(server, "PATCH", "/api/preferences", { companionEnabled: "yes" }, {
+        authorization: `Bearer ${token}`,
+      });
+
+      assert.equal(result.status, 400);
+      assert.match(result.body.error, /companionEnabled/);
+      assert.equal(store.snapshot().preferences.companionEnabled, true);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
+test("api publishes and removes discovery data for its actual port", async () => {
+  await withStore(async (store) => {
+    const discoveryFilePath = join(store.filePath, "..", "chroni-api.json");
+    const server = await listenWithRandomPort(store, () => {}, { discoveryFilePath });
+    const address = server.address();
+    assert.equal(typeof address, "object");
+    try {
+      const discovery = JSON.parse(readFileSync(discoveryFilePath, "utf8"));
+      assert.equal(discovery.baseUrl, `http://127.0.0.1:${address.port}`);
+      assert.equal(discovery.pid, process.pid);
+      assert.equal(Number.isNaN(Date.parse(discovery.startedAt)), false);
+    } finally {
+      await closeServer(server);
+    }
+    assert.equal(existsSync(discoveryFilePath), false);
   });
 });

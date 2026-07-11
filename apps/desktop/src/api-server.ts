@@ -1,8 +1,11 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import type { ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch } from "./shared/types.js";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import type { ChroniSnapshot } from "./shared/types.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniStore } from "./store.js";
+import { InputValidationError, validateIdentifier, validateIntakePayload, validateItemPatch, validatePreferencesPatch } from "./validation.js";
 
 type SnapshotUpdateReason = "data" | "preferences";
 type SnapshotCallback = (snapshot: ChroniSnapshot, reason: SnapshotUpdateReason) => void;
@@ -14,23 +17,26 @@ class HttpError extends Error {
   }
 }
 
-export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCallback): Server {
+export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCallback, options: { discoveryFilePath?: string } = {}): Server {
   const apiToken = process.env.CHRONI_API_TOKEN?.trim() || randomBytes(24).toString("base64url");
   const allowedOrigin = process.env.CHRONI_API_ALLOWED_ORIGIN?.trim() || "";
   const server = createServer(async (request, response) => {
     try {
       applyCors(request, response, allowedOrigin);
-      await route(request, response, store, onSnapshot, apiToken);
+      await route(request, response, store, onSnapshot, apiToken, () => baseUrl);
     } catch (error) {
-      const status = error instanceof HttpError ? error.statusCode : 500;
+      const status = error instanceof HttpError ? error.statusCode : error instanceof InputValidationError ? 400 : 500;
       sendJson(response, status, { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
   const configuredPort = Number(process.env.CHRONI_API_PORT || 8765);
+  let baseUrl = `http://127.0.0.1:${configuredPort}`;
   server.listen(configuredPort, "127.0.0.1", () => {
     const address = server.address();
     const port = typeof address === "object" && address ? address.port : configuredPort;
-    console.log(`Chroni API listening at http://127.0.0.1:${port}`);
+    baseUrl = `http://127.0.0.1:${port}`;
+    console.log(`Chroni API listening at ${baseUrl}`);
+    if (options.discoveryFilePath) publishDiscoveryFile(options.discoveryFilePath, baseUrl);
   });
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE" && configuredPort !== 0) {
@@ -39,10 +45,11 @@ export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCal
     }
     console.error("Chroni API failed.", error);
   });
+  if (options.discoveryFilePath) server.on("close", () => removeOwnedDiscoveryFile(options.discoveryFilePath!));
   return server;
 }
 
-async function route(request: IncomingMessage, response: ServerResponse, store: ChroniStore, onSnapshot: SnapshotCallback, apiToken: string): Promise<void> {
+async function route(request: IncomingMessage, response: ServerResponse, store: ChroniStore, onSnapshot: SnapshotCallback, apiToken: string, getBaseUrl: () => string): Promise<void> {
   if (request.method === "OPTIONS") {
     response.writeHead(204);
     response.end();
@@ -55,7 +62,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
       ok: true,
       product: "Chroni",
       version: "0.1.0",
-      defaultBaseUrl: "http://127.0.0.1:8765",
+      baseUrl: getBaseUrl(),
       apiToken,
       authentication: "Use Authorization: Bearer <apiToken> for every endpoint except /api/health.",
       supportedInputs: [
@@ -94,41 +101,41 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     return;
   }
   if (request.method === "POST" && pathname === "/api/extract") {
-    const payload = await readJson<IntakePayload>(request);
+    const payload = validateIntakePayload(await readJson(request));
     sendJson(response, 200, await extractPayload(payload, { llm: store.snapshot().preferences.llm }));
     return;
   }
   if (request.method === "POST" && pathname === "/api/intake") {
-    const payload = await readJson<IntakePayload>(request);
+    const payload = validateIntakePayload(await readJson(request));
     const result = await processIntake(payload, store);
     onSnapshot(result.snapshot, "data");
     sendJson(response, result.ok ? 200 : 422, result);
     return;
   }
   if (request.method === "PATCH" && pathname.startsWith("/api/items/")) {
-    const id = decodeURIComponent(pathname.slice("/api/items/".length));
-    const patch = await readJson<ItemPatch>(request);
+    const id = validateIdentifier(decodeURIComponent(pathname.slice("/api/items/".length)), "item id");
+    const patch = validateItemPatch(await readJson(request));
     const snapshot = store.updateItem(id, patch);
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "DELETE" && pathname.startsWith("/api/items/")) {
-    const id = decodeURIComponent(pathname.slice("/api/items/".length));
+    const id = validateIdentifier(decodeURIComponent(pathname.slice("/api/items/".length)), "item id");
     const snapshot = store.deleteItem(id);
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "PATCH" && pathname === "/api/preferences") {
-    const patch = await readJson<ChroniPreferencesPatch>(request);
+    const patch = validatePreferencesPatch(await readJson(request));
     const snapshot = store.updatePreferences(patch);
     onSnapshot(snapshot, "preferences");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "POST" && pathname.startsWith("/api/sources/") && pathname.endsWith("/reprocess")) {
-    const id = decodeURIComponent(pathname.slice("/api/sources/".length, -"/reprocess".length));
+    const id = validateIdentifier(decodeURIComponent(pathname.slice("/api/sources/".length, -"/reprocess".length)), "source id");
     const result = await reprocessSource(id, store);
     onSnapshot(result.snapshot, "data");
     sendJson(response, result.ok ? 200 : 422, result);
@@ -151,7 +158,7 @@ function apiEndpoints(): string[] {
   ];
 }
 
-async function readJson<T>(request: IncomingMessage): Promise<T> {
+async function readJson(request: IncomingMessage): Promise<unknown> {
   const declaredLength = Number(request.headers["content-length"] ?? 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_API_BODY_BYTES) {
     throw new HttpError(413, `Request body exceeds ${MAX_API_BODY_BYTES} bytes.`);
@@ -170,9 +177,29 @@ async function readJson<T>(request: IncomingMessage): Promise<T> {
   const raw = Buffer.concat(chunks).toString("utf8");
   if (!raw.trim()) throw new HttpError(400, "Request body must be JSON.");
   try {
-    return JSON.parse(raw) as T;
+    return JSON.parse(raw) as unknown;
   } catch {
     throw new HttpError(400, "Request body must be valid JSON.");
+  }
+}
+
+function publishDiscoveryFile(filePath: string, baseUrl: string): void {
+  try {
+    mkdirSync(dirname(filePath), { recursive: true });
+    const temporaryPath = `${filePath}.${process.pid}.tmp`;
+    writeFileSync(temporaryPath, JSON.stringify({ baseUrl, pid: process.pid, startedAt: new Date().toISOString() }, null, 2), "utf8");
+    renameSync(temporaryPath, filePath);
+  } catch (error) {
+    console.warn("Chroni API discovery file could not be written.", error);
+  }
+}
+
+function removeOwnedDiscoveryFile(filePath: string): void {
+  try {
+    const record = JSON.parse(readFileSync(filePath, "utf8")) as { pid?: unknown };
+    if (record.pid === process.pid) rmSync(filePath, { force: true });
+  } catch {
+    // A missing or replaced discovery file belongs to no cleanup work here.
   }
 }
 
