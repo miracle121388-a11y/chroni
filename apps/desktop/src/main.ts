@@ -12,6 +12,7 @@ import { validateBoolean, validateIdentifier, validateIntakePayload, validateIte
 let store: ChroniStore;
 let apiServer: ReturnType<typeof startChroniApiServer> | undefined;
 
+app.setName("Chroni");
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -20,7 +21,6 @@ if (!gotLock) {
     if (app.isReady()) showControlCenter();
   });
   app.whenReady().then(() => {
-    app.setName("Chroni");
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");
     store = new ChroniStore(app.getPath("userData"), createSecretCodec());
     installIpc();
