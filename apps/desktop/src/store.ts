@@ -1,7 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { createAgentMemory, updateAgentMemory } from "./agent/agent-memory.js";
+import { cloneAgentRun } from "./agent/agent-state.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
-import type { CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, PetPlacement, ServiceStatus, SourceExtractionStatus, SourceRecord } from "./shared/types.js";
+import type { AgentMemory, AgentMemoryPatch, AgentRunResult, AgentTraceEntry, CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, PetPlacement, ServiceStatus, SourceExtractionStatus, SourceRecord } from "./shared/types.js";
 
 export type SecretCodec = {
   encrypt(value: string): string;
@@ -21,6 +23,11 @@ type StoredState = {
     bubble: string;
   };
   petPlacement?: PetPlacement;
+  agent: {
+    memory: AgentMemory;
+    latestRun?: AgentRunResult;
+    traceHistory: AgentTraceEntry[][];
+  };
 };
 
 export class ChroniStore {
@@ -41,6 +48,10 @@ export class ChroniStore {
       preferences: { ...this.#state.preferences, llm: { ...this.#state.preferences.llm } },
       companion: { ...this.#state.companion },
       services: this.serviceStatus(),
+      agent: {
+        memory: { ...this.#state.agent.memory },
+        latestRun: this.#state.agent.latestRun ? cloneAgentRun(this.#state.agent.latestRun) : undefined,
+      },
     };
   }
 
@@ -57,6 +68,24 @@ export class ChroniStore {
   updatePetPlacement(placement: PetPlacement): void {
     this.#state.petPlacement = { ...placement };
     this.#save();
+  }
+
+  updateAgentMemory(patch: AgentMemoryPatch): ChroniSnapshot {
+    this.#state.agent.memory = updateAgentMemory(this.#state.agent.memory, patch);
+    this.#save();
+    return this.snapshot();
+  }
+
+  saveAgentRun(result: AgentRunResult): ChroniSnapshot {
+    const stored = cloneAgentRun(result);
+    this.#state.agent.latestRun = stored;
+    this.#state.agent.traceHistory = [stored.trace.map((entry) => ({ ...entry, data: { ...entry.data } })), ...this.#state.agent.traceHistory].slice(0, 10);
+    this.#save();
+    return this.snapshot();
+  }
+
+  agentTraceHistory(): AgentTraceEntry[][] {
+    return this.#state.agent.traceHistory.map((trace) => trace.map((entry) => ({ ...entry, data: { ...entry.data } })));
   }
 
   addItems(items: DdlItem[], message = "已加入日程。", extracted: ExtractedInput[] = []): ChroniSnapshot {
@@ -276,6 +305,7 @@ export class ChroniStore {
         },
         companion: parsed.companion?.state ? parsed.companion as StoredState["companion"] : fallback.companion,
         petPlacement: isPetPlacement(parsed.petPlacement) ? { ...parsed.petPlacement } : undefined,
+        agent: normalizeAgentState(parsed.agent),
       };
     } catch {
       return createDefaultState();
@@ -328,6 +358,20 @@ function createDefaultState(): StoredState {
       state: "idle",
       bubble: "把 DDL 文件、截图或文字拖给我。",
     },
+    agent: {
+      memory: createAgentMemory(),
+      traceHistory: [],
+    },
+  };
+}
+
+function normalizeAgentState(value: unknown): StoredState["agent"] {
+  if (!value || typeof value !== "object") return { memory: createAgentMemory(), traceHistory: [] };
+  const agent = value as Partial<StoredState["agent"]>;
+  return {
+    memory: createAgentMemory(agent.memory),
+    latestRun: agent.latestRun,
+    traceHistory: Array.isArray(agent.traceHistory) ? agent.traceHistory.slice(0, 10) : [],
   };
 }
 

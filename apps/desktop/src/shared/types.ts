@@ -26,6 +26,99 @@ export type PetPlacement = {
   yRatio: number;
 };
 
+export type AgentReminderFrequency = "important-only" | "daily" | "off";
+
+export type AgentMemory = {
+  maxDailyMinutes: number;
+  workdayStart: string;
+  workdayEnd: string;
+  reminderFrequency: AgentReminderFrequency;
+};
+
+export type AgentMemoryPatch = Partial<AgentMemory>;
+
+export type AgentRiskLevel = "low" | "medium" | "high" | "critical";
+
+export type AgentTaskAssessment = {
+  taskId: string;
+  title: string;
+  dueAt: string;
+  importance: Importance;
+  riskLevel: AgentRiskLevel;
+  score: number;
+  estimatedMinutes: number;
+  reasons: string[];
+};
+
+export type AgentObservation = {
+  observedAt: string;
+  totalCount: number;
+  incompleteCount: number;
+  activeCount: number;
+  snoozedCount: number;
+  overdueCount: number;
+  activeTasks: DdlItem[];
+};
+
+export type AgentWorkBlock = {
+  taskId: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  allocatedMinutes: number;
+};
+
+export type AgentPlan = {
+  blocks: AgentWorkBlock[];
+  plannedMinutes: number;
+  overflowMinutes: number;
+  unplannedTaskIds: string[];
+};
+
+export type AgentTraceStage = "observe" | "plan" | "act" | "verify";
+
+export type AgentTraceEntry = {
+  id: string;
+  sequence: number;
+  stage: AgentTraceStage;
+  timestamp: string;
+  summary: string;
+  success: boolean;
+  data: Record<string, string | number | boolean | null>;
+};
+
+export type AgentAction = {
+  tool: string;
+  status: "success" | "failed" | "skipped";
+  summary: string;
+};
+
+export type AgentVerification = {
+  status: "healthy" | "attention" | "critical";
+  unresolvedHighRiskTaskIds: string[];
+  unplannedPriorityTaskIds: string[];
+  capacityOverflowMinutes: number;
+  summary: string;
+};
+
+export type AgentRunResult = {
+  id: string;
+  startedAt: string;
+  completedAt: string;
+  observation: AgentObservation;
+  priorities: AgentTaskAssessment[];
+  plan: AgentPlan;
+  actions: AgentAction[];
+  verification: AgentVerification;
+  suggestions: string[];
+  trace: AgentTraceEntry[];
+};
+
+export type AgentSnapshot = {
+  memory: AgentMemory;
+  latestRun?: AgentRunResult;
+};
+
 export type DdlItem = {
   id: string;
   title: string;
@@ -101,6 +194,7 @@ export type ChroniSnapshot = {
     bubble: string;
   };
   services: ServiceStatus;
+  agent: AgentSnapshot;
 };
 
 export type IntakePayload = {
