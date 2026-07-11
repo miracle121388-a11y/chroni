@@ -1,8 +1,14 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+<<<<<<< HEAD
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
 import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, SourceRecord } from "../../shared/types";
+=======
+import { formatOperationError } from "../../shared/errors";
+import { fullScheduleSummary, visibleScheduleSummary } from "../../shared/schedule";
+import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, SourceRecord } from "../../shared/types";
+>>>>>>> fix/windows-release-readiness
 import "./styles.css";
 
 const api = window.chroni;
@@ -75,12 +81,17 @@ function App() {
 }
 
 function PetView({ snapshot, setSnapshot }: ViewProps) {
-  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const dragPointerId = useRef<number | null>(null);
+  const dragStartPoint = useRef<{ x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
   const [hovering, setHovering] = useState(false);
   const [movingPet, setMovingPet] = useState(false);
   const [bubbleVisible, setBubbleVisible] = useState(false);
+<<<<<<< HEAD
   const [localBubble, setLocalBubble] = useState("");
+=======
+  const [dropFeedback, setDropFeedback] = useState("");
+>>>>>>> fix/windows-release-readiness
   const visualAction = movingPet ? "drag" : petAction(snapshot.companion.state);
 
   useEffect(() => {
@@ -105,20 +116,38 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
     return () => window.clearTimeout(timeout);
   }, [localBubble, snapshot.companion.bubble, snapshot.companion.state]);
 
+  useEffect(() => {
+    if (!dropFeedback) return;
+    const timeout = window.setTimeout(() => setDropFeedback(""), 4200);
+    return () => window.clearTimeout(timeout);
+  }, [dropFeedback]);
+
   async function handleDrop(event: React.DragEvent) {
     event.preventDefault();
     setHovering(false);
+<<<<<<< HEAD
     try {
       const droppedFiles = Array.from(event.dataTransfer.files);
       const droppedText = event.dataTransfer.getData("text/plain");
       const files = await filesFromFileList(droppedFiles);
       await api.companionHover(false).catch(() => undefined);
+=======
+    setDropFeedback("");
+    try {
+      await api.companionHover(false);
+      const files = await filesFromFileList(droppedFiles);
+>>>>>>> fix/windows-release-readiness
       const result = files.length
         ? await api.intake({ kind: "files", files })
         : await api.intake({ kind: "text", text: droppedText });
       setSnapshot(result.snapshot);
+<<<<<<< HEAD
     } catch {
       setLocalBubble("没有成功读取这次拖入，请稍后重试。");
+=======
+    } catch (error) {
+      setDropFeedback(formatOperationError(error, "拖放处理失败"));
+>>>>>>> fix/windows-release-readiness
     }
   }
 
@@ -142,26 +171,39 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         void api.openPetMenu();
       }}
       onPointerDown={(event) => {
-        dragStart.current = { x: event.screenX, y: event.screenY };
+        if (!event.isPrimary || event.button !== 0) return;
+        dragPointerId.current = event.pointerId;
+        dragStartPoint.current = { x: event.screenX, y: event.screenY };
+        event.currentTarget.setPointerCapture(event.pointerId);
         suppressClick.current = false;
+        api.startWindowDrag(event.screenX, event.screenY);
       }}
       onPointerMove={(event) => {
-        if (!dragStart.current || event.buttons !== 1) return;
-        const dx = event.screenX - dragStart.current.x;
-        const dy = event.screenY - dragStart.current.y;
-        dragStart.current = { x: event.screenX, y: event.screenY };
-        if (Math.abs(dx) + Math.abs(dy) > 1) {
+        if (dragPointerId.current !== event.pointerId || (event.buttons & 1) === 0) return;
+        const start = dragStartPoint.current;
+        if (start && Math.abs(event.screenX - start.x) + Math.abs(event.screenY - start.y) > 2) {
           suppressClick.current = true;
           setMovingPet(true);
         }
-        api.dragWindow(dx, dy);
+        api.moveWindowDrag();
       }}
-      onPointerUp={() => {
-        dragStart.current = null;
+      onPointerUp={(event) => {
+        if (dragPointerId.current !== event.pointerId) return;
+        dragPointerId.current = null;
+        dragStartPoint.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
         setMovingPet(false);
-        api.snapWindow();
+        api.endWindowDrag();
       }}
-      onPointerLeave={() => setMovingPet(false)}
+      onPointerCancel={(event) => {
+        if (dragPointerId.current !== event.pointerId) return;
+        dragPointerId.current = null;
+        dragStartPoint.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        suppressClick.current = false;
+        setMovingPet(false);
+        api.endWindowDrag();
+      }}
     >
       <button
         className="pet-body"
@@ -178,7 +220,11 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
       >
         <PetSprite action={visualAction} />
       </button>
+<<<<<<< HEAD
       <div className={`bubble ${bubbleVisible ? "show" : ""}`} role="status" aria-live="polite">{localBubble || snapshot.companion.bubble}</div>
+=======
+      <div className={`bubble ${bubbleVisible || dropFeedback ? "show" : ""}`}>{dropFeedback || snapshot.companion.bubble}</div>
+>>>>>>> fix/windows-release-readiness
     </main>
   );
 }
@@ -232,8 +278,13 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
       setSnapshot(result.snapshot);
       showFeedback({ message: result.ok ? result.message : result.reason, tone: result.ok ? "ok" : "warn" });
       if (result.ok) setQuickText("");
+<<<<<<< HEAD
     } catch {
       showFeedback({ message: "快速添加失败，请稍后重试。", tone: "warn" });
+=======
+    } catch (error) {
+      setFeedback(formatOperationError(error, "识别失败"));
+>>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
     }
@@ -394,8 +445,13 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
       if (result.ok) setManual("");
+<<<<<<< HEAD
     } catch {
       setFeedback("快速添加失败，请稍后重试。");
+=======
+    } catch (error) {
+      setFeedback(formatOperationError(error, "识别失败"));
+>>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
     }
@@ -403,6 +459,7 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
 
   async function extractFiles(fileList: FileList | null, fill: boolean) {
     if (isBusy) return;
+<<<<<<< HEAD
     let files: ChroniInputFile[];
     try {
       files = await filesFromFileList(fileList);
@@ -413,14 +470,25 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
     if (!files.length) return;
     const payload: IntakePayload = { kind: "files", files };
     setBusyMessage(fill ? "正在填入日程..." : "正在预览抽取...");
+=======
+    setBusyMessage("正在读取文件...");
+>>>>>>> fix/windows-release-readiness
     setFeedback("");
-    if (fill) {
-      try {
+    try {
+      const files = await filesFromFileList(fileList);
+      if (!files.length) {
+        setFeedback("没有收到可读取的文件。");
+        return;
+      }
+      const payload: IntakePayload = { kind: "files", files };
+      setBusyMessage(fill ? "正在填入日程..." : "正在预览抽取...");
+      if (fill) {
         const result = await api.intake(payload);
         setSnapshot(result.snapshot);
         setFeedback(result.ok ? result.message : result.reason);
         setPreview(null);
         setPreviewPayload(null);
+<<<<<<< HEAD
       } catch {
         setFeedback("文件填入失败，请稍后重试。");
       } finally {
@@ -433,8 +501,17 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
       setPreviewPayload(payload);
     } catch {
       setFeedback("抽取预览失败，请检查文件后重试。");
+=======
+      } else {
+        setPreview(await api.extract(payload));
+        setPreviewPayload(payload);
+      }
+    } catch (error) {
+      setFeedback(formatOperationError(error, "文件处理失败"));
+>>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -551,8 +628,13 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
                 setFeedback(result.ok ? result.message : result.reason);
                 setPreview(null);
                 setPreviewPayload(null);
+<<<<<<< HEAD
               } catch {
                 setFeedback("填入日程失败，请稍后重试。");
+=======
+              } catch (error) {
+                setFeedback(formatOperationError(error, "填入日程失败"));
+>>>>>>> fix/windows-release-readiness
               } finally {
                 setBusyMessage("");
               }
@@ -661,8 +743,8 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
         <Toggle label="启用 LLM 抽取" checked={preferences.llm.enabled} onChange={(value) => void patch({ llm: { enabled: value } })} />
         <details className="advanced-settings">
           <summary>大模型 API</summary>
-          <label className="text-field">Base URL<input value={preferences.llm.baseUrl} placeholder="https://api.deepseek.com/v1" onChange={(event) => void patch({ llm: { baseUrl: event.target.value } })} /></label>
-          <label className="text-field">模型<input value={preferences.llm.model} placeholder="deepseek-chat" onChange={(event) => void patch({ llm: { model: event.target.value } })} /></label>
+          <label className="text-field">Base URL<input value={preferences.llm.baseUrl} placeholder="https://api.deepseek.com" onChange={(event) => void patch({ llm: { baseUrl: event.target.value } })} /></label>
+          <label className="text-field">模型<input value={preferences.llm.model} placeholder="deepseek-v4-flash" onChange={(event) => void patch({ llm: { model: event.target.value } })} /></label>
           <label className="text-field">API Key<input type="password" value={preferences.llm.apiKey} placeholder="sk-..." onChange={(event) => void patch({ llm: { apiKey: event.target.value } })} /></label>
         </details>
       </section>
@@ -771,8 +853,13 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const snapshot = await api.updateSourceText(source.id, draftText);
       setSnapshot(snapshot);
       setFeedback("原文已保存。");
+<<<<<<< HEAD
     } catch {
       setFeedback("原文保存失败，请稍后重试。");
+=======
+    } catch (error) {
+      setFeedback(formatOperationError(error, "保存失败"));
+>>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
     }
@@ -788,8 +875,13 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const result = await api.reprocessSource(source.id);
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
+<<<<<<< HEAD
     } catch {
       setFeedback("保存或重新识别失败，请稍后重试。");
+=======
+    } catch (error) {
+      setFeedback(formatOperationError(error, "重新识别失败"));
+>>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
     }
@@ -803,8 +895,13 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const result = await api.reprocessSource(source.id);
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
+<<<<<<< HEAD
     } catch {
       setFeedback("重新识别失败，请稍后重试。");
+=======
+    } catch (error) {
+      setFeedback(formatOperationError(error, "重新识别失败"));
+>>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
     }
@@ -864,6 +961,7 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
     if (!editing) setDraft(item);
   }, [editing, item]);
 
+<<<<<<< HEAD
   useEffect(() => {
     if (!snoozeMenuOpen) return;
     function closeOnPointerDown(event: PointerEvent): void {
@@ -891,9 +989,33 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
 
   async function runItemAction(message: string, action: () => Promise<void>, notice?: ActionNotice, failureMessage = "操作失败，请稍后重试。"): Promise<boolean> {
     if (isBusy) return false;
+=======
+  async function update(patch: Partial<DdlItem>): Promise<boolean> {
+    if (isBusy) return false;
+    try {
+      const snapshot = await api.updateItem(item.id, patch);
+      setSnapshot(snapshot);
+      return true;
+    } catch (error) {
+      onAction?.(formatOperationError(error, "更新失败"));
+      return false;
+    }
+  }
+
+  function updateDueAt(value: string): void {
+    if (!value) return;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return;
+    void update({ dueAt: date.toISOString() });
+  }
+
+  async function runItemAction(message: string, action: () => Promise<void | boolean>, doneMessage?: string) {
+    if (isBusy) return;
+>>>>>>> fix/windows-release-readiness
     setBusyAction(message);
     setRowError("");
     try {
+<<<<<<< HEAD
       await action();
       if (notice) onAction?.(notice);
       return true;
@@ -901,6 +1023,12 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
       setRowError(failureMessage);
       onAction?.({ message: failureMessage, tone: "warn" });
       return false;
+=======
+      const succeeded = await action();
+      if (succeeded !== false && doneMessage) onAction?.(doneMessage);
+    } catch (error) {
+      onAction?.(formatOperationError(error, "操作失败"));
+>>>>>>> fix/windows-release-readiness
     } finally {
       setBusyAction("");
     }

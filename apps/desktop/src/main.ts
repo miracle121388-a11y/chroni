@@ -1,24 +1,24 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Notification, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, Notification, safeStorage, shell } from "electron";
 import { startChroniApiServer } from "./api-server.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import { shouldRemindItem } from "./shared/schedule.js";
 import type { ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
-import { companionStateForItems, ChroniStore } from "./store.js";
+import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
 
 let store: ChroniStore;
-
-app.commandLine.appendSwitch("use-mock-keychain");
-app.commandLine.appendSwitch("password-store", "basic");
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
+  app.on("second-instance", () => {
+    if (app.isReady()) showControlCenter();
+  });
   app.whenReady().then(() => {
     app.setName("Chroni");
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");
-    store = new ChroniStore(app.getPath("userData"));
+    store = new ChroniStore(app.getPath("userData"), createSecretCodec());
     installIpc();
     createAppWindows();
     createTray();
@@ -203,4 +203,12 @@ function registerHotkey(): boolean {
     console.warn(`Unable to register Chroni hotkey: ${hotkey}`);
     return false;
   }
+}
+
+function createSecretCodec(): SecretCodec | undefined {
+  if (!safeStorage.isEncryptionAvailable()) return undefined;
+  return {
+    encrypt: (value) => safeStorage.encryptString(value).toString("base64"),
+    decrypt: (value) => safeStorage.decryptString(Buffer.from(value, "base64")),
+  };
 }

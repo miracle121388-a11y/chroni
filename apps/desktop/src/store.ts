@@ -3,6 +3,15 @@ import { dirname, join } from "node:path";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
 import type { CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, ServiceStatus, SourceExtractionStatus, SourceRecord } from "./shared/types.js";
 
+export type SecretCodec = {
+  encrypt(value: string): string;
+  decrypt(value: string): string;
+};
+
+type PersistedLlmSettings = Partial<ChroniPreferences["llm"]> & {
+  apiKeyProtected?: string;
+};
+
 type StoredState = {
   items: DdlItem[];
   sources: SourceRecord[];
@@ -16,17 +25,19 @@ type StoredState = {
 export class ChroniStore {
   readonly filePath: string;
   #state: StoredState;
+  #needsSecretMigration = false;
 
-  constructor(userDataPath: string) {
+  constructor(userDataPath: string, readonly secretCodec?: SecretCodec) {
     this.filePath = join(userDataPath, "chroni-state.json");
     this.#state = this.#load();
+    if (this.#needsSecretMigration) this.#save();
   }
 
   snapshot(): ChroniSnapshot {
     return {
       items: [...this.#state.items].sort(compareDdlItems),
       sources: [...this.#state.sources].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
-      preferences: { ...this.#state.preferences },
+      preferences: { ...this.#state.preferences, llm: { ...this.#state.preferences.llm } },
       companion: { ...this.#state.companion },
       services: this.serviceStatus(),
     };
@@ -205,12 +216,17 @@ export class ChroniStore {
       ocr: "ready",
       model: modelReady ? "ready" : "limited",
       storagePath: this.filePath,
-      privacy: "当前版本把日程数据保存在本机 JSON 文件中，不上传原始输入。",
+      privacy: modelEnabled
+        ? "日程和来源保存在本机；启用 LLM 时，抽取文本会发送到你配置的模型服务。"
+        : "日程和来源保存在本机，未启用 LLM 时不会发送到模型服务。",
       notes: [
         "已支持文本、PDF、DOCX、XLSX、CSV、网页/结构化文本和图片 OCR 的本地抽取。",
         modelReady
           ? `LLM 智能抽取已启用，当前模型：${llm.model || process.env.CHRONI_LLM_MODEL || "未设置"}。`
           : "未配置 LLM API Key 时会使用本地规则抽取；配置后优先使用大模型抽取并自动回退。",
+        this.secretCodec
+          ? "LLM API Key 使用操作系统安全存储加密。"
+          : "当前系统安全存储不可用，界面填写的 LLM API Key 仅在本次运行有效；可改用 CHRONI_LLM_API_KEY。",
         `${this.#state.sources.length} 条输入来源保存在本机，可在控制中心重新识别。`,
         this.#state.preferences.remindersEnabled
           ? `提醒已开启${this.#state.preferences.quietHoursEnabled ? `，勿扰时间 ${this.#state.preferences.quietHoursStart}-${this.#state.preferences.quietHoursEnd}` : ""}。`
@@ -224,16 +240,29 @@ export class ChroniStore {
   #load(): StoredState {
     if (!existsSync(this.filePath)) return createDefaultState();
     try {
-      const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<StoredState>;
+      const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<StoredState> & {
+        preferences?: Partial<ChroniPreferences> & { llm?: PersistedLlmSettings };
+      };
       const fallback = createDefaultState();
       const defaultPreferences = createDefaultPreferences();
+      const persistedLlm = (parsed.preferences?.llm ?? {}) as PersistedLlmSettings;
+      const { apiKey: legacyApiKey, apiKeyProtected, ...llmSettings } = persistedLlm;
+      let apiKey = typeof legacyApiKey === "string" ? legacyApiKey : "";
+      if (apiKeyProtected && this.secretCodec) {
+        try {
+          apiKey = this.secretCodec.decrypt(apiKeyProtected);
+        } catch {
+          apiKey = "";
+        }
+      }
+      if (legacyApiKey) this.#needsSecretMigration = true;
       return {
         items: Array.isArray(parsed.items) ? parsed.items : fallback.items,
         sources: Array.isArray(parsed.sources) ? (parsed.sources as SourceRecord[]).map(normalizeSourceRecord) : fallback.sources,
         preferences: {
           ...defaultPreferences,
           ...(parsed.preferences ?? {}),
-          llm: { ...defaultPreferences.llm, ...(parsed.preferences?.llm ?? {}) },
+          llm: { ...defaultPreferences.llm, ...llmSettings, apiKey },
         },
         companion: parsed.companion?.state ? parsed.companion as StoredState["companion"] : fallback.companion,
       };
@@ -245,8 +274,18 @@ export class ChroniStore {
   #save(): void {
     mkdirSync(dirname(this.filePath), { recursive: true });
     const tmp = `${this.filePath}.tmp`;
-    writeFileSync(tmp, JSON.stringify(this.#state, null, 2), "utf8");
+    const { apiKey, ...llm } = this.#state.preferences.llm;
+    const apiKeyProtected = apiKey && this.secretCodec ? this.secretCodec.encrypt(apiKey) : undefined;
+    const persistedState = {
+      ...this.#state,
+      preferences: {
+        ...this.#state.preferences,
+        llm: { ...llm, ...(apiKeyProtected ? { apiKeyProtected } : {}) },
+      },
+    };
+    writeFileSync(tmp, JSON.stringify(persistedState, null, 2), "utf8");
     renameSync(tmp, this.filePath);
+    this.#needsSecretMigration = false;
   }
 }
 
@@ -262,9 +301,9 @@ function createDefaultPreferences(): ChroniPreferences {
     llm: {
       enabled: false,
       provider: "openai-compatible",
-      baseUrl: "https://api.openai.com/v1",
+      baseUrl: "https://api.deepseek.com",
       apiKey: "",
-      model: "gpt-4.1-mini",
+      model: "deepseek-v4-flash",
     },
   };
 }

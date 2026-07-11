@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+<<<<<<< HEAD
 import { extractDdlItemsFromText, itemFromLlmCandidate, isReliableOcrResult, processIntake, reprocessSource } from "../dist/intake.js";
 import { lightweightScheduleItems, scheduleBucket, shouldRemindItem, snoozeUntil, visibleScheduleSummary } from "../dist/shared/schedule.js";
 import { companionStateForItems, ChroniStore } from "../dist/store.js";
+=======
+import { extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, isReliableOcrResult, processIntake, reprocessSource } from "../dist/intake.js";
+import { visibleScheduleSummary } from "../dist/shared/schedule.js";
+import { ChroniStore } from "../dist/store.js";
+>>>>>>> fix/windows-release-readiness
 
 async function withStore(fn) {
   const dir = mkdtempSync(join(tmpdir(), "chroni-test-"));
@@ -16,6 +22,19 @@ async function withStore(fn) {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+function testSecretCodec() {
+  return {
+    encrypt(value) {
+      return Buffer.from(`chroni:${value}`, "utf8").toString("base64");
+    },
+    decrypt(value) {
+      const decoded = Buffer.from(value, "base64").toString("utf8");
+      if (!decoded.startsWith("chroni:")) throw new Error("Invalid test secret");
+      return decoded.slice("chroni:".length);
+    },
+  };
 }
 
 test("records failed task-like intake as a local source", async () => {
@@ -404,4 +423,77 @@ test("source linking can match llm evidence snippets without source-name prefixe
     assert.deepEqual(sourceA?.itemIds, ["ddl-a"]);
     assert.deepEqual(sourceB?.itemIds, ["ddl-b"]);
   });
+});
+
+test("LLM keys are encrypted at rest and reload through the secret codec", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-secret-test-"));
+  try {
+    const store = new ChroniStore(dir, testSecretCodec());
+    store.updatePreferences({ llm: { apiKey: "sk-deepseek-private" } });
+
+    const raw = readFileSync(store.filePath, "utf8");
+    assert.equal(raw.includes("sk-deepseek-private"), false);
+    assert.match(raw, /apiKeyProtected/);
+
+    const reloaded = new ChroniStore(dir, testSecretCodec());
+    assert.equal(reloaded.snapshot().preferences.llm.apiKey, "sk-deepseek-private");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("enabled model failures are reported when local rules provide a fallback", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("connection refused"); };
+  try {
+    const result = await extractPayload(
+      { kind: "text", text: "明天 18:00 提交课程报告" },
+      {
+        llm: {
+          enabled: true,
+          provider: "openai-compatible",
+          baseUrl: "https://api.deepseek.com",
+          apiKey: "sk-test-only",
+          model: "deepseek-v4-flash",
+        },
+      },
+    );
+
+    assert.equal(result.ok, true);
+    assert.match(result.message, /模型.*不可用/);
+    assert.match(result.message, /本地规则/);
+    assert.equal(result.items.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("legacy plaintext LLM keys migrate to protected storage", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-secret-migration-test-"));
+  try {
+    const statePath = join(dir, "chroni-state.json");
+    writeFileSync(statePath, JSON.stringify({
+      items: [],
+      sources: [],
+      preferences: {
+        llm: {
+          enabled: true,
+          provider: "openai-compatible",
+          baseUrl: "https://api.deepseek.com",
+          apiKey: "sk-legacy-private",
+          model: "deepseek-v4-flash",
+        },
+      },
+      companion: { state: "idle", bubble: "ready" },
+    }), "utf8");
+
+    const store = new ChroniStore(dir, testSecretCodec());
+    const migrated = readFileSync(store.filePath, "utf8");
+
+    assert.equal(store.snapshot().preferences.llm.apiKey, "sk-legacy-private");
+    assert.equal(migrated.includes("sk-legacy-private"), false);
+    assert.match(migrated, /apiKeyProtected/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

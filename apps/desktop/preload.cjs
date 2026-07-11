@@ -17,8 +17,9 @@ contextBridge.exposeInMainWorld("chroni", {
   reprocessSource: (sourceId) => ipcRenderer.invoke("chroni:source-reprocess", sourceId),
   updateSourceText: (sourceId, text) => ipcRenderer.invoke("chroni:source-update-text", sourceId, text),
   openStorage: () => ipcRenderer.invoke("chroni:open-storage"),
-  dragWindow: (dx, dy) => ipcRenderer.send("chroni:drag-window", dx, dy),
-  snapWindow: () => ipcRenderer.send("chroni:snap-window"),
+  startWindowDrag: (screenX, screenY) => ipcRenderer.sendSync("chroni:start-window-drag", screenX, screenY),
+  moveWindowDrag: () => ipcRenderer.send("chroni:move-window-drag"),
+  endWindowDrag: () => ipcRenderer.send("chroni:end-window-drag"),
   filePath: (file) => webUtils.getPathForFile(file),
   onSnapshotUpdated: (callback) => {
     const listener = (_event, snapshot) => callback(snapshot);
