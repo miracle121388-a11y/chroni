@@ -4,15 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-<<<<<<< HEAD
-import { extractDdlItemsFromText, itemFromLlmCandidate, isReliableOcrResult, processIntake, reprocessSource } from "../dist/intake.js";
+import { extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, isReliableOcrResult, processIntake, reprocessSource } from "../dist/intake.js";
 import { lightweightScheduleItems, scheduleBucket, shouldRemindItem, snoozeUntil, visibleScheduleSummary } from "../dist/shared/schedule.js";
 import { companionStateForItems, ChroniStore } from "../dist/store.js";
-=======
-import { extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, isReliableOcrResult, processIntake, reprocessSource } from "../dist/intake.js";
-import { visibleScheduleSummary } from "../dist/shared/schedule.js";
-import { ChroniStore } from "../dist/store.js";
->>>>>>> fix/windows-release-readiness
 
 async function withStore(fn) {
   const dir = mkdtempSync(join(tmpdir(), "chroni-test-"));

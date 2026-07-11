@@ -1,14 +1,9 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-<<<<<<< HEAD
+import { formatOperationError } from "../../shared/errors";
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
 import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, SourceRecord } from "../../shared/types";
-=======
-import { formatOperationError } from "../../shared/errors";
-import { fullScheduleSummary, visibleScheduleSummary } from "../../shared/schedule";
-import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, SourceRecord } from "../../shared/types";
->>>>>>> fix/windows-release-readiness
 import "./styles.css";
 
 const api = window.chroni;
@@ -87,11 +82,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
   const [hovering, setHovering] = useState(false);
   const [movingPet, setMovingPet] = useState(false);
   const [bubbleVisible, setBubbleVisible] = useState(false);
-<<<<<<< HEAD
   const [localBubble, setLocalBubble] = useState("");
-=======
-  const [dropFeedback, setDropFeedback] = useState("");
->>>>>>> fix/windows-release-readiness
   const visualAction = movingPet ? "drag" : petAction(snapshot.companion.state);
 
   useEffect(() => {
@@ -116,38 +107,20 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
     return () => window.clearTimeout(timeout);
   }, [localBubble, snapshot.companion.bubble, snapshot.companion.state]);
 
-  useEffect(() => {
-    if (!dropFeedback) return;
-    const timeout = window.setTimeout(() => setDropFeedback(""), 4200);
-    return () => window.clearTimeout(timeout);
-  }, [dropFeedback]);
-
   async function handleDrop(event: React.DragEvent) {
     event.preventDefault();
     setHovering(false);
-<<<<<<< HEAD
     try {
       const droppedFiles = Array.from(event.dataTransfer.files);
       const droppedText = event.dataTransfer.getData("text/plain");
       const files = await filesFromFileList(droppedFiles);
       await api.companionHover(false).catch(() => undefined);
-=======
-    setDropFeedback("");
-    try {
-      await api.companionHover(false);
-      const files = await filesFromFileList(droppedFiles);
->>>>>>> fix/windows-release-readiness
       const result = files.length
         ? await api.intake({ kind: "files", files })
         : await api.intake({ kind: "text", text: droppedText });
       setSnapshot(result.snapshot);
-<<<<<<< HEAD
-    } catch {
-      setLocalBubble("没有成功读取这次拖入，请稍后重试。");
-=======
     } catch (error) {
-      setDropFeedback(formatOperationError(error, "拖放处理失败"));
->>>>>>> fix/windows-release-readiness
+      setLocalBubble(formatOperationError(error, "拖放处理失败"));
     }
   }
 
@@ -220,11 +193,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
       >
         <PetSprite action={visualAction} />
       </button>
-<<<<<<< HEAD
       <div className={`bubble ${bubbleVisible ? "show" : ""}`} role="status" aria-live="polite">{localBubble || snapshot.companion.bubble}</div>
-=======
-      <div className={`bubble ${bubbleVisible || dropFeedback ? "show" : ""}`}>{dropFeedback || snapshot.companion.bubble}</div>
->>>>>>> fix/windows-release-readiness
     </main>
   );
 }
@@ -278,13 +247,8 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
       setSnapshot(result.snapshot);
       showFeedback({ message: result.ok ? result.message : result.reason, tone: result.ok ? "ok" : "warn" });
       if (result.ok) setQuickText("");
-<<<<<<< HEAD
-    } catch {
-      showFeedback({ message: "快速添加失败，请稍后重试。", tone: "warn" });
-=======
     } catch (error) {
-      setFeedback(formatOperationError(error, "识别失败"));
->>>>>>> fix/windows-release-readiness
+      showFeedback({ message: formatOperationError(error, "识别失败"), tone: "warn" });
     } finally {
       setBusyMessage("");
     }
@@ -445,13 +409,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
       if (result.ok) setManual("");
-<<<<<<< HEAD
-    } catch {
-      setFeedback("快速添加失败，请稍后重试。");
-=======
     } catch (error) {
       setFeedback(formatOperationError(error, "识别失败"));
->>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
     }
@@ -459,20 +418,7 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
 
   async function extractFiles(fileList: FileList | null, fill: boolean) {
     if (isBusy) return;
-<<<<<<< HEAD
-    let files: ChroniInputFile[];
-    try {
-      files = await filesFromFileList(fileList);
-    } catch {
-      setFeedback("文件读取失败，请重新选择。");
-      return;
-    }
-    if (!files.length) return;
-    const payload: IntakePayload = { kind: "files", files };
-    setBusyMessage(fill ? "正在填入日程..." : "正在预览抽取...");
-=======
     setBusyMessage("正在读取文件...");
->>>>>>> fix/windows-release-readiness
     setFeedback("");
     try {
       const files = await filesFromFileList(fileList);
@@ -488,27 +434,12 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
         setFeedback(result.ok ? result.message : result.reason);
         setPreview(null);
         setPreviewPayload(null);
-<<<<<<< HEAD
-      } catch {
-        setFeedback("文件填入失败，请稍后重试。");
-      } finally {
-        setBusyMessage("");
-      }
-      return;
-    }
-    try {
-      setPreview(await api.extract(payload));
-      setPreviewPayload(payload);
-    } catch {
-      setFeedback("抽取预览失败，请检查文件后重试。");
-=======
       } else {
         setPreview(await api.extract(payload));
         setPreviewPayload(payload);
       }
     } catch (error) {
       setFeedback(formatOperationError(error, "文件处理失败"));
->>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -628,13 +559,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
                 setFeedback(result.ok ? result.message : result.reason);
                 setPreview(null);
                 setPreviewPayload(null);
-<<<<<<< HEAD
-              } catch {
-                setFeedback("填入日程失败，请稍后重试。");
-=======
               } catch (error) {
                 setFeedback(formatOperationError(error, "填入日程失败"));
->>>>>>> fix/windows-release-readiness
               } finally {
                 setBusyMessage("");
               }
@@ -853,13 +779,8 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const snapshot = await api.updateSourceText(source.id, draftText);
       setSnapshot(snapshot);
       setFeedback("原文已保存。");
-<<<<<<< HEAD
-    } catch {
-      setFeedback("原文保存失败，请稍后重试。");
-=======
     } catch (error) {
       setFeedback(formatOperationError(error, "保存失败"));
->>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
     }
@@ -875,13 +796,8 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const result = await api.reprocessSource(source.id);
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
-<<<<<<< HEAD
-    } catch {
-      setFeedback("保存或重新识别失败，请稍后重试。");
-=======
     } catch (error) {
       setFeedback(formatOperationError(error, "重新识别失败"));
->>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
     }
@@ -895,13 +811,8 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
       const result = await api.reprocessSource(source.id);
       setSnapshot(result.snapshot);
       setFeedback(result.ok ? result.message : result.reason);
-<<<<<<< HEAD
-    } catch {
-      setFeedback("重新识别失败，请稍后重试。");
-=======
     } catch (error) {
       setFeedback(formatOperationError(error, "重新识别失败"));
->>>>>>> fix/windows-release-readiness
     } finally {
       setBusyMessage("");
     }
@@ -961,7 +872,6 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
     if (!editing) setDraft(item);
   }, [editing, item]);
 
-<<<<<<< HEAD
   useEffect(() => {
     if (!snoozeMenuOpen) return;
     function closeOnPointerDown(event: PointerEvent): void {
@@ -989,46 +899,17 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
 
   async function runItemAction(message: string, action: () => Promise<void>, notice?: ActionNotice, failureMessage = "操作失败，请稍后重试。"): Promise<boolean> {
     if (isBusy) return false;
-=======
-  async function update(patch: Partial<DdlItem>): Promise<boolean> {
-    if (isBusy) return false;
-    try {
-      const snapshot = await api.updateItem(item.id, patch);
-      setSnapshot(snapshot);
-      return true;
-    } catch (error) {
-      onAction?.(formatOperationError(error, "更新失败"));
-      return false;
-    }
-  }
-
-  function updateDueAt(value: string): void {
-    if (!value) return;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return;
-    void update({ dueAt: date.toISOString() });
-  }
-
-  async function runItemAction(message: string, action: () => Promise<void | boolean>, doneMessage?: string) {
-    if (isBusy) return;
->>>>>>> fix/windows-release-readiness
     setBusyAction(message);
     setRowError("");
     try {
-<<<<<<< HEAD
       await action();
       if (notice) onAction?.(notice);
       return true;
-    } catch {
-      setRowError(failureMessage);
-      onAction?.({ message: failureMessage, tone: "warn" });
-      return false;
-=======
-      const succeeded = await action();
-      if (succeeded !== false && doneMessage) onAction?.(doneMessage);
     } catch (error) {
-      onAction?.(formatOperationError(error, "操作失败"));
->>>>>>> fix/windows-release-readiness
+      const message = formatOperationError(error, failureMessage);
+      setRowError(message);
+      onAction?.({ message, tone: "warn" });
+      return false;
     } finally {
       setBusyAction("");
     }
