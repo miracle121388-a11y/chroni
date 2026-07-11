@@ -1,4 +1,40 @@
-import type { AgentMemory, AgentObservation, AgentPlan, AgentTaskAssessment, DdlItem } from "../shared/types.js";
+import type { AgentIcsExportResult, AgentMemory, AgentObservation, AgentPlan, AgentTaskAssessment, DdlItem, IntakeResult } from "../shared/types.js";
+
+export type DeadlineAgentTools = {
+  readTasks(): Promise<DdlItem[]>;
+  assessRisks(tasks: DdlItem[], now: Date): AgentTaskAssessment[];
+  plan(risks: AgentTaskAssessment[], memory: AgentMemory, now: Date): AgentPlan;
+  replan(risks: AgentTaskAssessment[], memory: AgentMemory, now: Date): AgentPlan | Promise<AgentPlan>;
+  sendReminder(task: AgentTaskAssessment): Promise<void>;
+  intakeText?(text: string): Promise<IntakeResult>;
+  exportIcs?(): Promise<AgentIcsExportResult>;
+};
+
+export type AgentToolDependencies = {
+  readTasks(): DdlItem[];
+  intakeText(text: string): Promise<IntakeResult>;
+  writeIcs(content: string, fileName: string): string | Promise<string>;
+  sendReminder(task: AgentTaskAssessment): Promise<void>;
+  now?: () => Date;
+};
+
+export function createAgentTools(dependencies: AgentToolDependencies): DeadlineAgentTools {
+  const now = dependencies.now ?? (() => new Date());
+  return {
+    readTasks: async () => dependencies.readTasks().map((item) => ({ ...item })),
+    assessRisks: assessTaskRisks,
+    plan: planWorkBlocks,
+    replan: planWorkBlocks,
+    sendReminder: dependencies.sendReminder,
+    intakeText: dependencies.intakeText,
+    async exportIcs() {
+      const tasks = dependencies.readTasks().filter((item) => !item.completed);
+      const generatedAt = now();
+      const path = await dependencies.writeIcs(serializeTasksToIcs(tasks, generatedAt), `chroni-deadlines-${localDateKey(generatedAt)}.ics`);
+      return { path, itemCount: tasks.length };
+    },
+  };
+}
 
 export function observeTasks(items: DdlItem[], now = new Date()): AgentObservation {
   const incomplete = items.filter((item) => !item.completed);
@@ -129,4 +165,11 @@ function icsDate(value: Date): string {
 
 function escapeIcs(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+}
+
+function localDateKey(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

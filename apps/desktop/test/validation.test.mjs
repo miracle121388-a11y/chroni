@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateIntakePayload, validateItemPatch, validatePreferencesPatch } from "../dist/validation.js";
+import { validateAgentMemoryPatch, validateIntakePayload, validateItemPatch, validatePreferencesPatch } from "../dist/validation.js";
 
 test("validateIntakePayload accepts supported text and file shapes", () => {
   assert.deepEqual(validateIntakePayload({ kind: "text", text: "tomorrow 18:00 submit report" }), {
@@ -39,4 +39,23 @@ test("validatePreferencesPatch rejects invalid nested settings", () => {
   assert.throws(() => validatePreferencesPatch({ companionEnabled: "yes" }), /companionEnabled/);
   assert.throws(() => validatePreferencesPatch({ companionStyle: "purple" }), /companionStyle/);
   assert.throws(() => validatePreferencesPatch({ llm: { provider: "unknown" } }), /provider/);
+});
+
+test("validateAgentMemoryPatch enforces capacity, work hours, and reminder frequency", () => {
+  assert.deepEqual(validateAgentMemoryPatch({ maxDailyMinutes: 180, workdayStart: "10:00", workdayEnd: "17:00", reminderFrequency: "daily" }), {
+    maxDailyMinutes: 180,
+    workdayStart: "10:00",
+    workdayEnd: "17:00",
+    reminderFrequency: "daily",
+  });
+  assert.throws(() => validateAgentMemoryPatch({ maxDailyMinutes: 10 }), /maxDailyMinutes/);
+  assert.throws(() => validateAgentMemoryPatch({ workdayStart: "18:00", workdayEnd: "09:00" }), /before/);
+  assert.throws(() => validateAgentMemoryPatch({ reminderFrequency: "always" }), /reminderFrequency/);
+  assert.throws(() => validateAgentMemoryPatch({ unknown: true }), /unknown/);
+  assert.throws(() => validateAgentMemoryPatch({ workdayEnd: "14:00" }, {
+    maxDailyMinutes: 180,
+    workdayStart: "15:00",
+    workdayEnd: "18:00",
+    reminderFrequency: "daily",
+  }), /before/);
 });

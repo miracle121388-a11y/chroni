@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { ChroniLlmSettings, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult } from "../../shared/types";
+import type { AgentIcsExportResult, AgentMemoryPatch, ChroniLlmSettings, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult } from "../../shared/types";
 
 declare global {
   interface Window {
@@ -15,6 +15,9 @@ declare global {
       deleteItem(id: string): Promise<ChroniSnapshot>;
       updatePreferences(patch: ChroniPreferencesPatch): Promise<ChroniSnapshot>;
       testLlmConnection(settings: ChroniLlmSettings): Promise<LlmConnectionResult>;
+      runDeadlineAgent(): Promise<ChroniSnapshot>;
+      updateAgentMemory(patch: AgentMemoryPatch): Promise<ChroniSnapshot>;
+      exportAgentIcs(): Promise<AgentIcsExportResult>;
       quickAdd(text: string): Promise<IntakeResult>;
       openControlCenter(): Promise<void>;
       openPetMenu(): Promise<void>;

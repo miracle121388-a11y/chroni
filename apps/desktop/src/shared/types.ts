@@ -119,6 +119,11 @@ export type AgentSnapshot = {
   latestRun?: AgentRunResult;
 };
 
+export type AgentIcsExportResult = {
+  path: string;
+  itemCount: number;
+};
+
 export type DdlItem = {
   id: string;
   title: string;

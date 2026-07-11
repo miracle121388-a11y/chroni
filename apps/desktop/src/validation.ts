@@ -1,4 +1,4 @@
-import type { ChroniInputFile, ChroniLlmSettings, ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
+import type { AgentMemory, AgentMemoryPatch, ChroniInputFile, ChroniLlmSettings, ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
 
 const MAX_TEXT_LENGTH = 2 * 1024 * 1024;
 const MAX_FILES = 32;
@@ -88,6 +88,30 @@ export function validateLlmSettings(value: unknown): ChroniLlmSettings {
   return llm as ChroniLlmSettings;
 }
 
+export function validateAgentMemoryPatch(value: unknown, current?: AgentMemory): AgentMemoryPatch {
+  const patch = record(value, "agent memory");
+  knownKeys(patch, ["maxDailyMinutes", "workdayStart", "workdayEnd", "reminderFrequency"], "agent memory");
+  const result: AgentMemoryPatch = {};
+  if (patch.maxDailyMinutes !== undefined) {
+    if (!Number.isInteger(patch.maxDailyMinutes) || (patch.maxDailyMinutes as number) < 30 || (patch.maxDailyMinutes as number) > 720) {
+      fail("agent memory.maxDailyMinutes must be an integer from 30 to 720.");
+    }
+    result.maxDailyMinutes = patch.maxDailyMinutes as number;
+  }
+  if (patch.workdayStart !== undefined) result.workdayStart = clockTime(patch.workdayStart, "agent memory.workdayStart");
+  if (patch.workdayEnd !== undefined) result.workdayEnd = clockTime(patch.workdayEnd, "agent memory.workdayEnd");
+  if (patch.reminderFrequency !== undefined) {
+    if (patch.reminderFrequency !== "important-only" && patch.reminderFrequency !== "daily" && patch.reminderFrequency !== "off") {
+      fail("agent memory.reminderFrequency is not supported.");
+    }
+    result.reminderFrequency = patch.reminderFrequency;
+  }
+  const start = result.workdayStart ?? current?.workdayStart ?? "09:00";
+  const end = result.workdayEnd ?? current?.workdayEnd ?? "18:00";
+  if (minutesOfClock(start) >= minutesOfClock(end)) fail("agent memory.workdayStart must be before workdayEnd.");
+  return result;
+}
+
 export function validateIdentifier(value: unknown, field = "id"): string {
   return nonEmptyString(value, field, 500);
 }
@@ -148,6 +172,11 @@ function clockTime(value: unknown, field: string): string {
   const result = boundedString(value, field, 5);
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(result)) fail(`${field} must use HH:MM.`);
   return result;
+}
+
+function minutesOfClock(value: string): number {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
 }
 
 function fail(message: string): never {

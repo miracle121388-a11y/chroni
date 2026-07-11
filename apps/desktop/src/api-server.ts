@@ -2,14 +2,26 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ChroniSnapshot } from "./shared/types.js";
+import type { AgentIcsExportResult, AgentMemoryPatch, AgentRunResult, ChroniSnapshot } from "./shared/types.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniStore } from "./store.js";
-import { InputValidationError, validateIdentifier, validateIntakePayload, validateItemPatch, validatePreferencesPatch } from "./validation.js";
+import { InputValidationError, validateAgentMemoryPatch, validateIdentifier, validateIntakePayload, validateItemPatch, validatePreferencesPatch } from "./validation.js";
 
 type SnapshotUpdateReason = "data" | "preferences";
 type SnapshotCallback = (snapshot: ChroniSnapshot, reason: SnapshotUpdateReason) => void;
 export const MAX_API_BODY_BYTES = 32 * 1024 * 1024;
+
+export type AgentApiOperations = {
+  run(): Promise<AgentRunResult>;
+  latest(): AgentRunResult | undefined;
+  updateMemory(patch: AgentMemoryPatch): ChroniSnapshot;
+  exportIcs(): Promise<AgentIcsExportResult>;
+};
+
+type ApiServerOptions = {
+  discoveryFilePath?: string;
+  agent?: AgentApiOperations;
+};
 
 class HttpError extends Error {
   constructor(readonly statusCode: number, message: string) {
@@ -17,13 +29,13 @@ class HttpError extends Error {
   }
 }
 
-export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCallback, options: { discoveryFilePath?: string } = {}): Server {
+export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCallback, options: ApiServerOptions = {}): Server {
   const apiToken = process.env.CHRONI_API_TOKEN?.trim() || randomBytes(24).toString("base64url");
   const allowedOrigin = process.env.CHRONI_API_ALLOWED_ORIGIN?.trim() || "";
   const server = createServer(async (request, response) => {
     try {
       applyCors(request, response, allowedOrigin);
-      await route(request, response, store, onSnapshot, apiToken, () => baseUrl);
+      await route(request, response, store, onSnapshot, apiToken, () => baseUrl, options.agent);
     } catch (error) {
       const status = error instanceof HttpError ? error.statusCode : error instanceof InputValidationError ? 400 : 500;
       sendJson(response, status, { ok: false, error: error instanceof Error ? error.message : String(error) });
@@ -49,7 +61,7 @@ export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCal
   return server;
 }
 
-async function route(request: IncomingMessage, response: ServerResponse, store: ChroniStore, onSnapshot: SnapshotCallback, apiToken: string, getBaseUrl: () => string): Promise<void> {
+async function route(request: IncomingMessage, response: ServerResponse, store: ChroniStore, onSnapshot: SnapshotCallback, apiToken: string, getBaseUrl: () => string, agent?: AgentApiOperations): Promise<void> {
   if (request.method === "OPTIONS") {
     response.writeHead(204);
     response.end();
@@ -98,6 +110,32 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   if (request.method === "GET" && pathname === "/api/snapshot") {
     sendJson(response, 200, { ok: true, snapshot: store.snapshot() });
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/agent/run") {
+    if (!agent) throw new HttpError(503, "DeadlineAgent is not available in this process.");
+    const result = await agent.run();
+    const snapshot = store.snapshot();
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, result, snapshot });
+    return;
+  }
+  if (request.method === "GET" && pathname === "/api/agent/latest") {
+    if (!agent) throw new HttpError(503, "DeadlineAgent is not available in this process.");
+    sendJson(response, 200, { ok: true, latest: agent.latest() });
+    return;
+  }
+  if (request.method === "PATCH" && pathname === "/api/agent/memory") {
+    const patch = validateAgentMemoryPatch(await readJson(request), store.snapshot().agent.memory);
+    if (!agent) throw new HttpError(503, "DeadlineAgent is not available in this process.");
+    const snapshot = agent.updateMemory(patch);
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/agent/export-ics") {
+    if (!agent) throw new HttpError(503, "DeadlineAgent is not available in this process.");
+    sendJson(response, 200, { ok: true, ...await agent.exportIcs() });
     return;
   }
   if (request.method === "POST" && pathname === "/api/extract") {
@@ -149,6 +187,10 @@ function apiEndpoints(): string[] {
   return [
     "GET /api/health",
     "GET /api/snapshot",
+    "POST /api/agent/run",
+    "GET /api/agent/latest",
+    "PATCH /api/agent/memory",
+    "POST /api/agent/export-ics",
     "POST /api/extract",
     "POST /api/intake",
     "PATCH /api/items/:id",

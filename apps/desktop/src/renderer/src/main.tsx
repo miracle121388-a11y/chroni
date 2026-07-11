@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { formatOperationError } from "../../shared/errors";
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
-import type { CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, SourceRecord } from "../../shared/types";
+import type { AgentMemory, CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, SourceRecord } from "../../shared/types";
 import "./styles.css";
 
 const api = window.chroni;
@@ -363,6 +363,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
         </div>
         <nav aria-label="控制中心">
           <button className={tab === "schedule" ? "active" : ""} aria-current={tab === "schedule" ? "page" : undefined} onClick={() => setTab("schedule")}>日程</button>
+          <button className={tab === "agent" ? "active" : ""} aria-current={tab === "agent" ? "page" : undefined} onClick={() => setTab("agent")}>Agent</button>
           <button className={tab === "preferences" ? "active" : ""} aria-current={tab === "preferences" ? "page" : undefined} onClick={() => setTab("preferences")}>偏好</button>
           <button className={tab === "services" ? "active" : ""} aria-current={tab === "services" ? "page" : undefined} onClick={() => setTab("services")}>运行状态</button>
         </nav>
@@ -373,10 +374,178 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
       </aside>
       <section className="content">
         {tab === "schedule" && <CorrectionPane snapshot={snapshot} setSnapshot={setSnapshot} />}
+        {tab === "agent" && <AgentPane snapshot={snapshot} setSnapshot={setSnapshot} />}
         {tab === "preferences" && <PreferencesPane preferences={snapshot.preferences} setSnapshot={setSnapshot} />}
         {tab === "services" && <ServicesPane snapshot={snapshot} setSnapshot={setSnapshot} />}
       </section>
     </main>
+  );
+}
+
+function AgentPane({ snapshot, setSnapshot }: ViewProps) {
+  const latest = snapshot.agent.latestRun;
+  const [memoryDraft, setMemoryDraft] = useState<AgentMemory>({ ...snapshot.agent.memory });
+  const [memoryDirty, setMemoryDirty] = useState(false);
+  const [busyAction, setBusyAction] = useState<"run" | "memory" | "export" | "">("");
+  const [feedback, setFeedback] = useState("");
+  const highRisk = latest?.priorities.filter((item) => item.riskLevel === "high" || item.riskLevel === "critical") ?? [];
+
+  useEffect(() => {
+    if (!memoryDirty) setMemoryDraft({ ...snapshot.agent.memory });
+  }, [memoryDirty, snapshot.agent.memory]);
+
+  function patchMemory(patch: Partial<AgentMemory>): void {
+    setMemoryDraft((current) => ({ ...current, ...patch }));
+    setMemoryDirty(true);
+    setFeedback("");
+  }
+
+  async function runInspection(): Promise<void> {
+    if (busyAction) return;
+    setBusyAction("run");
+    setFeedback("");
+    try {
+      const next = await api.runDeadlineAgent();
+      setSnapshot(next);
+      setFeedback("今日 Agent 巡检已完成。");
+    } catch (error) {
+      setFeedback(formatOperationError(error, "Agent 巡检失败"));
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function saveMemory(): Promise<void> {
+    if (busyAction) return;
+    setBusyAction("memory");
+    setFeedback("");
+    try {
+      const next = await api.updateAgentMemory(memoryDraft);
+      setSnapshot(next);
+      setMemoryDirty(false);
+      setFeedback("Agent Memory 已保存。");
+    } catch (error) {
+      setFeedback(formatOperationError(error, "Memory 保存失败"));
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function exportIcs(): Promise<void> {
+    if (busyAction) return;
+    setBusyAction("export");
+    setFeedback("");
+    try {
+      const result = await api.exportAgentIcs();
+      setFeedback(`已导出 ${result.itemCount} 条日程：${result.path}`);
+    } catch (error) {
+      setFeedback(formatOperationError(error, "ICS 导出失败"));
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  return (
+    <div className="pane agent-pane">
+      <header className="pane-head agent-head">
+        <div>
+          <p>Observe · Plan · Act · Verify</p>
+          <h2>今日 Agent 巡检</h2>
+        </div>
+        <button className="agent-run" type="button" disabled={!!busyAction} onClick={() => void runInspection()}>
+          {busyAction === "run" ? "巡检中..." : "运行巡检"}
+        </button>
+      </header>
+
+      {feedback && <p className={`inline-feedback ${isPositiveFeedback(feedback) ? "ok" : "warn"}`} role="status" aria-live="polite">{feedback}</p>}
+
+      <section className={`agent-status status-${latest?.verification.status ?? "idle"}`}>
+        <div>
+          <span>当前状态</span>
+          <b>{latest ? agentStatusLabel(latest.verification.status) : "尚未巡检"}</b>
+        </div>
+        <div>
+          <span>高风险</span>
+          <b>{highRisk.length}</b>
+        </div>
+        <div>
+          <span>今日安排</span>
+          <b>{latest?.plan.plannedMinutes ?? 0} 分钟</b>
+        </div>
+        <div>
+          <span>最近运行</span>
+          <b>{latest ? formatAgentTime(latest.completedAt) : "--"}</b>
+        </div>
+      </section>
+
+      {!latest ? (
+        <div className="empty agent-empty">运行巡检后，这里会显示今日优先级、工作块和 Agent Trace。</div>
+      ) : (
+        <>
+          <section className="agent-section">
+            <header className="section-head">
+              <div><h3>今日建议</h3><p>{latest.verification.summary}</p></div>
+            </header>
+            <ol className="agent-suggestions">{latest.suggestions.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ol>
+          </section>
+
+          <div className="agent-columns">
+            <section className="agent-section">
+              <header className="section-head"><div><h3>优先任务</h3><p>{highRisk.length} 条高风险</p></div></header>
+              <div className="agent-risk-list">
+                {latest.priorities.slice(0, 6).map((item) => (
+                  <article className={`agent-risk-row risk-${item.riskLevel}`} key={item.taskId}>
+                    <div><b>{item.title}</b><span>{item.reasons.join(" · ")}</span></div>
+                    <em>{agentRiskLabel(item.riskLevel)}</em>
+                  </article>
+                ))}
+                {!latest.priorities.length && <div className="empty compact-empty">没有待处理任务。</div>}
+              </div>
+            </section>
+
+            <section className="agent-section">
+              <header className="section-head"><div><h3>工作块</h3><p>{latest.plan.blocks.length} 段 · {latest.plan.plannedMinutes} 分钟</p></div></header>
+              <div className="agent-block-list">
+                {latest.plan.blocks.map((block) => (
+                  <article className="agent-block-row" key={`${block.taskId}-${block.startAt}`}>
+                    <time>{formatAgentClock(block.startAt)}–{formatAgentClock(block.endAt)}</time>
+                    <div><b>{block.title}</b><span>{block.allocatedMinutes} 分钟</span></div>
+                  </article>
+                ))}
+                {!latest.plan.blocks.length && <div className="empty compact-empty">今日没有生成工作块。</div>}
+              </div>
+            </section>
+          </div>
+
+          <section className="agent-section">
+            <header className="section-head"><div><h3>Agent Trace</h3><p>{latest.trace.length} 个审计步骤</p></div></header>
+            <div className="agent-trace">
+              {latest.trace.map((entry) => (
+                <article className={entry.success ? "" : "failed"} key={`${entry.sequence}-${entry.id}`}>
+                  <span>{entry.sequence}</span>
+                  <div><b>{agentStageLabel(entry.stage)}</b><p>{entry.summary}</p></div>
+                  <time>{formatAgentClock(entry.timestamp)}</time>
+                </article>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+
+      <details className="agent-settings advanced-settings">
+        <summary>Agent Memory 与导出</summary>
+        <div className="agent-memory-grid">
+          <label>每日容量（分钟）<input type="number" min="30" max="720" step="30" value={memoryDraft.maxDailyMinutes} onChange={(event) => patchMemory({ maxDailyMinutes: Number(event.target.value) })} /></label>
+          <label>开始时间<input type="time" value={memoryDraft.workdayStart} onChange={(event) => patchMemory({ workdayStart: event.target.value })} /></label>
+          <label>结束时间<input type="time" value={memoryDraft.workdayEnd} onChange={(event) => patchMemory({ workdayEnd: event.target.value })} /></label>
+          <label>提醒频率<select value={memoryDraft.reminderFrequency} onChange={(event) => patchMemory({ reminderFrequency: event.target.value as AgentMemory["reminderFrequency"] })}><option value="important-only">仅高风险</option><option value="daily">每日</option><option value="off">关闭</option></select></label>
+        </div>
+        <div className="agent-settings-actions">
+          <button className="secondary" type="button" disabled={!!busyAction || !memoryDirty} onClick={() => void saveMemory()}>{busyAction === "memory" ? "保存中..." : "保存 Memory"}</button>
+          <button className="secondary" type="button" disabled={!!busyAction} onClick={() => void exportIcs()}>{busyAction === "export" ? "导出中..." : "导出 ICS"}</button>
+        </div>
+      </details>
+    </div>
   );
 }
 
@@ -1201,7 +1370,27 @@ type ControlScheduleGroup = {
   items: DdlItem[];
 };
 
-type ControlTab = "schedule" | "preferences" | "services";
+type ControlTab = "schedule" | "agent" | "preferences" | "services";
+
+function agentStatusLabel(status: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["verification"]["status"]): string {
+  return status === "healthy" ? "安排正常" : status === "critical" ? "需要立即处理" : "需要关注";
+}
+
+function agentRiskLabel(level: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["priorities"][number]["riskLevel"]): string {
+  return level === "critical" ? "严重" : level === "high" ? "高" : level === "medium" ? "中" : "低";
+}
+
+function agentStageLabel(stage: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["trace"][number]["stage"]): string {
+  return stage === "observe" ? "观察" : stage === "plan" ? "规划" : stage === "act" ? "执行" : "验证";
+}
+
+function formatAgentClock(value: string): string {
+  return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+}
+
+function formatAgentTime(value: string): string {
+  return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+}
 
 const companionStyleOptions: { value: CompanionStyle; label: string }[] = [
   { value: "classic", label: "经典" },

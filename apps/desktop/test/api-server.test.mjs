@@ -245,3 +245,68 @@ test("api publishes and removes discovery data for its actual port", async () =>
     assert.equal(existsSync(discoveryFilePath), false);
   });
 });
+
+test("authenticated Agent API runs inspections and updates memory", async () => {
+  await withStore(async (store) => {
+    const run = {
+      id: "api-agent-run",
+      startedAt: "2026-07-11T09:00:00.000Z",
+      completedAt: "2026-07-11T09:00:01.000Z",
+      observation: { observedAt: "2026-07-11T09:00:00.000Z", totalCount: 0, incompleteCount: 0, activeCount: 0, snoozedCount: 0, overdueCount: 0, activeTasks: [] },
+      priorities: [],
+      plan: { blocks: [], plannedMinutes: 0, overflowMinutes: 0, unplannedTaskIds: [] },
+      actions: [],
+      verification: { status: "healthy", unresolvedHighRiskTaskIds: [], unplannedPriorityTaskIds: [], capacityOverflowMinutes: 0, summary: "healthy" },
+      suggestions: ["No pending work"],
+      trace: [],
+    };
+    let latest;
+    let memoryPatch;
+    const agent = {
+      async run() { latest = run; return run; },
+      latest: () => latest,
+      updateMemory(patch) { memoryPatch = patch; return store.updateAgentMemory(patch); },
+      async exportIcs() { return { path: "C:\\Chroni\\exports\\deadlines.ics", itemCount: 0 }; },
+    };
+    const server = await listenWithRandomPort(store, () => {}, { agent });
+    try {
+      const token = await getApiToken(server);
+      const headers = { authorization: `Bearer ${token}` };
+      const runResponse = await apiRequest(server, "POST", "/api/agent/run", {}, headers);
+      const latestResponse = await apiRequest(server, "GET", "/api/agent/latest", undefined, headers);
+      const memoryResponse = await apiRequest(server, "PATCH", "/api/agent/memory", {
+        maxDailyMinutes: 180,
+        workdayStart: "10:00",
+        workdayEnd: "17:00",
+        reminderFrequency: "daily",
+      }, headers);
+      const exportResponse = await apiRequest(server, "POST", "/api/agent/export-ics", {}, headers);
+
+      assert.equal(runResponse.status, 200);
+      assert.equal(runResponse.body.result.id, "api-agent-run");
+      assert.equal(latestResponse.body.latest.id, "api-agent-run");
+      assert.equal(memoryResponse.body.snapshot.agent.memory.maxDailyMinutes, 180);
+      assert.equal(memoryPatch.reminderFrequency, "daily");
+      assert.equal(exportResponse.body.itemCount, 0);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
+test("Agent API validates memory and reports unavailable operations", async () => {
+  await withStore(async (store) => {
+    const server = await listenWithRandomPort(store);
+    try {
+      const token = await getApiToken(server);
+      const headers = { authorization: `Bearer ${token}` };
+      const invalid = await apiRequest(server, "PATCH", "/api/agent/memory", { maxDailyMinutes: 5 }, headers);
+      const unavailable = await apiRequest(server, "POST", "/api/agent/run", {}, headers);
+
+      assert.equal(invalid.status, 400);
+      assert.equal(unavailable.status, 503);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});

@@ -1,16 +1,21 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Notification, safeStorage, shell } from "electron";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { startChroniApiServer } from "./api-server.js";
+import { DeadlineAgent } from "./agent/deadline-agent.js";
+import { createAgentTools, type DeadlineAgentTools } from "./agent/agent-tools.js";
+import { startChroniApiServer, type AgentApiOperations } from "./api-server.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import { testLlmConnection } from "./llm-client.js";
 import { shouldRemindItem } from "./shared/schedule.js";
-import type { ChroniLlmSettings, ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
+import type { AgentMemoryPatch, AgentRunResult, ChroniLlmSettings, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
-import { validateBoolean, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferencesPatch, validateSourceText } from "./validation.js";
+import { validateAgentMemoryPatch, validateBoolean, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferencesPatch, validateSourceText } from "./validation.js";
 
 let store: ChroniStore;
 let apiServer: ReturnType<typeof startChroniApiServer> | undefined;
+let deadlineAgent: DeadlineAgent;
+let agentTools: DeadlineAgentTools;
 
 app.setName("Chroni");
 const gotLock = app.requestSingleInstanceLock();
@@ -23,6 +28,7 @@ if (!gotLock) {
   app.whenReady().then(() => {
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");
     store = new ChroniStore(app.getPath("userData"), createSecretCodec());
+    installDeadlineAgent();
     installIpc();
     createAppWindows({
       petPlacement: store.petPlacement(),
@@ -38,7 +44,10 @@ if (!gotLock) {
       }
       broadcast("chroni:snapshot-updated", snapshot);
       refreshScheduleAfterUpdate();
-    }, { discoveryFilePath: join(app.getPath("userData"), "chroni-api.json") });
+    }, {
+      discoveryFilePath: join(app.getPath("userData"), "chroni-api.json"),
+      agent: agentApiOperations(),
+    });
     refreshCompanionFromSchedule();
     refreshReminders();
     console.log("Chroni desktop shell ready.");
@@ -105,6 +114,19 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:llm-test", (_event, settings: ChroniLlmSettings) => testLlmConnection(validateLlmSettings(settings)));
+  ipcMain.handle("chroni:agent-run", async () => {
+    await runDeadlineAgentAndPublish();
+    return store.snapshot();
+  });
+  ipcMain.handle("chroni:agent-memory-update", (_event, patch: AgentMemoryPatch) => {
+    const snapshot = store.updateAgentMemory(validateAgentMemoryPatch(patch, store.snapshot().agent.memory));
+    broadcast("chroni:snapshot-updated", snapshot);
+    return snapshot;
+  });
+  ipcMain.handle("chroni:agent-export-ics", async () => {
+    if (!agentTools.exportIcs) throw new Error("Agent ICS export is unavailable.");
+    return agentTools.exportIcs();
+  });
   ipcMain.handle("chroni:quick-add", async (_event, text: string) => {
     const payload = validateIntakePayload({ kind: "text", text });
     broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
@@ -130,6 +152,61 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:open-storage", () => shell.showItemInFolder(store.filePath));
+}
+
+function installDeadlineAgent(): void {
+  agentTools = createAgentTools({
+    readTasks: () => store.snapshot().items,
+    intakeText: (text) => processIntake({ kind: "text", text }, store),
+    writeIcs: (content, fileName) => {
+      const directory = join(app.getPath("userData"), "exports");
+      mkdirSync(directory, { recursive: true });
+      const path = join(directory, fileName);
+      writeFileSync(path, content, "utf8");
+      return path;
+    },
+    sendReminder: async (task) => {
+      const preferences = store.snapshot().preferences;
+      if (!preferences.remindersEnabled || !Notification.isSupported()) return;
+      new Notification({
+        title: "Chroni Agent：高风险 DDL",
+        body: `${task.title} · ${task.reasons[0] ?? "需要优先处理"}`,
+      }).show();
+    },
+  });
+  deadlineAgent = new DeadlineAgent({
+    tools: agentTools,
+    getMemory: () => store.snapshot().agent.memory,
+    saveRun: (result) => { store.saveAgentRun(result); },
+  });
+}
+
+async function runDeadlineAgentAndPublish(): Promise<AgentRunResult> {
+  const result = await deadlineAgent.run();
+  const highRiskCount = result.priorities.filter((item) => item.riskLevel === "high" || item.riskLevel === "critical").length;
+  const bubble = highRiskCount
+    ? `Agent 巡检完成：${highRiskCount} 个高风险 DDL。`
+    : "Agent 巡检完成，今日安排正常。";
+  const snapshot = store.setCompanion(highRiskCount ? "deadline_near" : "success", bubble);
+  broadcast("chroni:snapshot-updated", snapshot);
+  refreshScheduleAfterUpdate();
+  return result;
+}
+
+function agentApiOperations(): AgentApiOperations {
+  return {
+    run: runDeadlineAgentAndPublish,
+    latest: () => store.snapshot().agent.latestRun,
+    updateMemory: (patch) => {
+      const snapshot = store.updateAgentMemory(patch);
+      broadcast("chroni:snapshot-updated", snapshot);
+      return snapshot;
+    },
+    exportIcs: async () => {
+      if (!agentTools.exportIcs) throw new Error("Agent ICS export is unavailable.");
+      return agentTools.exportIcs();
+    },
+  };
 }
 
 function refreshCompanionFromSchedule(): void {
