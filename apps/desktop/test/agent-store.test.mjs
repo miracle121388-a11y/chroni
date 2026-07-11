@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -39,6 +39,25 @@ test("store persists Agent memory and latest run with bounded trace history", ()
     assert.equal(reloaded.snapshot().agent.latestRun?.id, "run-11");
     assert.equal(reloaded.agentTraceHistory().length, 10);
     assert.equal(reloaded.agentTraceHistory()[0][0].data.index, 11);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("store accepts UTF-8 BOM state files created by Windows tools", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-bom-store-"));
+  try {
+    const timestamp = "2026-07-11T09:00:00.000Z";
+    const state = JSON.stringify({
+      items: [{ id: "bom-task", title: "BOM task", dueAt: timestamp, importance: "high", sourceSummary: "test", createdAt: timestamp, updatedAt: timestamp, completed: false }],
+      sources: [],
+      companion: { state: "idle", bubble: "ready" },
+    });
+    writeFileSync(join(dir, "chroni-state.json"), `\uFEFF${state}`, "utf8");
+
+    const store = new ChroniStore(dir);
+
+    assert.equal(store.snapshot().items[0]?.id, "bom-task");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -279,7 +279,8 @@ export class ChroniStore {
   #load(): StoredState {
     if (!existsSync(this.filePath)) return createDefaultState();
     try {
-      const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<StoredState> & {
+      const raw = readFileSync(this.filePath, "utf8").replace(/^\uFEFF/, "");
+      const parsed = JSON.parse(raw) as Partial<StoredState> & {
         preferences?: Partial<ChroniPreferences> & { llm?: PersistedLlmSettings };
       };
       const fallback = createDefaultState();
