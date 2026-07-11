@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
-import type { CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, ServiceStatus, SourceExtractionStatus, SourceRecord } from "./shared/types.js";
+import type { CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, PetPlacement, ServiceStatus, SourceExtractionStatus, SourceRecord } from "./shared/types.js";
 
 export type SecretCodec = {
   encrypt(value: string): string;
@@ -20,6 +20,7 @@ type StoredState = {
     state: CompanionState;
     bubble: string;
   };
+  petPlacement?: PetPlacement;
 };
 
 export class ChroniStore {
@@ -47,6 +48,15 @@ export class ChroniStore {
     this.#state.companion = { state, bubble };
     this.#save();
     return this.snapshot();
+  }
+
+  petPlacement(): PetPlacement | undefined {
+    return this.#state.petPlacement ? { ...this.#state.petPlacement } : undefined;
+  }
+
+  updatePetPlacement(placement: PetPlacement): void {
+    this.#state.petPlacement = { ...placement };
+    this.#save();
   }
 
   addItems(items: DdlItem[], message = "已加入日程。", extracted: ExtractedInput[] = []): ChroniSnapshot {
@@ -265,6 +275,7 @@ export class ChroniStore {
           llm: { ...defaultPreferences.llm, ...llmSettings, apiKey },
         },
         companion: parsed.companion?.state ? parsed.companion as StoredState["companion"] : fallback.companion,
+        petPlacement: isPetPlacement(parsed.petPlacement) ? { ...parsed.petPlacement } : undefined,
       };
     } catch {
       return createDefaultState();
@@ -318,6 +329,14 @@ function createDefaultState(): StoredState {
       bubble: "把 DDL 文件、截图或文字拖给我。",
     },
   };
+}
+
+function isPetPlacement(value: unknown): value is PetPlacement {
+  if (!value || typeof value !== "object") return false;
+  const placement = value as Partial<PetPlacement>;
+  return Number.isFinite(placement.displayId)
+    && Number.isFinite(placement.xRatio)
+    && Number.isFinite(placement.yRatio);
 }
 
 export function sourceRecordFromInput(input: ExtractedInput, status: SourceExtractionStatus = "success", lastError?: string): SourceRecord {

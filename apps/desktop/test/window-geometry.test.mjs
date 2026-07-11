@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   draggedWindowPosition,
   interpolatedPosition,
+  normalizedWindowPlacement,
+  restoredWindowPosition,
   snappedWindowPosition,
   windowsDrawerPosition,
 } from "../dist/window-geometry.js";
@@ -42,4 +44,23 @@ test("snappedWindowPosition snaps nearby edges and clamps windows inside the wor
   assert.deepEqual(snappedWindowPosition({ ...size, x: -1900, y: 95 }, area, 36), { x: -1920, y: 80 });
   assert.deepEqual(snappedWindowPosition({ ...size, x: -210, y: 885 }, area, 36), { x: -180, y: 910 });
   assert.deepEqual(snappedWindowPosition({ ...size, x: -2500, y: 1300 }, area, 36), { x: -1920, y: 910 });
+});
+
+test("normalizedWindowPlacement records a display-relative movable position", () => {
+  const area = { x: -1920, y: 80, width: 1920, height: 1040 };
+  const bounds = { x: -1050, y: 495, width: 180, height: 210 };
+
+  assert.deepEqual(normalizedWindowPlacement(bounds, area, 42), {
+    displayId: 42,
+    xRatio: 0.5,
+    yRatio: 0.5,
+  });
+});
+
+test("restoredWindowPosition adapts normalized placement and clamps invalid ratios", () => {
+  const area = { x: 200, y: 40, width: 1600, height: 900 };
+  const size = { width: 180, height: 210 };
+
+  assert.deepEqual(restoredWindowPosition({ displayId: 7, xRatio: 0.5, yRatio: 0.5 }, area, size), { x: 910, y: 385 });
+  assert.deepEqual(restoredWindowPosition({ displayId: 7, xRatio: 4, yRatio: -2 }, area, size), { x: 1620, y: 40 });
 });

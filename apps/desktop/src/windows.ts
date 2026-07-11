@@ -1,7 +1,7 @@
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type NativeImage } from "electron";
 import { join } from "node:path";
-import type { ChroniPreferences, ChroniView } from "./shared/types.js";
-import { draggedWindowPosition, interpolatedPosition, snappedWindowPosition, windowsDrawerPosition, type WindowPosition } from "./window-geometry.js";
+import type { ChroniPreferences, ChroniView, PetPlacement } from "./shared/types.js";
+import { draggedWindowPosition, interpolatedPosition, normalizedWindowPlacement, restoredWindowPosition, snappedWindowPosition, windowsDrawerPosition, type WindowPosition } from "./window-geometry.js";
 
 type WindowSet = {
   pet?: BrowserWindow;
@@ -15,12 +15,16 @@ let scheduleExpanded = false;
 let macScheduleHideTimer: NodeJS.Timeout | undefined;
 const windowDragSessions = new Map<number, { startWindow: WindowPosition; startCursor: WindowPosition }>();
 let scheduleAnimationGeneration = 0;
+let lastPetPlacement: PetPlacement | undefined;
+let onPetPlacementChanged: ((placement: PetPlacement) => void) | undefined;
 
 const windowsDrawerWidth = 384;
 const macPopoverWidth = 348;
 const macPopoverHeight = 418;
 
-export function createAppWindows(): void {
+export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPlacementChanged?: (placement: PetPlacement) => void } = {}): void {
+  lastPetPlacement = options.petPlacement;
+  onPetPlacementChanged = options.onPetPlacementChanged;
   windows.pet = createViewWindow("pet", {
     width: 180,
     height: 210,
@@ -31,11 +35,12 @@ export function createAppWindows(): void {
     skipTaskbar: true,
     alwaysOnTop: true,
   });
-  const display = screen.getPrimaryDisplay().workArea;
-  windows.pet.setPosition(display.x + display.width - 220, display.y + display.height - 280);
+  restorePetPosition();
   windows.pet.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   const petWebContentsId = windows.pet.webContents.id;
   windows.pet.webContents.once("destroyed", () => windowDragSessions.delete(petWebContentsId));
+  screen.on("display-removed", repositionPetForDisplays);
+  screen.on("display-metrics-changed", repositionPetForDisplays);
 
   windows.schedule = createViewWindow("schedule", scheduleWindowOptions());
   positionScheduleWindow(false);
@@ -77,7 +82,10 @@ export function createAppWindows(): void {
     if (!windowDragSessions.has(event.sender.id)) return;
     windowDragSessions.delete(event.sender.id);
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (win) snapWindowToEdge(win);
+    if (win) {
+      snapWindowToEdge(win);
+      persistPetPlacement(win);
+    }
   });
 }
 
@@ -275,6 +283,36 @@ function snapWindowToEdge(win: BrowserWindow): void {
   const display = screen.getDisplayMatching(bounds).workArea;
   const position = snappedWindowPosition(bounds, display, 36);
   win.setPosition(Math.round(position.x), Math.round(position.y));
+}
+
+function restorePetPosition(): void {
+  const win = windows.pet;
+  if (!win) return;
+  if (!lastPetPlacement) {
+    const area = screen.getPrimaryDisplay().workArea;
+    win.setPosition(area.x + area.width - 220, area.y + area.height - 280);
+    persistPetPlacement(win);
+    return;
+  }
+  const display = screen.getAllDisplays().find((candidate) => candidate.id === lastPetPlacement?.displayId)
+    ?? screen.getPrimaryDisplay();
+  const bounds = win.getBounds();
+  const position = restoredWindowPosition(lastPetPlacement, display.workArea, bounds);
+  win.setPosition(position.x, position.y);
+  persistPetPlacement(win);
+}
+
+function repositionPetForDisplays(): void {
+  if (!windows.pet || windows.pet.isDestroyed()) return;
+  restorePetPosition();
+  positionScheduleWindow(scheduleExpanded);
+}
+
+function persistPetPlacement(win: BrowserWindow): void {
+  const bounds = win.getBounds();
+  const display = screen.getDisplayMatching(bounds);
+  lastPetPlacement = normalizedWindowPlacement(bounds, display.workArea, display.id);
+  onPetPlacementChanged?.(lastPetPlacement);
 }
 
 function createTrayIcon(): NativeImage {

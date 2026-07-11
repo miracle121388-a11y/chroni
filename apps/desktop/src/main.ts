@@ -20,7 +20,10 @@ if (!gotLock) {
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");
     store = new ChroniStore(app.getPath("userData"), createSecretCodec());
     installIpc();
-    createAppWindows();
+    createAppWindows({
+      petPlacement: store.petPlacement(),
+      onPetPlacementChanged: (placement) => store.updatePetPlacement(placement),
+    });
     createTray();
     applyPreferences(store.snapshot().preferences);
     registerHotkey();

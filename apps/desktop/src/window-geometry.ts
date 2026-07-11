@@ -10,6 +10,12 @@ export type WindowSize = {
 
 export type WindowBounds = WindowPosition & WindowSize;
 
+export type NormalizedWindowPlacement = {
+  displayId: number;
+  xRatio: number;
+  yRatio: number;
+};
+
 const windowsDrawerHandleWidth = 34;
 const windowsDrawerMargin = 8;
 
@@ -44,6 +50,29 @@ export function snappedWindowPosition(bounds: WindowBounds, area: WindowBounds, 
   return {
     x: clamp(x, area.x, Math.max(area.x, area.x + area.width - bounds.width)),
     y: clamp(y, area.y, Math.max(area.y, area.y + area.height - bounds.height)),
+  };
+}
+
+export function normalizedWindowPlacement(bounds: WindowBounds, area: WindowBounds, displayId: number): NormalizedWindowPlacement {
+  const movableWidth = Math.max(0, area.width - bounds.width);
+  const movableHeight = Math.max(0, area.height - bounds.height);
+  return {
+    displayId,
+    xRatio: movableWidth ? clamp((bounds.x - area.x) / movableWidth, 0, 1) : 0,
+    yRatio: movableHeight ? clamp((bounds.y - area.y) / movableHeight, 0, 1) : 0,
+  };
+}
+
+export function restoredWindowPosition(
+  placement: NormalizedWindowPlacement,
+  area: WindowBounds,
+  size: WindowSize,
+): WindowPosition {
+  const movableWidth = Math.max(0, area.width - size.width);
+  const movableHeight = Math.max(0, area.height - size.height);
+  return {
+    x: Math.round(area.x + movableWidth * clamp(placement.xRatio, 0, 1)),
+    y: Math.round(area.y + movableHeight * clamp(placement.yRatio, 0, 1)),
   };
 }
 

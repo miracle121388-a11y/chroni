@@ -436,6 +436,22 @@ test("LLM keys are encrypted at rest and reload through the secret codec", () =>
   }
 });
 
+test("pet placement persists privately without changing the public snapshot", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-placement-test-"));
+  try {
+    const store = new ChroniStore(dir);
+    const placement = { displayId: 9, xRatio: 0.25, yRatio: 0.75 };
+
+    store.updatePetPlacement(placement);
+
+    assert.deepEqual(store.petPlacement(), placement);
+    assert.equal("petPlacement" in store.snapshot(), false);
+    assert.deepEqual(new ChroniStore(dir).petPlacement(), placement);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("enabled model failures are reported when local rules provide a fallback", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => { throw new Error("connection refused"); };

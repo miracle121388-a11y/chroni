@@ -20,6 +20,12 @@ export type SourceExtractionStatus = "success" | "failed" | "duplicate";
 
 export type CompanionStyle = "classic" | "mint" | "sunrise";
 
+export type PetPlacement = {
+  displayId: number;
+  xRatio: number;
+  yRatio: number;
+};
+
 export type DdlItem = {
   id: string;
   title: string;
