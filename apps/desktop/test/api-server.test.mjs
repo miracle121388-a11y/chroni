@@ -6,6 +6,8 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { startChroniApiServer } from "../dist/api-server.js";
+import { analyzeCompleteness } from "../dist/agent/clarification-agent.js";
+import { createRuleTaskPlan } from "../dist/agent/task-plan-agent.js";
 import { ChroniStore } from "../dist/store.js";
 
 async function withStore(fn) {
@@ -140,6 +142,7 @@ test("api health issues a session token and protected routes require it", async 
 test("api responses never expose the configured LLM key", async () => {
   await withStore(async (store) => {
     store.updatePreferences({ llm: { apiKey: "sk-chroni-secret" } });
+    store.recordSourceFailure([{ sourceName: "private.txt", sourceType: "txt", text: "private source body" }], "test");
     const server = await listenWithRandomPort(store);
     try {
       const health = await apiRequest(server, "GET", "/api/health");
@@ -148,7 +151,10 @@ test("api responses never expose the configured LLM key", async () => {
       });
 
       assert.equal(result.body.snapshot.preferences.llm.apiKey, "");
+      assert.equal(result.body.snapshot.sources[0].text, "");
+      assert.deepEqual(result.body.snapshot.agent.recentPlanningFeedback, []);
       assert.equal(JSON.stringify(result.body).includes("sk-chroni-secret"), false);
+      assert.equal(JSON.stringify(result.body).includes("private source body"), false);
     } finally {
       await closeServer(server);
     }
@@ -310,3 +316,63 @@ test("Agent API validates memory and reports unavailable operations", async () =
     }
   });
 });
+
+test("clarification and task plan APIs are authenticated, validated, and resumable", async () => {
+  await withStore(async (store) => {
+    const analysis = analyzeCompleteness({ sourceName: "直接文本", sourceType: "text", text: "下周完成机器学习作业。" }, new Date("2026-07-12T10:00:00+08:00"));
+    store.saveIntakeDraft(analysis.draft, analysis.clarifications, { sourceName: "直接文本", sourceType: "text", text: "下周完成机器学习作业。" });
+    const agent = agentOperationsForStore(store);
+    const server = await listenWithRandomPort(store, () => {}, { agent });
+    try {
+      const unauthorized = await apiRequest(server, "GET", "/api/agent/clarifications");
+      assert.equal(unauthorized.status, 401);
+      const token = await getApiToken(server);
+      const headers = { authorization: `Bearer ${token}` };
+      const pending = await apiRequest(server, "GET", "/api/agent/clarifications", undefined, headers);
+      const id = pending.body.clarifications[0].id;
+      const invalid = await apiRequest(server, "POST", `/api/agent/clarifications/${encodeURIComponent(id)}/answer`, { optionId: "next-friday", confidence: 1 }, headers);
+      assert.equal(invalid.status, 400);
+
+      const answered = await apiRequest(server, "POST", `/api/agent/clarifications/${encodeURIComponent(id)}/answer`, { optionId: "next-friday" }, headers);
+      assert.equal(answered.status, 200);
+      assert.equal(answered.body.snapshot.items.length, 1);
+      const taskId = answered.body.createdTaskId;
+      const plan = await apiRequest(server, "GET", `/api/items/${encodeURIComponent(taskId)}/plan`, undefined, headers);
+      assert.equal(plan.status, 200);
+      assert.equal(plan.body.plan.status, "draft");
+      assert.equal(plan.body.plan.steps.length >= 3, true);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
+function agentOperationsForStore(store) {
+  return {
+    async run() { throw new Error("not used"); },
+    latest() { return undefined; },
+    updateMemory(patch) { return store.updateAgentMemory(patch); },
+    async exportIcs() { return { path: "test.ics", itemCount: 0 }; },
+    async answerClarification(id, payload) {
+      const result = store.answerClarification(id, payload);
+      if (result.createdTaskId && !store.taskPlanByTaskId(result.createdTaskId)) {
+        const task = store.snapshot().items.find((item) => item.id === result.createdTaskId);
+        store.saveGeneratedTaskPlan(createRuleTaskPlan(task));
+      }
+      return { ...result, snapshot: store.snapshot() };
+    },
+    dismissClarification(id) { return store.dismissClarification(id); },
+    cancelIntakeDraft(id) { return store.cancelIntakeDraft(id); },
+    async generateTaskPlan(taskId) {
+      const task = store.snapshot().items.find((item) => item.id === taskId);
+      return store.saveGeneratedTaskPlan(createRuleTaskPlan(task));
+    },
+    activateTaskPlan(taskId, planId) { return store.activateTaskPlan(taskId, planId); },
+    updateTaskPlan(taskId, payload) { return store.updateTaskPlan(taskId, payload); },
+    updateBehaviorMemory(patch) { return store.updateBehaviorMemory(patch); },
+    upsertPlanningPreference(input) { return store.upsertExplicitPlanningPreference(input); },
+    setPlanningPreferenceStatus(id, status) { return store.setPlanningPreferenceStatus(id, status); },
+    deletePlanningPreference(id) { return store.deletePlanningPreference(id); },
+    clearBehaviorMemory() { return store.clearBehaviorMemory(); },
+  };
+}

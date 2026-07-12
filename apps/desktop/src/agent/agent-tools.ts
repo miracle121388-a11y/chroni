@@ -1,4 +1,4 @@
-import type { AgentIcsExportResult, AgentMemory, AgentObservation, AgentPlan, AgentTaskAssessment, DdlItem, IntakeResult } from "../shared/types.js";
+import type { AgentIcsExportResult, AgentMemory, AgentObservation, AgentPlan, AgentTaskAssessment, DdlItem, IntakeResult, TaskPlan } from "../shared/types.js";
 
 export type DeadlineAgentTools = {
   readTasks(): Promise<DdlItem[]>;
@@ -13,6 +13,7 @@ export type DeadlineAgentTools = {
 
 export type AgentToolDependencies = {
   readTasks(): DdlItem[];
+  readTaskPlans?(): TaskPlan[];
   intakeText(text: string): Promise<IntakeResult>;
   writeIcs(content: string, fileName: string): string | Promise<string>;
   sendReminder(task: AgentTaskAssessment): Promise<AgentReminderResult | void>;
@@ -24,7 +25,7 @@ export function createAgentTools(dependencies: AgentToolDependencies): DeadlineA
   const now = dependencies.now ?? (() => new Date());
   return {
     readTasks: async () => dependencies.readTasks().map((item) => ({ ...item })),
-    assessRisks: assessTaskRisks,
+    assessRisks: (tasks, current) => assessmentsWithTaskPlans(assessTaskRisks(tasks, current), dependencies.readTaskPlans?.() ?? []),
     plan: planWorkBlocks,
     replan: replanWorkBlocks,
     sendReminder: dependencies.sendReminder,
@@ -84,7 +85,8 @@ export function planWorkBlocks(assessments: AgentTaskAssessment[], memory: Agent
     const end = new Date(cursor.getTime() + allocatedMinutes * 60_000);
     blocks.push({
       taskId: assessment.taskId,
-      title: assessment.title,
+      stepId: assessment.nextStepId,
+      title: assessment.nextStepTitle ? `${assessment.title} · ${assessment.nextStepTitle}` : assessment.title,
       startAt: cursor.toISOString(),
       endAt: end.toISOString(),
       allocatedMinutes,
@@ -134,7 +136,7 @@ export function replanWorkBlocks(assessments: AgentTaskAssessment[], memory: Age
     const allocatedMinutes = allocations.get(item.taskId) ?? 0;
     if (allocatedMinutes <= 0) continue;
     const end = new Date(blockCursor.getTime() + allocatedMinutes * 60_000);
-    blocks.push({ taskId: item.taskId, title: item.title, startAt: blockCursor.toISOString(), endAt: end.toISOString(), allocatedMinutes });
+    blocks.push({ taskId: item.taskId, stepId: item.nextStepId, title: item.nextStepTitle ? `${item.title} · ${item.nextStepTitle}` : item.title, startAt: blockCursor.toISOString(), endAt: end.toISOString(), allocatedMinutes });
     blockCursor = end;
   }
   const requestedMinutes = assessments.reduce((sum, item) => sum + item.estimatedMinutes, 0);
@@ -225,6 +227,21 @@ function remainingEffort(item: DdlItem): number {
   const estimate = item.estimatedMinutes ?? (item.importance === "high" ? 90 : item.importance === "medium" ? 60 : 30);
   const progress = item.progressPercent ?? 0;
   return Math.max(0, Math.ceil(estimate * (100 - progress) / 100));
+}
+
+function assessmentsWithTaskPlans(assessments: AgentTaskAssessment[], plans: TaskPlan[]): AgentTaskAssessment[] {
+  return assessments.map((assessment) => {
+    const plan = plans.find((candidate) => candidate.taskId === assessment.taskId && candidate.status === "active");
+    if (!plan) return assessment;
+    const incomplete = plan.steps.filter((step) => step.status !== "completed" && step.status !== "skipped").sort((left, right) => left.order - right.order);
+    const next = incomplete[0];
+    return {
+      ...assessment,
+      estimatedMinutes: incomplete.reduce((sum, step) => sum + step.estimatedMinutes, 0),
+      nextStepId: next?.id,
+      nextStepTitle: next?.title,
+    };
+  });
 }
 
 function atLocalClock(date: Date, value: string): Date {

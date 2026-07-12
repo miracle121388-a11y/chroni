@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AgentIcsExportResult, AgentMemoryPatch, ChroniLlmSettings, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult } from "../../shared/types";
+import type { AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
 
 declare global {
   interface Window {
@@ -18,6 +18,17 @@ declare global {
       runDeadlineAgent(): Promise<ChroniSnapshot>;
       updateAgentMemory(patch: AgentMemoryPatch): Promise<ChroniSnapshot>;
       exportAgentIcs(): Promise<AgentIcsExportResult>;
+      answerClarification(id: string, payload: ClarificationAnswerPayload): Promise<ClarificationResult>;
+      dismissClarification(id: string): Promise<ChroniSnapshot>;
+      cancelIntakeDraft(id: string): Promise<ChroniSnapshot>;
+      generateTaskPlan(taskId: string, regenerate?: boolean): Promise<TaskPlanResult>;
+      activateTaskPlan(taskId: string, planId: string): Promise<TaskPlanResult>;
+      updateTaskPlan(taskId: string, payload: TaskPlanUpdatePayload): Promise<TaskPlanResult>;
+      updateBehaviorMemory(patch: BehaviorMemoryPatch): Promise<ChroniSnapshot>;
+      upsertPlanningPreference(input: ExplicitPreferenceInput): Promise<ChroniSnapshot>;
+      setPlanningPreferenceStatus(id: string, status: "active" | "disabled"): Promise<ChroniSnapshot>;
+      deletePlanningPreference(id: string): Promise<ChroniSnapshot>;
+      clearBehaviorMemory(): Promise<ChroniSnapshot>;
       quickAdd(text: string): Promise<IntakeResult>;
       openControlCenter(): Promise<void>;
       openPetMenu(): Promise<void>;

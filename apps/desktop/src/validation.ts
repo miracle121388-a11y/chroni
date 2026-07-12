@@ -1,4 +1,4 @@
-import type { AgentMemory, AgentMemoryPatch, ChroniInputFile, ChroniLlmSettings, ChroniPreferencesPatch, IntakePayload, ItemPatch } from "./shared/types.js";
+import type { AgentMemory, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniInputFile, ChroniLlmSettings, ExplicitPreferenceInput, ChroniPreferencesPatch, IntakePayload, ItemPatch, PlanningPreferenceKey, TaskPlanStep, TaskPlanUpdatePayload } from "./shared/types.js";
 
 const MAX_TEXT_LENGTH = 2 * 1024 * 1024;
 const MAX_FILES = 32;
@@ -122,6 +122,91 @@ export function validateAgentMemoryPatch(value: unknown, current?: AgentMemory):
   return result;
 }
 
+export function validateClarificationAnswer(value: unknown): ClarificationAnswerPayload {
+  const payload = record(value, "clarification answer");
+  knownKeys(payload, ["optionId", "value"], "clarification answer");
+  if (payload.optionId === undefined && payload.value === undefined) fail("clarification answer must include optionId or value.");
+  const result: ClarificationAnswerPayload = {};
+  if (payload.optionId !== undefined) result.optionId = nonEmptyString(payload.optionId, "clarification answer.optionId", 200);
+  if (payload.value !== undefined) {
+    if (typeof payload.value === "string") result.value = boundedString(payload.value, "clarification answer.value", 500);
+    else if (typeof payload.value === "number" && Number.isFinite(payload.value)) result.value = payload.value;
+    else if (Array.isArray(payload.value) && payload.value.length <= 12 && payload.value.every((item) => typeof item === "string" && item.length <= 200)) result.value = [...payload.value];
+    else fail("clarification answer.value is invalid.");
+  }
+  return result;
+}
+
+export function validateTaskPlanUpdate(value: unknown): TaskPlanUpdatePayload {
+  const payload = record(value, "task plan update");
+  knownKeys(payload, ["baseVersion", "goal", "deliverables", "constraints", "steps", "bufferMinutes", "summary", "uncertainties"], "task plan update");
+  if (!Number.isInteger(payload.baseVersion) || (payload.baseVersion as number) < 1) fail("task plan update.baseVersion must be a positive integer.");
+  if (!Array.isArray(payload.steps) || payload.steps.length < 1 || payload.steps.length > 12) fail("task plan update.steps must contain 1 to 12 steps.");
+  const steps = payload.steps.map((step, index) => validateTaskPlanStep(step, index));
+  const ids = new Set(steps.map((step) => step.id));
+  if (ids.size !== steps.length) fail("task plan step ids must be unique.");
+  if (steps.some((step) => step.dependsOn.some((id) => !ids.has(id) || id === step.id))) fail("task plan step dependency is invalid.");
+  if (!Number.isInteger(payload.bufferMinutes) || (payload.bufferMinutes as number) < 0 || (payload.bufferMinutes as number) > 1_440) fail("task plan update.bufferMinutes must be from 0 to 1440.");
+  return {
+    baseVersion: payload.baseVersion as number,
+    goal: nonEmptyString(payload.goal, "task plan update.goal", 200),
+    deliverables: stringArray(payload.deliverables, "task plan update.deliverables", 12, 200),
+    constraints: stringArray(payload.constraints, "task plan update.constraints", 12, 300),
+    steps,
+    bufferMinutes: payload.bufferMinutes as number,
+    summary: boundedString(payload.summary, "task plan update.summary", 500),
+    uncertainties: stringArray(payload.uncertainties, "task plan update.uncertainties", 12, 300),
+  };
+}
+
+export function validateBehaviorMemoryPatch(value: unknown): BehaviorMemoryPatch {
+  const patch = record(value, "behavior memory patch");
+  knownKeys(patch, ["learningEnabled", "autoApplyEnabled"], "behavior memory patch");
+  if (!Object.keys(patch).length) fail("behavior memory patch must contain at least one field.");
+  const result: BehaviorMemoryPatch = {};
+  if (patch.learningEnabled !== undefined) result.learningEnabled = booleanValue(patch.learningEnabled, "behavior memory patch.learningEnabled");
+  if (patch.autoApplyEnabled !== undefined) result.autoApplyEnabled = booleanValue(patch.autoApplyEnabled, "behavior memory patch.autoApplyEnabled");
+  return result;
+}
+
+export function validateExplicitPreference(value: unknown): ExplicitPreferenceInput {
+  const payload = record(value, "explicit preference");
+  knownKeys(payload, ["key", "value", "scope"], "explicit preference");
+  const key = planningPreferenceKey(payload.key);
+  const scopeValue = payload.scope === undefined ? {} : record(payload.scope, "explicit preference.scope");
+  knownKeys(scopeValue, ["taskType", "importance", "dueWindowBucket"], "explicit preference.scope");
+  const scope: ExplicitPreferenceInput["scope"] = {};
+  if (scopeValue.taskType !== undefined) scope.taskType = nonEmptyString(scopeValue.taskType, "explicit preference.scope.taskType", 80);
+  if (scopeValue.importance !== undefined) {
+    if (!(["high", "medium", "low"] as unknown[]).includes(scopeValue.importance)) fail("explicit preference.scope.importance is invalid.");
+    scope.importance = scopeValue.importance as "high" | "medium" | "low";
+  }
+  if (scopeValue.dueWindowBucket !== undefined) {
+    if (!(["under-24h", "1-3d", "4-7d", "over-7d"] as unknown[]).includes(scopeValue.dueWindowBucket)) fail("explicit preference.scope.dueWindowBucket is invalid.");
+    scope.dueWindowBucket = scopeValue.dueWindowBucket as NonNullable<ExplicitPreferenceInput["scope"]>["dueWindowBucket"];
+  }
+  const result: ExplicitPreferenceInput = { key, value: validatePreferenceValue(key, payload.value) };
+  if (Object.keys(scope).length) result.scope = scope;
+  return result;
+}
+
+export function validatePreferenceStatus(value: unknown): "active" | "disabled" {
+  if (value !== "active" && value !== "disabled") fail("preference status must be active or disabled.");
+  return value;
+}
+
+export function validatePlanActivation(value: unknown): string {
+  const payload = record(value, "plan activation");
+  knownKeys(payload, ["planId"], "plan activation");
+  return nonEmptyString(payload.planId, "plan activation.planId", 200);
+}
+
+export function validatePreferenceStatusPatch(value: unknown): "active" | "disabled" {
+  const payload = record(value, "preference status patch");
+  knownKeys(payload, ["status"], "preference status patch");
+  return validatePreferenceStatus(payload.status);
+}
+
 export function validateIdentifier(value: unknown, field = "id"): string {
   return nonEmptyString(value, field, 500);
 }
@@ -143,6 +228,58 @@ function validateInputFile(value: unknown, index: number): ChroniInputFile {
   if (file.contentBase64 !== undefined) result.contentBase64 = boundedString(file.contentBase64, `files[${index}].contentBase64`, MAX_FILE_BASE64_CHARS);
   if (!result.path && result.contentBase64 === undefined) fail(`files[${index}] must include path or contentBase64.`);
   return result;
+}
+
+function validateTaskPlanStep(value: unknown, index: number): TaskPlanStep {
+  const step = record(value, `task plan step[${index}]`);
+  knownKeys(step, ["id", "taskId", "title", "description", "estimatedMinutes", "order", "dependsOn", "suggestedStartAt", "suggestedEndAt", "completionCriteria", "status", "origin", "userModifiedFields", "memoryPreferenceIds", "createdAt", "updatedAt"], `task plan step[${index}]`);
+  if (!Number.isInteger(step.estimatedMinutes) || (step.estimatedMinutes as number) < 15 || (step.estimatedMinutes as number) > 480) fail(`task plan step[${index}].estimatedMinutes must be from 15 to 480.`);
+  if (!(["pending", "in-progress", "blocked", "completed", "skipped"] as unknown[]).includes(step.status)) fail(`task plan step[${index}].status is invalid.`);
+  const result: TaskPlanStep = {
+    id: nonEmptyString(step.id, `task plan step[${index}].id`, 200),
+    taskId: nonEmptyString(step.taskId, `task plan step[${index}].taskId`, 200),
+    title: nonEmptyString(step.title, `task plan step[${index}].title`, 80),
+    description: boundedString(step.description, `task plan step[${index}].description`, 500),
+    estimatedMinutes: step.estimatedMinutes as number,
+    order: index + 1,
+    dependsOn: stringArray(step.dependsOn, `task plan step[${index}].dependsOn`, 12, 200),
+    completionCriteria: stringArray(step.completionCriteria, `task plan step[${index}].completionCriteria`, 8, 200),
+    status: step.status as TaskPlanStep["status"],
+    origin: "user",
+    userModifiedFields: stringArray(step.userModifiedFields ?? [], `task plan step[${index}].userModifiedFields`, 20, 80),
+    memoryPreferenceIds: stringArray(step.memoryPreferenceIds ?? [], `task plan step[${index}].memoryPreferenceIds`, 8, 200),
+    createdAt: dateString(step.createdAt, `task plan step[${index}].createdAt`),
+    updatedAt: dateString(step.updatedAt, `task plan step[${index}].updatedAt`),
+  };
+  if (step.suggestedStartAt !== undefined) result.suggestedStartAt = dateString(step.suggestedStartAt, `task plan step[${index}].suggestedStartAt`);
+  if (step.suggestedEndAt !== undefined) result.suggestedEndAt = dateString(step.suggestedEndAt, `task plan step[${index}].suggestedEndAt`);
+  return result;
+}
+
+function stringArray(value: unknown, field: string, maxItems: number, maxLength: number): string[] {
+  if (!Array.isArray(value) || value.length > maxItems) fail(`${field} must be an array with at most ${maxItems} entries.`);
+  return value.map((item, index) => boundedString(item, `${field}[${index}]`, maxLength));
+}
+
+function planningPreferenceKey(value: unknown): PlanningPreferenceKey {
+  const keys: PlanningPreferenceKey[] = ["preferredStepMinutes", "preferredStepCount", "bufferRatio", "estimateMultiplier", "preferReviewStep", "preferResearchBeforeExecution", "preferLongCoreWorkStep", "preferEarlyStart", "preferredPlanningGranularity"];
+  if (!keys.includes(value as PlanningPreferenceKey)) fail("explicit preference.key is invalid.");
+  return value as PlanningPreferenceKey;
+}
+
+function validatePreferenceValue(key: PlanningPreferenceKey, value: unknown): number | boolean | string {
+  if (key === "preferredStepMinutes") return boundedNumber(value, 15, 180, key);
+  if (key === "preferredStepCount") return boundedNumber(value, 1, 12, key, true);
+  if (key === "bufferRatio") return boundedNumber(value, 0, 0.5, key);
+  if (key === "estimateMultiplier") return boundedNumber(value, 0.5, 3, key);
+  if (key === "preferredPlanningGranularity") return nonEmptyString(value, key, 40);
+  if (typeof value !== "boolean") fail(`${key} must be a boolean.`);
+  return value;
+}
+
+function boundedNumber(value: unknown, min: number, max: number, field: string, integer = false): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) fail(`${field} must be from ${min} to ${max}.`);
+  return value;
 }
 
 function record(value: unknown, field: string): Record<string, unknown> {

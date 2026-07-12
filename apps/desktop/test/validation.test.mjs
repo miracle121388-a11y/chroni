@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateAgentMemoryPatch, validateIntakePayload, validateItemPatch, validatePreferencesPatch } from "../dist/validation.js";
+import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateExplicitPreference, validateIntakePayload, validateItemPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "../dist/validation.js";
 
 test("validateIntakePayload accepts supported text and file shapes", () => {
   assert.deepEqual(validateIntakePayload({ kind: "text", text: "tomorrow 18:00 submit report" }), {
@@ -66,4 +66,28 @@ test("validateAgentMemoryPatch enforces capacity, work hours, reminder frequency
     automaticInspectionEnabled: true,
     useLlmPlanning: true,
   }), /before/);
+});
+
+test("Agent planning payloads reject unknown keys and privilege escalation", () => {
+  assert.deepEqual(validateClarificationAnswer({ optionId: "next-friday" }), { optionId: "next-friday" });
+  assert.throws(() => validateClarificationAnswer({ optionId: "next-friday", confidence: 1 }), /confidence/);
+  assert.deepEqual(validateBehaviorMemoryPatch({ learningEnabled: false }), { learningEnabled: false });
+  assert.throws(() => validateBehaviorMemoryPatch({ preferences: [] }), /preferences/);
+  assert.deepEqual(validateExplicitPreference({ key: "preferredStepMinutes", value: 45 }), { key: "preferredStepMinutes", value: 45 });
+  assert.throws(() => validateExplicitPreference({ key: "preferredStepMinutes", value: 500 }), /preferredStepMinutes/);
+
+  const now = "2026-07-12T00:00:00.000Z";
+  const update = validateTaskPlanUpdate({
+    baseVersion: 1,
+    goal: "Complete report",
+    deliverables: [],
+    constraints: [],
+    bufferMinutes: 15,
+    summary: "Plan",
+    uncertainties: [],
+    steps: [{ id: "step-1", taskId: "task-1", title: "Draft", description: "", estimatedMinutes: 30, order: 99, dependsOn: [], completionCriteria: [], status: "pending", origin: "agent", userModifiedFields: [], memoryPreferenceIds: [], createdAt: now, updatedAt: now }],
+  });
+  assert.equal(update.steps[0].origin, "user");
+  assert.equal(update.steps[0].order, 1);
+  assert.throws(() => validateTaskPlanUpdate({ ...update, confidence: 1 }), /confidence/);
 });

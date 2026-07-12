@@ -7,14 +7,14 @@ import { reminderEligibility } from "./agent/agent-reminder.js";
 import { AgentScheduler } from "./agent/agent-scheduler.js";
 import { createAgentTools, type DeadlineAgentTools } from "./agent/agent-tools.js";
 import { startChroniApiServer, type AgentApiOperations } from "./api-server.js";
-import { extractPayload, processIntake, reprocessSource } from "./intake.js";
+import { ensureTaskPlan, extractPayload, processIntake, reprocessSource } from "./intake.js";
 import { testLlmConnection } from "./llm-client.js";
 import { resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
-import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, ChroniLlmSettings, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch } from "./shared/types.js";
+import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniLlmSettings, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
-import { validateAgentMemoryPatch, validateBoolean, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferencesPatch, validateSourceText } from "./validation.js";
+import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
 
 let store: ChroniStore;
 let apiServer: ReturnType<typeof startChroniApiServer> | undefined;
@@ -142,6 +142,39 @@ function installIpc(): void {
     if (!agentTools.exportIcs) throw new Error("Agent ICS export is unavailable.");
     return agentTools.exportIcs();
   });
+  ipcMain.handle("chroni:clarification-answer", async (_event, id: string, payload: ClarificationAnswerPayload) => {
+    const result = store.answerClarification(validateIdentifier(id, "clarification id"), validateClarificationAnswer(payload));
+    if (result.createdTaskId) await ensureTaskPlan(result.createdTaskId, store);
+    const complete = { ...result, snapshot: store.snapshot() };
+    broadcast("chroni:snapshot-updated", complete.snapshot);
+    if (result.createdTaskId) scheduleAgentForTaskChange();
+    return complete;
+  });
+  ipcMain.handle("chroni:clarification-dismiss", (_event, id: string) => publishStoreSnapshot(store.dismissClarification(validateIdentifier(id, "clarification id"))));
+  ipcMain.handle("chroni:intake-draft-cancel", (_event, id: string) => publishStoreSnapshot(store.cancelIntakeDraft(validateIdentifier(id, "draft id"))));
+  ipcMain.handle("chroni:task-plan-generate", async (_event, taskId: string, regenerate: boolean) => {
+    taskId = validateIdentifier(taskId, "task id");
+    await ensureTaskPlan(taskId, store, validateBoolean(regenerate, "regenerate"));
+    const snapshot = publishStoreSnapshot(store.snapshot());
+    return { ok: true, plan: store.taskPlanByTaskId(taskId), snapshot, message: "任务规划草案已生成。" };
+  });
+  ipcMain.handle("chroni:task-plan-activate", (_event, taskId: string, planId: string) => {
+    const result = store.activateTaskPlan(validateIdentifier(taskId, "task id"), validateIdentifier(planId, "plan id"));
+    publishStoreSnapshot(result.snapshot);
+    scheduleAgentForTaskChange();
+    return result;
+  });
+  ipcMain.handle("chroni:task-plan-update", (_event, taskId: string, payload: TaskPlanUpdatePayload) => {
+    const result = store.updateTaskPlan(validateIdentifier(taskId, "task id"), validateTaskPlanUpdate(payload));
+    publishStoreSnapshot(result.snapshot);
+    scheduleAgentForTaskChange();
+    return result;
+  });
+  ipcMain.handle("chroni:behavior-memory-update", (_event, patch: BehaviorMemoryPatch) => publishStoreSnapshot(store.updateBehaviorMemory(validateBehaviorMemoryPatch(patch))));
+  ipcMain.handle("chroni:planning-preference-upsert", (_event, input: ExplicitPreferenceInput) => publishStoreSnapshot(store.upsertExplicitPlanningPreference(validateExplicitPreference(input))));
+  ipcMain.handle("chroni:planning-preference-status", (_event, id: string, status: "active" | "disabled") => publishStoreSnapshot(store.setPlanningPreferenceStatus(validateIdentifier(id, "preference id"), validatePreferenceStatus(status))));
+  ipcMain.handle("chroni:planning-preference-delete", (_event, id: string) => publishStoreSnapshot(store.deletePlanningPreference(validateIdentifier(id, "preference id"))));
+  ipcMain.handle("chroni:behavior-memory-clear", () => publishStoreSnapshot(store.clearBehaviorMemory()));
   ipcMain.handle("chroni:quick-add", async (_event, text: string) => {
     const payload = validateIntakePayload({ kind: "text", text });
     broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
@@ -171,9 +204,16 @@ function installIpc(): void {
   ipcMain.handle("chroni:open-storage", () => shell.showItemInFolder(store.filePath));
 }
 
+function publishStoreSnapshot(snapshot: ChroniSnapshot): ChroniSnapshot {
+  broadcast("chroni:snapshot-updated", snapshot);
+  refreshScheduleAfterUpdate();
+  return snapshot;
+}
+
 function installDeadlineAgent(): void {
   agentTools = createAgentTools({
     readTasks: () => store.snapshot().items,
+    readTaskPlans: () => store.snapshot().taskPlans,
     intakeText: (text) => processIntake({ kind: "text", text }, store),
     writeIcs: (content, fileName) => {
       const directory = join(app.getPath("userData"), "exports");
@@ -240,7 +280,9 @@ function scheduleAgentForTaskChange(): void {
 }
 
 function taskFingerprint(snapshot: ChroniSnapshot): string {
-  return snapshot.items.map((item) => [item.id, item.title, item.dueAt, item.importance, item.completed, item.snoozedUntil ?? "", item.estimatedMinutes ?? "", item.progressPercent ?? ""].join("|")).sort().join("\n");
+  const items = snapshot.items.map((item) => [item.id, item.title, item.dueAt, item.importance, item.completed, item.snoozedUntil ?? "", item.estimatedMinutes ?? "", item.progressPercent ?? ""].join("|")).sort();
+  const plans = snapshot.taskPlans.filter((plan) => plan.status === "active").map((plan) => `${plan.taskId}|${plan.version}|${plan.steps.map((step) => `${step.id}:${step.estimatedMinutes}:${step.status}`).join(",")}`).sort();
+  return [...items, ...plans].join("\n");
 }
 
 function agentApiOperations(): AgentApiOperations {
@@ -256,6 +298,27 @@ function agentApiOperations(): AgentApiOperations {
       if (!agentTools.exportIcs) throw new Error("Agent ICS export is unavailable.");
       return agentTools.exportIcs();
     },
+    answerClarification: async (id, payload) => {
+      const result = store.answerClarification(id, payload);
+      if (result.createdTaskId) await ensureTaskPlan(result.createdTaskId, store);
+      if (result.createdTaskId) scheduleAgentForTaskChange();
+      return { ...result, snapshot: store.snapshot() };
+    },
+    dismissClarification: (id) => store.dismissClarification(id),
+    cancelIntakeDraft: (id) => store.cancelIntakeDraft(id),
+    generateTaskPlan: async (taskId, regenerate) => {
+      await ensureTaskPlan(taskId, store, regenerate);
+      const plan = store.taskPlanByTaskId(taskId);
+      if (!plan) throw new Error("任务规划生成失败。");
+      return { ok: true, plan, snapshot: store.snapshot(), message: regenerate ? "已生成新的规划草案，原计划未被覆盖。" : "任务规划草案已生成。" };
+    },
+    activateTaskPlan: (taskId, planId) => store.activateTaskPlan(taskId, planId),
+    updateTaskPlan: (taskId, payload) => store.updateTaskPlan(taskId, payload),
+    updateBehaviorMemory: (patch) => store.updateBehaviorMemory(patch),
+    upsertPlanningPreference: (input) => store.upsertExplicitPlanningPreference(input),
+    setPlanningPreferenceStatus: (id, status) => store.setPlanningPreferenceStatus(id, status),
+    deletePlanningPreference: (id) => store.deletePlanningPreference(id),
+    clearBehaviorMemory: () => store.clearBehaviorMemory(),
   };
 }
 

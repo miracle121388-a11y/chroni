@@ -6,6 +6,9 @@ import type { DdlItem, ChroniInputFile, ChroniLlmSettings, ExtractResult, Extrac
 import type { ChroniStore } from "./store.js";
 import { requestChatCompletion } from "./llm-client.js";
 import { resolveLlmSettings } from "./llm-settings.js";
+import { analyzeCompletenessWithLlm } from "./agent/clarification-agent.js";
+import { selectPlanningPreferences } from "./agent/preference-selector.js";
+import { generateTaskPlan } from "./agent/task-plan-agent.js";
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
 const documentExtensions = new Set([".docx", ".pdf"]);
@@ -41,6 +44,19 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
   store.setCompanion("processing", "正在识别 DDL...");
   const result = await extractPayload(payload, { llm: store.snapshot().preferences.llm });
   if (!result.ok) {
+    let clarificationSnapshot;
+    let firstQuestion = "";
+    for (const input of result.extracted) {
+      if (!hasPossibleTaskWithoutDeadline(input.text)) continue;
+      const analysis = await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.snapshot().preferences.llm));
+      if (analysis.status !== "needs-clarification") continue;
+      clarificationSnapshot = store.saveIntakeDraft(analysis.draft, analysis.clarifications, input);
+      firstQuestion ||= analysis.clarifications[0]?.question ?? "还需要确认任务信息。";
+    }
+    if (clarificationSnapshot) {
+      recordExtractionFailures(store, result.failures);
+      return { ok: false, reason: `需要确认：${firstQuestion}`, snapshot: store.snapshot() };
+    }
     const fallbackFailures = result.failures.length ? [] : fallbackExtractedInputs(payload, result.extracted);
     store.recordSourceFailure(fallbackFailures, result.reason);
     recordExtractionFailures(store, result.failures);
@@ -48,9 +64,38 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
     return { ok: false, reason: result.reason, snapshot };
   }
 
-  let snapshot = store.addItems(result.items, result.message, result.extracted);
+  const blocking: Array<{ input: ExtractedInput; analysis: Awaited<ReturnType<typeof analyzeCompletenessWithLlm>> }> = [];
+  for (const input of result.extracted.filter((candidate) => /下周(?![一二三四五六日天])/.test(candidate.text))) {
+    const analysis = await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.snapshot().preferences.llm));
+    if (analysis.clarifications.some((item) => item.required && item.field === "dueAt")) blocking.push({ input, analysis });
+  }
+  const blockedSourceNames = new Set(blocking.map((entry) => entry.input.sourceName));
+  const safeItems = result.items.filter((item) => ![...blockedSourceNames].some((sourceName) => item.sourceSummary.startsWith(`${sourceName}:`)));
+  const beforeIds = new Set(store.snapshot().items.map((item) => item.id));
+  let snapshot = store.addItems(safeItems, result.message, result.extracted.filter((input) => !blockedSourceNames.has(input.sourceName)));
+  const created = snapshot.items.filter((item) => !beforeIds.has(item.id));
+  for (const item of created) {
+    await ensureTaskPlan(item.id, store);
+    snapshot = store.snapshot();
+  }
+  for (const entry of blocking) snapshot = store.saveIntakeDraft(entry.analysis.draft, entry.analysis.clarifications, entry.input);
   snapshot = recordExtractionFailures(store, result.failures) ?? snapshot;
-  return { ok: true, created: result.items, message: snapshot.companion.bubble, snapshot };
+  if (!created.length && blocking.length) return { ok: false, reason: `需要确认：${blocking[0].analysis.clarifications[0]?.question ?? "请补充截止时间。"}`, snapshot };
+  const message = blocking.length ? `${result.message} 另有 ${blocking.length} 项等待确认。` : result.message;
+  return { ok: true, created, message, snapshot };
+}
+
+export async function ensureTaskPlan(taskId: string, store: ChroniStore, regenerate = false) {
+  const snapshot = store.snapshot();
+  const task = snapshot.items.find((item) => item.id === taskId);
+  if (!task) throw new Error("找不到要规划的任务。");
+  if (!regenerate && store.taskPlanByTaskId(taskId)) return store.taskPlanByTaskId(taskId)!;
+  const taskType = /(作业|课程|实验|论文|考试|答辩)/.test(`${task.title} ${task.sourceSummary}`) ? "coursework" : "general";
+  const preferences = selectPlanningPreferences(snapshot.agent.behaviorMemory, { taskType, importance: task.importance, dueAt: task.dueAt });
+  const applied = snapshot.agent.behaviorMemory.autoApplyEnabled ? preferences : preferences.filter((item) => item.source === "explicit");
+  const settings = resolveLlmSettings(snapshot.preferences.llm);
+  const plan = await generateTaskPlan(task, applied, settings);
+  return store.saveGeneratedTaskPlan(plan).plan;
 }
 
 export async function reprocessSource(sourceId: string, store: ChroniStore): Promise<IntakeResult> {

@@ -601,6 +601,30 @@ test("empty or rejected DeepSeek output is visible when local rules are used", a
   }
 });
 
+test("an ambiguous relative deadline cannot be bypassed by an LLM guess", async () => {
+  await withStore(async (store) => {
+    store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-v4-flash" } });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      const isClarification = body.messages[0].content.includes("信息补全 Agent");
+      const content = isClarification
+        ? { missingFields: [{ field: "dueAt", question: "下周具体哪天截止？", reason: "日期不唯一", options: [] }] }
+        : { items: [{ title: "机器学习作业", dueAt: "2026-07-17T23:59:00+08:00", importance: "medium", sourceSummary: "下周完成机器学习作业" }] };
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }), { status: 200 });
+    };
+    try {
+      const result = await processIntake({ kind: "text", text: "下周完成机器学习作业。" }, store);
+      assert.equal(result.ok, false);
+      assert.equal(result.snapshot.items.length, 0);
+      assert.equal(result.snapshot.clarifications[0].status, "pending");
+      assert.match(result.reason, /需要确认/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 test("legacy plaintext LLM keys migrate to protected storage", () => {
   const dir = mkdtempSync(join(tmpdir(), "chroni-secret-migration-test-"));
   try {

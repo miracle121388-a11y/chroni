@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import { formatOperationError } from "../../shared/errors";
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
-import type { AgentMemory, CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, ServiceStatus, SourceRecord } from "../../shared/types";
+import type { AgentMemory, CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
+import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
 import "./styles.css";
 
 const api = window.chroni;
@@ -339,7 +340,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
                   <span>{group.label}</span>
                   <b>{group.items.length}</b>
                 </header>
-                <DdlList items={group.items} setSnapshot={setSnapshot} compact onAction={showFeedback} ariaLabel={`${group.label}日程`} />
+              <DdlList items={group.items} plans={snapshot.taskPlans} setSnapshot={setSnapshot} compact onAction={showFeedback} ariaLabel={`${group.label}日程`} />
               </section>
             ))}
           </div>
@@ -377,7 +378,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
           <button className={tab === "services" ? "active" : ""} aria-current={tab === "services" ? "page" : undefined} onClick={() => setTab("services")}>运行状态</button>
         </nav>
         <div className="sidebar-foot">
-          <span>待处理 {pendingCount}</span>
+          <span>待处理 {pendingCount}{snapshot.clarifications.some((item) => item.status === "pending") ? ` · 待确认 ${snapshot.clarifications.filter((item) => item.status === "pending").length}` : ""}</span>
           <b>{petLabel(snapshot.companion.state)}</b>
         </div>
       </aside>
@@ -468,6 +469,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
       </header>
 
       {feedback && <p className={`inline-feedback ${isPositiveFeedback(feedback) ? "ok" : "warn"}`} role="status" aria-live="polite">{feedback}</p>}
+      <ClarificationPanel snapshot={snapshot} setSnapshot={setSnapshot} />
 
       <section className={`agent-status status-${latest?.verification.status ?? "idle"}`}>
         <div>
@@ -570,6 +572,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
           <button className="secondary" type="button" disabled={!!busyAction} onClick={() => void exportIcs()}>{busyAction === "export" ? "导出中..." : "导出 ICS"}</button>
         </div>
       </details>
+      <BehaviorMemoryPane snapshot={snapshot} setSnapshot={setSnapshot} />
     </div>
   );
 }
@@ -583,6 +586,7 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
   const [itemFilter, setItemFilter] = useState<"active" | "completed" | "all">("active");
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [busyMessage, setBusyMessage] = useState("");
+  const [selectedTaskId, setSelectedTaskId] = useState("");
   const manualInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileImportMode = useRef<"preview" | "fill">("preview");
@@ -593,6 +597,7 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
   const snoozedCount = summary.active - actionableSummary.active;
   const itemGroups = useMemo(() => buildControlScheduleGroups(snapshot.items, itemFilter, new Date(scheduleClock)), [itemFilter, scheduleClock, snapshot.items]);
   const filteredCount = itemGroups.reduce((count, group) => count + group.items.length, 0);
+  const selectedTask = snapshot.items.find((item) => item.id === selectedTaskId);
 
   async function addManual() {
     if (!manual.trim() || isBusy) return;
@@ -650,6 +655,8 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
     await extractFiles(event.dataTransfer.files, false);
   }
 
+  if (selectedTask) return <TaskDetailPane task={selectedTask} snapshot={snapshot} setSnapshot={setSnapshot} onBack={() => setSelectedTaskId("")} />;
+
   return (
     <div className="pane">
       <header className="pane-head">
@@ -692,6 +699,7 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
       </div>
       {busyMessage && <p className="inline-feedback info" role="status" aria-live="polite">{busyMessage}</p>}
       {feedback && <p className={`inline-feedback ${isPositiveFeedback(feedback) ? "ok" : "warn"}`} role={isPositiveFeedback(feedback) ? "status" : "alert"} aria-live="polite">{feedback}</p>}
+      <ClarificationPanel snapshot={snapshot} setSnapshot={setSnapshot} />
       <div
         className={`upload-box ${draggingFiles ? "dragging" : ""} ${isBusy ? "busy" : ""}`}
         aria-busy={isBusy}
@@ -787,11 +795,13 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
               </header>
               <DdlList
                 items={group.items}
+                plans={snapshot.taskPlans}
                 sources={snapshot.sources}
                 setSnapshot={setSnapshot}
                 editable
                 ariaLabel={`${group.label}日程`}
                 onAction={(notice) => setFeedback(notice.message)}
+                onOpenTask={setSelectedTaskId}
               />
             </section>
           ))}
@@ -1095,19 +1105,19 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
   );
 }
 
-function DdlList({ items, sources = [], setSnapshot, compact = false, editable = false, emptyText = "暂时没有需要马上处理的 DDL。", onAction, ariaLabel }: { items: DdlItem[]; sources?: SourceRecord[]; setSnapshot: ViewProps["setSnapshot"]; compact?: boolean; editable?: boolean; emptyText?: string; onAction?(notice: ActionNotice): void; ariaLabel?: string }) {
+function DdlList({ items, sources = [], plans = [], setSnapshot, compact = false, editable = false, emptyText = "暂时没有需要马上处理的 DDL。", onAction, onOpenTask, ariaLabel }: { items: DdlItem[]; sources?: SourceRecord[]; plans?: TaskPlan[]; setSnapshot: ViewProps["setSnapshot"]; compact?: boolean; editable?: boolean; emptyText?: string; onAction?(notice: ActionNotice): void; onOpenTask?(taskId: string): void; ariaLabel?: string }) {
   if (!items.length) return <div className="empty">{emptyText}</div>;
   const sourceMap = new Map(sources.map((source) => [source.id, source]));
   return (
     <div className={`ddl-list ${compact ? "compact" : ""}`} role="list" aria-label={ariaLabel}>
       {items.map((item) => (
-        <DdlRow key={item.id} item={item} source={item.sourceId ? sourceMap.get(item.sourceId) : undefined} setSnapshot={setSnapshot} editable={editable} onAction={onAction} />
+        <DdlRow key={item.id} item={item} plan={plans.filter((plan) => plan.taskId === item.id && plan.status !== "superseded").sort((left, right) => right.version - left.version)[0]} source={item.sourceId ? sourceMap.get(item.sourceId) : undefined} setSnapshot={setSnapshot} editable={editable} onAction={onAction} onOpenTask={onOpenTask} />
       ))}
     </div>
   );
 }
 
-function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlItem; source?: SourceRecord; setSnapshot: ViewProps["setSnapshot"]; editable?: boolean; onAction?(notice: ActionNotice): void }) {
+function DdlRow({ item, source, plan, setSnapshot, editable, onAction, onOpenTask }: { item: DdlItem; source?: SourceRecord; plan?: TaskPlan; setSnapshot: ViewProps["setSnapshot"]; editable?: boolean; onAction?(notice: ActionNotice): void; onOpenTask?(taskId: string): void }) {
   const urgency = urgencyTone(item);
   const [draft, setDraft] = useState(item);
   const [busyAction, setBusyAction] = useState("");
@@ -1266,12 +1276,14 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
               <time>{formatDue(item.dueAt)}</time>
               <span className={`remaining tone-${urgency}`}>{item.completed ? "已完成" : remainingText(item.dueAt)}</span>
               <span>{item.estimatedMinutes ?? (item.importance === "high" ? 90 : item.importance === "medium" ? 60 : 30)} 分钟 · {item.progressPercent ?? 0}%</span>
+              <span className={`plan-chip ${plan?.status ?? "missing"}`}>{plan ? `${plan.steps.length} 步 · ${plan.status === "active" ? "已规划" : "待确认"}` : "待生成规划"}</span>
               <span className={`source-chip ${snoozed ? "snoozed-chip" : ""}`} title={item.sourceSummary}>
                 {snoozed && item.snoozedUntil ? `稍后至 ${formatDue(item.snoozedUntil)}` : source?.sourceName ?? "手动录入"}
               </span>
             </div>
           </div>
           <div className="editor-actions">
+            {onOpenTask && <button type="button" disabled={isBusy} onClick={() => onOpenTask(item.id)}>规划详情</button>}
             {snoozed && <button type="button" disabled={isBusy} onClick={() => void cancelSnooze()}>{busyAction === "正在取消" ? "取消中" : "取消稍后"}</button>}
             <button type="button" disabled={isBusy} aria-expanded={editing} onClick={() => {
               setEditing((current) => !current);
@@ -1667,6 +1679,7 @@ function petAction(state: CompanionState): PetAction {
     clicked: "wake",
     hover_accept: "drag",
     processing: "study",
+    needs_clarification: "wake",
     success: "pet",
     confused: "cat",
     deadline_near: "study",
@@ -1678,7 +1691,7 @@ function petAction(state: CompanionState): PetAction {
 }
 
 function isPersistentPetFeedback(state: CompanionState): boolean {
-  return state === "hover_accept" || state === "processing" || state === "deadline_near" || state === "overdue";
+  return state === "hover_accept" || state === "processing" || state === "needs_clarification" || state === "deadline_near" || state === "overdue";
 }
 
 function isTransientPetFeedback(state: CompanionState): boolean {
@@ -1691,6 +1704,7 @@ function petLabel(state: CompanionState): string {
     clicked: "Hi",
     hover_accept: "Drop",
     processing: "...",
+    needs_clarification: "?",
     success: "OK",
     confused: "?",
     deadline_near: "!",

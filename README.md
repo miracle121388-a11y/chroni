@@ -126,6 +126,14 @@ Observe 读取真实任务和当前时间
 
 Agent Memory 包含每日最大工作分钟、工作开始/结束时间、提醒频率、自动巡检开关和大模型辅助规划开关。默认每日容量为 240 分钟，工作时段为 09:00–18:00。每天首次启动会自动巡检，DDL 变化后会防抖重跑，均可关闭。Memory、应用计划、最新巡检和最多十份 Trace 历史保存在 `chroni-state.json`，Trace 只记录结构化摘要、规划来源和工具结果，不包含 API Key、原始文档、模型原始响应或隐藏推理。
 
+### 主动追问、任务规划与 Behavior Memory
+
+信息不完整时，Chroni 不会猜测最终 DDL。它会保存可恢复的 `IntakeDraft`，并在日程页和 Agent 页显示待确认问题；回答后从原草稿继续处理，重复回答不会重复创建任务。必要字段未解决前不能创建正式任务，放弃草稿会使关联问题失效。
+
+每个任务可从“规划详情”进入结构化工作区。任务创建后会生成规则或 LLM 规划草案，但只有点击“确认并启用”才成为 active plan。步骤支持修改标题、说明、耗时和状态，支持拖动/按钮排序、新增、删除与版本记录；保存时使用 `baseVersion` 防止静默覆盖。DeadlineAgent 使用 active plan 中未完成步骤的剩余时间，并将下一步骤关联到今日工作块。
+
+Behavior Memory 只从用户明确保存的结构化规划 Diff 学习，不读取输入框过程，也不进行训练。首次一致修改只形成 candidate；至少三次一致证据且置信度达到门槛后才成为 active。偏好按任务类型等范围隔离，显式偏好优先；用户可停用、删除、关闭学习、关闭自动应用或清除全部行为记录。模型只接收当前任务相关摘要和最多 8 条已选择的结构化偏好，不接收完整反馈历史。
+
 “导出 ICS”会把当前未完成 DDL 写入 Electron 用户数据目录下的 `exports/`。任务抽取、风险检查、本地规划、风险优先重排、计划持久化、提醒和日历导出均通过明确工具边界提供。提醒遵守系统开关、勿扰时间和去重策略；Trace 会区分已发送、跳过和失败。
 
 ## 支持的输入
@@ -135,7 +143,7 @@ Agent Memory 包含每日最大工作分钟、工作开始/结束时间、提醒
 - 图片 OCR：PNG、JPG/JPEG、WEBP、BMP、TIF/TIFF
 - 直接文本：桌宠拖放、控制中心快速添加、本地 HTTP API
 
-单个文档最大 18 MiB，纯文本最大 2 MiB。图片 OCR 的自动入日程置信度阈值为 70。空文件、乱码、非法日期和没有明确任务语义的内容会返回具体失败原因。
+单个文档最大 18 MiB，纯文本最大 2 MiB。图片 OCR 的可靠性阈值为 55；没有文本层的扫描 PDF 会先渲染页面再进行 OCR。TXT 支持 UTF-8、UTF-16 和 GBK/GB18030。空文件、乱码、非法日期和没有明确任务语义的内容会返回具体失败原因。
 
 ## 本地 HTTP API
 
@@ -168,6 +176,22 @@ POST   /api/agent/run
 GET    /api/agent/latest
 PATCH  /api/agent/memory
 POST   /api/agent/export-ics
+GET    /api/agent/clarifications
+POST   /api/agent/clarifications/:id/answer
+POST   /api/agent/clarifications/:id/dismiss
+GET    /api/intake-drafts/:id
+DELETE /api/intake-drafts/:id
+GET    /api/items/:id/plan
+POST   /api/items/:id/plan
+PUT    /api/items/:id/plan
+POST   /api/items/:id/plan/regenerate
+POST   /api/items/:id/plan/activate
+GET    /api/items/:id/plan/revisions
+PATCH  /api/agent/behavior-memory
+DELETE /api/agent/behavior-memory
+POST   /api/agent/behavior-memory/preferences
+PATCH  /api/agent/behavior-memory/preferences/:id
+DELETE /api/agent/behavior-memory/preferences/:id
 POST   /api/extract
 POST   /api/intake
 PATCH  /api/items/:id
@@ -176,7 +200,7 @@ PATCH  /api/preferences
 POST   /api/sources/:id/reprocess
 ```
 
-如果系统用户数据目录不是 `%APPDATA%\Chroni`，可在“运行状态”中点击“打开本地数据位置”确认 `chroni-api.json`。需要固定 API 令牌时，在启动前设置 `CHRONI_API_TOKEN`。浏览器跨域默认关闭；只有设置精确的 `CHRONI_API_ALLOWED_ORIGIN` 后，该 Origin 才能访问。HTTP JSON 请求体上限为 32 MiB，所有请求会进行运行时字段校验，所有 HTTP snapshot 都会移除 LLM API Key。
+如果系统用户数据目录不是 `%APPDATA%\Chroni`，可在“运行状态”中点击“打开本地数据位置”确认 `chroni-api.json`。需要固定 API 令牌时，在启动前设置 `CHRONI_API_TOKEN`。浏览器跨域默认关闭；只有设置精确的 `CHRONI_API_ALLOWED_ORIGIN` 后，该 Origin 才能访问。HTTP JSON 请求体上限为 32 MiB，所有请求会进行运行时字段校验；HTTP snapshot 会移除 LLM API Key、来源全文和近期反馈事件。
 
 ## 检查与打包
 
@@ -198,8 +222,8 @@ npx pnpm@11.7.0 run package:desktop
 ### 文件显示为空或没有识别结果
 
 - 确认文件扩展名在支持列表中且文件不是 0 字节。
-- TXT 建议使用 UTF-8 或 UTF-16LE 编码。
-- 扫描 PDF 本身没有文本层时，请先转成图片或使用截图 OCR。
+- TXT 支持 UTF-8、UTF-16、GBK 和 GB18030；仍失败时确认文件不是二进制内容伪装成 TXT。
+- 扫描 PDF 会自动进入页面 OCR；页数较多时处理时间会明显增加。
 - 控制中心会显示“文件无法读取”“文本无法可靠解析”“OCR 置信度不足”或“没有明确截止时间”等具体原因。
 - 同一个文件修正后可以直接再次选择，文件输入会在每次处理后重置。
 

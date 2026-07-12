@@ -5,6 +5,7 @@ export type CompanionState =
   | "clicked"
   | "hover_accept"
   | "processing"
+  | "needs_clarification"
   | "success"
   | "confused"
   | "deadline_near"
@@ -45,6 +46,8 @@ export type AgentPlannerSource = "rules" | "llm" | "rules-fallback";
 
 export type AgentTaskAssessment = {
   taskId: string;
+  nextStepId?: string;
+  nextStepTitle?: string;
   title: string;
   dueAt: string;
   importance: Importance;
@@ -66,6 +69,7 @@ export type AgentObservation = {
 
 export type AgentWorkBlock = {
   taskId: string;
+  stepId?: string;
   title: string;
   startAt: string;
   endAt: string;
@@ -136,6 +140,8 @@ export type AgentRunResult = {
 
 export type AgentSnapshot = {
   memory: AgentMemory;
+  behaviorMemory: AgentBehaviorMemory;
+  recentPlanningFeedback: PlanningFeedbackEvent[];
   latestRun?: AgentRunResult;
   appliedPlan?: AgentPlan;
   lastAutomaticRunAt?: string;
@@ -161,6 +167,196 @@ export type DdlItem = {
   estimatedMinutes?: number;
   progressPercent?: number;
 };
+
+export type ClarificationField =
+  | "title"
+  | "dueAt"
+  | "dueTime"
+  | "taskType"
+  | "deliverables"
+  | "estimatedMinutes"
+  | "progressPercent"
+  | "difficulty"
+  | "other";
+
+export type ClarificationOption = {
+  id: string;
+  label: string;
+  value: string | number | string[];
+  explanation?: string;
+};
+
+export type PendingClarification = {
+  id: string;
+  sourceId?: string;
+  taskId?: string;
+  draftId: string;
+  field: ClarificationField;
+  question: string;
+  reason: string;
+  options: ClarificationOption[];
+  allowFreeText: boolean;
+  required: boolean;
+  status: "pending" | "answered" | "dismissed" | "expired";
+  createdAt: string;
+  answeredAt?: string;
+  answer?: string | number | string[];
+  resumeToken: string;
+};
+
+export type IntakeDraftCandidate = {
+  title?: string;
+  dueAt?: string;
+  importance?: Importance;
+  estimatedMinutes?: number;
+  progressPercent?: number;
+  deliverables?: string[];
+  taskType?: string;
+};
+
+export type IntakeDraft = {
+  id: string;
+  sourceId?: string;
+  sourceName: string;
+  sourceType: string;
+  candidate: IntakeDraftCandidate;
+  confidence: Record<string, number>;
+  pendingClarificationIds: string[];
+  status: "needs-clarification" | "ready" | "applied" | "cancelled";
+  createdAt: string;
+  updatedAt: string;
+  appliedTaskId?: string;
+};
+
+export type TaskStepStatus = "pending" | "in-progress" | "blocked" | "completed" | "skipped";
+
+export type TaskPlanStep = {
+  id: string;
+  taskId: string;
+  title: string;
+  description: string;
+  estimatedMinutes: number;
+  order: number;
+  dependsOn: string[];
+  suggestedStartAt?: string;
+  suggestedEndAt?: string;
+  completionCriteria: string[];
+  status: TaskStepStatus;
+  origin: "agent" | "user";
+  userModifiedFields: string[];
+  memoryPreferenceIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TaskPlan = {
+  id: string;
+  taskId: string;
+  version: number;
+  goal: string;
+  taskType?: string;
+  deliverables: string[];
+  constraints: string[];
+  steps: TaskPlanStep[];
+  estimatedTotalMinutes: number;
+  bufferMinutes: number;
+  latestSafeStartAt?: string;
+  plannerSource: "rules" | "llm" | "personalized-llm" | "rules-fallback";
+  memoryPreferenceIds: string[];
+  summary: string;
+  uncertainties: string[];
+  status: "draft" | "active" | "superseded";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlanChange =
+  | { type: "step-added"; stepId: string; afterStepId?: string }
+  | { type: "step-removed"; stepId: string }
+  | { type: "step-reordered"; stepId: string; fromOrder: number; toOrder: number }
+  | { type: "duration-changed"; stepId: string; beforeMinutes: number; afterMinutes: number }
+  | { type: "title-changed"; stepId: string; before: string; after: string }
+  | { type: "buffer-changed"; beforeMinutes: number; afterMinutes: number };
+
+export type TaskPlanRevision = {
+  id: string;
+  taskId: string;
+  planId: string;
+  fromVersion: number;
+  toVersion: number;
+  source: "user" | "agent";
+  changes: PlanChange[];
+  createdAt: string;
+};
+
+export type PlanningFeedbackEvent = {
+  id: string;
+  taskId: string;
+  planId: string;
+  planVersion: number;
+  taskType?: string;
+  source: "plan-edit" | "plan-accept" | "plan-reset";
+  changes: PlanChange[];
+  context: {
+    dueWindowHours: number;
+    importance: Importance;
+    originalStepCount: number;
+    finalStepCount: number;
+    originalTotalMinutes: number;
+    finalTotalMinutes: number;
+    originalBufferMinutes: number;
+    finalBufferMinutes: number;
+  };
+  createdAt: string;
+};
+
+export type PlanningPreferenceKey =
+  | "preferredStepMinutes"
+  | "preferredStepCount"
+  | "bufferRatio"
+  | "estimateMultiplier"
+  | "preferReviewStep"
+  | "preferResearchBeforeExecution"
+  | "preferLongCoreWorkStep"
+  | "preferEarlyStart"
+  | "preferredPlanningGranularity";
+
+export type PreferenceScope = {
+  taskType?: string;
+  importance?: Importance;
+  dueWindowBucket?: "under-24h" | "1-3d" | "4-7d" | "over-7d";
+};
+
+export type PlanningPreference = {
+  id: string;
+  key: PlanningPreferenceKey;
+  scope: PreferenceScope;
+  value: number | boolean | string;
+  confidence: number;
+  evidenceCount: number;
+  positiveEvidenceCount: number;
+  negativeEvidenceCount: number;
+  lastObservedAt: string;
+  status: "candidate" | "active" | "disabled";
+  source: "inferred" | "explicit";
+  explanation: string;
+};
+
+export type AgentBehaviorMemory = {
+  version: number;
+  preferences: PlanningPreference[];
+  recentFeedbackEvents: PlanningFeedbackEvent[];
+  learningEnabled: boolean;
+  autoApplyEnabled: boolean;
+  lastUpdatedAt?: string;
+};
+
+export type ClarificationAnswerPayload = { optionId?: string; value?: string | number | string[] };
+export type ClarificationResult = { ok: true; message: string; createdTaskId?: string; snapshot: ChroniSnapshot };
+export type TaskPlanUpdatePayload = Pick<TaskPlan, "goal" | "deliverables" | "constraints" | "steps" | "bufferMinutes" | "summary" | "uncertainties"> & { baseVersion: number };
+export type TaskPlanResult = { ok: true; plan: TaskPlan; snapshot: ChroniSnapshot; message: string };
+export type BehaviorMemoryPatch = { learningEnabled?: boolean; autoApplyEnabled?: boolean };
+export type ExplicitPreferenceInput = { key: PlanningPreferenceKey; value: number | boolean | string; scope?: PreferenceScope };
 
 export type SourceRecord = {
   id: string;
@@ -219,6 +415,10 @@ export type ServiceStatus = {
 export type ChroniSnapshot = {
   items: DdlItem[];
   sources: SourceRecord[];
+  intakeDrafts: IntakeDraft[];
+  clarifications: PendingClarification[];
+  taskPlans: TaskPlan[];
+  taskPlanRevisions: TaskPlanRevision[];
   preferences: ChroniPreferences;
   companion: {
     state: CompanionState;

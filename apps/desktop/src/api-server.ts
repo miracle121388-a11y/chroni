@@ -2,10 +2,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { AgentIcsExportResult, AgentMemoryPatch, AgentRunResult, ChroniSnapshot } from "./shared/types.js";
+import type { AgentIcsExportResult, AgentMemoryPatch, AgentRunResult, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniSnapshot, ExplicitPreferenceInput, TaskPlanResult, TaskPlanUpdatePayload } from "./shared/types.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniStore } from "./store.js";
-import { InputValidationError, validateAgentMemoryPatch, validateIdentifier, validateIntakePayload, validateItemPatch, validatePreferencesPatch } from "./validation.js";
+import { InputValidationError, validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validatePlanActivation, validatePreferenceStatusPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "./validation.js";
 
 type SnapshotUpdateReason = "data" | "preferences";
 type SnapshotCallback = (snapshot: ChroniSnapshot, reason: SnapshotUpdateReason) => void;
@@ -16,6 +16,17 @@ export type AgentApiOperations = {
   latest(): AgentRunResult | undefined;
   updateMemory(patch: AgentMemoryPatch): ChroniSnapshot;
   exportIcs(): Promise<AgentIcsExportResult>;
+  answerClarification(id: string, payload: ClarificationAnswerPayload): Promise<ClarificationResult>;
+  dismissClarification(id: string): ChroniSnapshot;
+  cancelIntakeDraft(id: string): ChroniSnapshot;
+  generateTaskPlan(taskId: string, regenerate: boolean): Promise<TaskPlanResult>;
+  activateTaskPlan(taskId: string, planId: string): TaskPlanResult;
+  updateTaskPlan(taskId: string, payload: TaskPlanUpdatePayload): TaskPlanResult;
+  updateBehaviorMemory(patch: BehaviorMemoryPatch): ChroniSnapshot;
+  upsertPlanningPreference(input: ExplicitPreferenceInput): ChroniSnapshot;
+  setPlanningPreferenceStatus(id: string, status: "active" | "disabled"): ChroniSnapshot;
+  deletePlanningPreference(id: string): ChroniSnapshot;
+  clearBehaviorMemory(): ChroniSnapshot;
 };
 
 type ApiServerOptions = {
@@ -138,6 +149,115 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     sendJson(response, 200, { ok: true, ...await agent.exportIcs() });
     return;
   }
+  if (request.method === "GET" && pathname === "/api/agent/clarifications") {
+    sendJson(response, 200, { ok: true, clarifications: store.snapshot().clarifications.filter((item) => item.status === "pending") });
+    return;
+  }
+  const clarificationAnswer = pathname.match(/^\/api\/agent\/clarifications\/([^/]+)\/answer$/);
+  if (request.method === "POST" && clarificationAnswer) {
+    if (!agent) throw new HttpError(503, "Agent clarification operations are unavailable in this process.");
+    const result = await agent.answerClarification(validateIdentifier(decodeURIComponent(clarificationAnswer[1]), "clarification id"), validateClarificationAnswer(await readJson(request)));
+    onSnapshot(result.snapshot, "data");
+    sendJson(response, 200, result);
+    return;
+  }
+  const clarificationDismiss = pathname.match(/^\/api\/agent\/clarifications\/([^/]+)\/dismiss$/);
+  if (request.method === "POST" && clarificationDismiss) {
+    if (!agent) throw new HttpError(503, "Agent clarification operations are unavailable in this process.");
+    const snapshot = agent.dismissClarification(validateIdentifier(decodeURIComponent(clarificationDismiss[1]), "clarification id"));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
+    return;
+  }
+  const intakeDraft = pathname.match(/^\/api\/intake-drafts\/([^/]+)$/);
+  if (request.method === "GET" && intakeDraft) {
+    const id = validateIdentifier(decodeURIComponent(intakeDraft[1]), "draft id");
+    const draft = store.snapshot().intakeDrafts.find((item) => item.id === id);
+    if (!draft) throw new HttpError(404, "Intake draft was not found.");
+    sendJson(response, 200, { ok: true, draft });
+    return;
+  }
+  if (request.method === "DELETE" && intakeDraft) {
+    if (!agent) throw new HttpError(503, "Agent draft operations are unavailable in this process.");
+    const snapshot = agent.cancelIntakeDraft(validateIdentifier(decodeURIComponent(intakeDraft[1]), "draft id"));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
+    return;
+  }
+  const planRoute = pathname.match(/^\/api\/items\/([^/]+)\/plan$/);
+  if (request.method === "GET" && planRoute) {
+    const taskId = validateIdentifier(decodeURIComponent(planRoute[1]), "task id");
+    sendJson(response, 200, { ok: true, plan: store.taskPlanByTaskId(taskId) });
+    return;
+  }
+  if ((request.method === "POST" || request.method === "PUT") && planRoute) {
+    if (!agent) throw new HttpError(503, "Task planning operations are unavailable in this process.");
+    const taskId = validateIdentifier(decodeURIComponent(planRoute[1]), "task id");
+    const result = request.method === "POST"
+      ? await agent.generateTaskPlan(taskId, false)
+      : agent.updateTaskPlan(taskId, validateTaskPlanUpdate(await readJson(request)));
+    onSnapshot(result.snapshot, "data");
+    sendJson(response, 200, result);
+    return;
+  }
+  const regenerateRoute = pathname.match(/^\/api\/items\/([^/]+)\/plan\/regenerate$/);
+  if (request.method === "POST" && regenerateRoute) {
+    if (!agent) throw new HttpError(503, "Task planning operations are unavailable in this process.");
+    const result = await agent.generateTaskPlan(validateIdentifier(decodeURIComponent(regenerateRoute[1]), "task id"), true);
+    onSnapshot(result.snapshot, "data");
+    sendJson(response, 200, result);
+    return;
+  }
+  const activateRoute = pathname.match(/^\/api\/items\/([^/]+)\/plan\/activate$/);
+  if (request.method === "POST" && activateRoute) {
+    if (!agent) throw new HttpError(503, "Task planning operations are unavailable in this process.");
+    const result = agent.activateTaskPlan(validateIdentifier(decodeURIComponent(activateRoute[1]), "task id"), validatePlanActivation(await readJson(request)));
+    onSnapshot(result.snapshot, "data");
+    sendJson(response, 200, result);
+    return;
+  }
+  const revisionsRoute = pathname.match(/^\/api\/items\/([^/]+)\/plan\/revisions$/);
+  if (request.method === "GET" && revisionsRoute) {
+    const taskId = validateIdentifier(decodeURIComponent(revisionsRoute[1]), "task id");
+    sendJson(response, 200, { ok: true, revisions: store.snapshot().taskPlanRevisions.filter((item) => item.taskId === taskId) });
+    return;
+  }
+  if (request.method === "PATCH" && pathname === "/api/agent/behavior-memory") {
+    if (!agent) throw new HttpError(503, "Behavior Memory operations are unavailable in this process.");
+    const snapshot = agent.updateBehaviorMemory(validateBehaviorMemoryPatch(await readJson(request)));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/agent/behavior-memory/preferences") {
+    if (!agent) throw new HttpError(503, "Behavior Memory operations are unavailable in this process.");
+    const snapshot = agent.upsertPlanningPreference(validateExplicitPreference(await readJson(request)));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
+    return;
+  }
+  const preferenceRoute = pathname.match(/^\/api\/agent\/behavior-memory\/preferences\/([^/]+)$/);
+  if (request.method === "PATCH" && preferenceRoute) {
+    if (!agent) throw new HttpError(503, "Behavior Memory operations are unavailable in this process.");
+    const snapshot = agent.setPlanningPreferenceStatus(validateIdentifier(decodeURIComponent(preferenceRoute[1]), "preference id"), validatePreferenceStatusPatch(await readJson(request)));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
+    return;
+  }
+  if (request.method === "DELETE" && preferenceRoute) {
+    if (!agent) throw new HttpError(503, "Behavior Memory operations are unavailable in this process.");
+    const snapshot = agent.deletePlanningPreference(validateIdentifier(decodeURIComponent(preferenceRoute[1]), "preference id"));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
+    return;
+  }
+  if (request.method === "DELETE" && pathname === "/api/agent/behavior-memory") {
+    if (!agent) throw new HttpError(503, "Behavior Memory operations are unavailable in this process.");
+    const snapshot = agent.clearBehaviorMemory();
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
+    return;
+  }
   if (request.method === "POST" && pathname === "/api/extract") {
     const payload = validateIntakePayload(await readJson(request));
     sendJson(response, 200, await extractPayload(payload, { llm: store.snapshot().preferences.llm }));
@@ -191,6 +311,17 @@ function apiEndpoints(): string[] {
     "GET /api/agent/latest",
     "PATCH /api/agent/memory",
     "POST /api/agent/export-ics",
+    "GET /api/agent/clarifications",
+    "POST /api/agent/clarifications/:id/answer",
+    "POST /api/agent/clarifications/:id/dismiss",
+    "GET|DELETE /api/intake-drafts/:id",
+    "GET|POST|PUT /api/items/:id/plan",
+    "POST /api/items/:id/plan/regenerate",
+    "POST /api/items/:id/plan/activate",
+    "GET /api/items/:id/plan/revisions",
+    "PATCH|DELETE /api/agent/behavior-memory",
+    "POST /api/agent/behavior-memory/preferences",
+    "PATCH|DELETE /api/agent/behavior-memory/preferences/:id",
     "POST /api/extract",
     "POST /api/intake",
     "PATCH /api/items/:id",
@@ -273,6 +404,18 @@ function redactSensitiveData(value: unknown): unknown {
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
     key,
-    key === "apiKey" ? "" : redactSensitiveData(entry),
+    key === "apiKey" ? "" : key === "snapshot" ? redactSnapshotSourceText(entry) : redactSensitiveData(entry),
   ]));
+}
+
+function redactSnapshotSourceText(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return redactSensitiveData(value);
+  const snapshot = value as Record<string, unknown>;
+  const sources = Array.isArray(snapshot.sources)
+    ? snapshot.sources.map((source) => source && typeof source === "object" ? { ...(source as Record<string, unknown>), text: "" } : source)
+    : snapshot.sources;
+  const agent = snapshot.agent && typeof snapshot.agent === "object"
+    ? { ...(snapshot.agent as Record<string, unknown>), recentPlanningFeedback: [] }
+    : snapshot.agent;
+  return redactSensitiveData({ ...snapshot, sources, agent });
 }
