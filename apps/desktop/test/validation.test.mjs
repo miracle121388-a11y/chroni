@@ -21,15 +21,19 @@ test("validateIntakePayload rejects malformed and excessive input", () => {
 });
 
 test("validateItemPatch enforces field types, enums, dates, and known keys", () => {
-  assert.deepEqual(validateItemPatch({ title: "Report", importance: "high", completed: false }), {
+  assert.deepEqual(validateItemPatch({ title: "Report", importance: "high", completed: false, estimatedMinutes: 120, progressPercent: 25 }), {
     title: "Report",
     importance: "high",
     completed: false,
+    estimatedMinutes: 120,
+    progressPercent: 25,
   });
   assert.throws(() => validateItemPatch({ completed: "yes" }), /completed/);
   assert.throws(() => validateItemPatch({ importance: "urgent" }), /importance/);
   assert.throws(() => validateItemPatch({ dueAt: "not-a-date" }), /dueAt/);
   assert.throws(() => validateItemPatch({ injected: true }), /injected/);
+  assert.throws(() => validateItemPatch({ estimatedMinutes: 5 }), /estimatedMinutes/);
+  assert.throws(() => validateItemPatch({ progressPercent: 101 }), /progressPercent/);
 });
 
 test("validatePreferencesPatch rejects invalid nested settings", () => {
@@ -41,12 +45,14 @@ test("validatePreferencesPatch rejects invalid nested settings", () => {
   assert.throws(() => validatePreferencesPatch({ llm: { provider: "unknown" } }), /provider/);
 });
 
-test("validateAgentMemoryPatch enforces capacity, work hours, and reminder frequency", () => {
-  assert.deepEqual(validateAgentMemoryPatch({ maxDailyMinutes: 180, workdayStart: "10:00", workdayEnd: "17:00", reminderFrequency: "daily" }), {
+test("validateAgentMemoryPatch enforces capacity, work hours, reminder frequency, and automation flags", () => {
+  assert.deepEqual(validateAgentMemoryPatch({ maxDailyMinutes: 180, workdayStart: "10:00", workdayEnd: "17:00", reminderFrequency: "daily", automaticInspectionEnabled: false, useLlmPlanning: false }), {
     maxDailyMinutes: 180,
     workdayStart: "10:00",
     workdayEnd: "17:00",
     reminderFrequency: "daily",
+    automaticInspectionEnabled: false,
+    useLlmPlanning: false,
   });
   assert.throws(() => validateAgentMemoryPatch({ maxDailyMinutes: 10 }), /maxDailyMinutes/);
   assert.throws(() => validateAgentMemoryPatch({ workdayStart: "18:00", workdayEnd: "09:00" }), /before/);
@@ -57,5 +63,7 @@ test("validateAgentMemoryPatch enforces capacity, work hours, and reminder frequ
     workdayStart: "15:00",
     workdayEnd: "18:00",
     reminderFrequency: "daily",
+    automaticInspectionEnabled: true,
+    useLlmPlanning: true,
   }), /before/);
 });

@@ -5,6 +5,8 @@ export const defaultAgentMemory: AgentMemory = {
   workdayStart: "09:00",
   workdayEnd: "18:00",
   reminderFrequency: "important-only",
+  automaticInspectionEnabled: true,
+  useLlmPlanning: true,
 };
 
 export function createAgentMemory(value?: Partial<AgentMemory>): AgentMemory {

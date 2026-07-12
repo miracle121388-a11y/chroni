@@ -4,7 +4,7 @@ import { createAgentMemory, updateAgentMemory } from "./agent/agent-memory.js";
 import { cloneAgentRun } from "./agent/agent-state.js";
 import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveLlmSettings } from "./llm-settings.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
-import type { AgentMemory, AgentMemoryPatch, AgentRunResult, AgentTraceEntry, CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, PetPlacement, ServiceStatus, SourceExtractionStatus, SourceRecord } from "./shared/types.js";
+import type { AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, PetPlacement, ServiceStatus, SourceExtractionStatus, SourceRecord } from "./shared/types.js";
 
 export type SecretCodec = {
   encrypt(value: string): string;
@@ -27,6 +27,8 @@ type StoredState = {
   agent: {
     memory: AgentMemory;
     latestRun?: AgentRunResult;
+    appliedPlan?: AgentPlan;
+    lastAutomaticRunAt?: string;
     traceHistory: AgentTraceEntry[][];
   };
 };
@@ -52,6 +54,8 @@ export class ChroniStore {
       agent: {
         memory: { ...this.#state.agent.memory },
         latestRun: this.#state.agent.latestRun ? cloneAgentRun(this.#state.agent.latestRun) : undefined,
+        appliedPlan: this.#state.agent.appliedPlan ? structuredClone(this.#state.agent.appliedPlan) : undefined,
+        lastAutomaticRunAt: this.#state.agent.lastAutomaticRunAt,
       },
     };
   }
@@ -80,7 +84,14 @@ export class ChroniStore {
   saveAgentRun(result: AgentRunResult): ChroniSnapshot {
     const stored = cloneAgentRun(result);
     this.#state.agent.latestRun = stored;
+    if (stored.trigger && stored.trigger !== "manual") this.#state.agent.lastAutomaticRunAt = stored.completedAt;
     this.#state.agent.traceHistory = [stored.trace.map((entry) => ({ ...entry, data: { ...entry.data } })), ...this.#state.agent.traceHistory].slice(0, 10);
+    this.#save();
+    return this.snapshot();
+  }
+
+  saveAppliedAgentPlan(plan: AgentPlan): ChroniSnapshot {
+    this.#state.agent.appliedPlan = structuredClone(plan);
     this.#save();
     return this.snapshot();
   }
@@ -376,6 +387,8 @@ function normalizeAgentState(value: unknown): StoredState["agent"] {
   return {
     memory: createAgentMemory(agent.memory),
     latestRun: agent.latestRun,
+    appliedPlan: agent.appliedPlan ? structuredClone(agent.appliedPlan) : undefined,
+    lastAutomaticRunAt: typeof agent.lastAutomaticRunAt === "string" ? agent.lastAutomaticRunAt : undefined,
     traceHistory: Array.isArray(agent.traceHistory) ? agent.traceHistory.slice(0, 10) : [],
   };
 }

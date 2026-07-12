@@ -461,6 +461,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
           <p>Observe · Plan · Act · Verify</p>
           <h2>今日 Agent 巡检</h2>
         </div>
+        {latest && <span className={`agent-planner-badge planner-${latest.plan.plannerSource ?? "rules"}`}>{agentPlannerLabel(latest.plan.plannerSource)}</span>}
         <button className="agent-run" type="button" disabled={!!busyAction} onClick={() => void runInspection()}>
           {busyAction === "run" ? "巡检中..." : "运行巡检"}
         </button>
@@ -483,7 +484,11 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
         </div>
         <div>
           <span>最近运行</span>
-          <b>{latest ? formatAgentTime(latest.completedAt) : "--"}</b>
+          <b>{latest ? `${agentTriggerLabel(latest.trigger)} · ${formatAgentTime(latest.completedAt)}` : "--"}</b>
+        </div>
+        <div>
+          <span>计划覆盖</span>
+          <b>{latest?.verification.coveragePercent ?? 0}%</b>
         </div>
       </section>
 
@@ -496,6 +501,13 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
               <div><h3>今日建议</h3><p>{latest.verification.summary}</p></div>
             </header>
             <ol className="agent-suggestions">{latest.suggestions.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ol>
+          </section>
+
+          <section className="agent-section">
+            <header className="section-head"><div><h3>执行结果</h3><p>{latest.actions.filter((action) => action.status === "failed").length} 项失败</p></div></header>
+            <div className="agent-action-list">
+              {latest.actions.map((action, index) => <p className={`agent-action action-${action.status}`} key={`${action.tool}-${index}`}><b>{action.tool}</b><span>{action.summary}</span></p>)}
+            </div>
           </section>
 
           <div className="agent-columns">
@@ -548,6 +560,10 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
           <label>开始时间<input type="time" value={memoryDraft.workdayStart} onChange={(event) => patchMemory({ workdayStart: event.target.value })} /></label>
           <label>结束时间<input type="time" value={memoryDraft.workdayEnd} onChange={(event) => patchMemory({ workdayEnd: event.target.value })} /></label>
           <label>提醒频率<select value={memoryDraft.reminderFrequency} onChange={(event) => patchMemory({ reminderFrequency: event.target.value as AgentMemory["reminderFrequency"] })}><option value="important-only">仅高风险</option><option value="daily">每日</option><option value="off">关闭</option></select></label>
+        </div>
+        <div className="agent-setting-toggles">
+          <Toggle label="自动巡检" checked={memoryDraft.automaticInspectionEnabled} onChange={(value) => patchMemory({ automaticInspectionEnabled: value })} />
+          <Toggle label="使用大模型辅助规划" checked={memoryDraft.useLlmPlanning} onChange={(value) => patchMemory({ useLlmPlanning: value })} />
         </div>
         <div className="agent-settings-actions">
           <button className="secondary" type="button" disabled={!!busyAction || !memoryDirty} onClick={() => void saveMemory()}>{busyAction === "memory" ? "保存中..." : "保存 Memory"}</button>
@@ -1213,7 +1229,7 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
     }
     const success = await runItemAction(
       "正在保存",
-      () => update({ title, importance: draft.importance, dueAt: dueAt.toISOString() }),
+      () => update({ title, importance: draft.importance, dueAt: dueAt.toISOString(), estimatedMinutes: draft.estimatedMinutes, progressPercent: draft.progressPercent }),
       { message: `已保存「${title}」。`, tone: "ok" },
       "保存失败，请检查内容后重试。",
     );
@@ -1249,6 +1265,7 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
             <div className="editor-meta">
               <time>{formatDue(item.dueAt)}</time>
               <span className={`remaining tone-${urgency}`}>{item.completed ? "已完成" : remainingText(item.dueAt)}</span>
+              <span>{item.estimatedMinutes ?? (item.importance === "high" ? 90 : item.importance === "medium" ? 60 : 30)} 分钟 · {item.progressPercent ?? 0}%</span>
               <span className={`source-chip ${snoozed ? "snoozed-chip" : ""}`} title={item.sourceSummary}>
                 {snoozed && item.snoozedUntil ? `稍后至 ${formatDue(item.snoozedUntil)}` : source?.sourceName ?? "手动录入"}
               </span>
@@ -1276,6 +1293,8 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
                 const date = new Date(event.target.value);
                 setDraft({ ...draft, dueAt: Number.isNaN(date.getTime()) ? "" : date.toISOString() });
               }} /></label>
+              <label className="edit-field">预计工时<input type="number" min="15" max="1440" step="15" value={draft.estimatedMinutes ?? ""} placeholder="自动" disabled={isBusy} onChange={(event) => setDraft({ ...draft, estimatedMinutes: event.target.value ? Number(event.target.value) : undefined })} /></label>
+              <label className="edit-field">完成进度<input type="number" min="0" max="100" step="5" value={draft.progressPercent ?? 0} disabled={isBusy} onChange={(event) => setDraft({ ...draft, progressPercent: Number(event.target.value) })} /></label>
             </div>
             <div className="ddl-edit-actions">
               <button className="save-edit" type="submit" disabled={isBusy || !draft.title.trim()}>保存</button>
@@ -1402,6 +1421,18 @@ function agentRiskLabel(level: NonNullable<ChroniSnapshot["agent"]["latestRun"]>
 
 function agentStageLabel(stage: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["trace"][number]["stage"]): string {
   return stage === "observe" ? "观察" : stage === "plan" ? "规划" : stage === "act" ? "执行" : "验证";
+}
+
+function agentPlannerLabel(source: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["plan"]["plannerSource"] | undefined): string {
+  if (source === "llm") return "大模型规划";
+  if (source === "rules-fallback") return "模型失败 · 已回退";
+  return "本地规划";
+}
+
+function agentTriggerLabel(trigger: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["trigger"] | undefined): string {
+  if (trigger === "startup") return "启动巡检";
+  if (trigger === "task-change") return "变更巡检";
+  return "手动巡检";
 }
 
 function formatAgentClock(value: string): string {

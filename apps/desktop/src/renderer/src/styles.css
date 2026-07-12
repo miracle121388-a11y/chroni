@@ -1093,6 +1093,19 @@ summary:focus-visible {
   align-items: center;
 }
 
+.agent-planner-badge {
+  margin-left: auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.agent-planner-badge.planner-llm { color: var(--accent-strong); }
+.agent-planner-badge.planner-rules-fallback { color: var(--warning); }
+
 .agent-run {
   min-width: 112px;
   min-height: 38px;
@@ -1105,7 +1118,7 @@ summary:focus-visible {
 
 .agent-status {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   border-block: 1px solid var(--line);
   background: #f7faf9;
 }
@@ -1291,6 +1304,31 @@ summary:focus-visible {
   gap: 8px;
   margin-top: 12px;
 }
+
+.agent-setting-toggles {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.agent-action-list {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-action {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) 1fr;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+.agent-action b { color: var(--text); }
+.agent-action.action-failed { background: var(--danger-soft); }
 
 @media (max-width: 760px) {
   .agent-status {

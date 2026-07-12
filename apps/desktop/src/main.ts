@@ -2,13 +2,16 @@ import { app, BrowserWindow, globalShortcut, ipcMain, Notification, safeStorage,
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DeadlineAgent } from "./agent/deadline-agent.js";
+import { createLlmAgentPlanner } from "./agent/agent-planner.js";
+import { reminderEligibility } from "./agent/agent-reminder.js";
+import { AgentScheduler } from "./agent/agent-scheduler.js";
 import { createAgentTools, type DeadlineAgentTools } from "./agent/agent-tools.js";
 import { startChroniApiServer, type AgentApiOperations } from "./api-server.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import { testLlmConnection } from "./llm-client.js";
 import { resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
-import type { AgentMemoryPatch, AgentRunResult, ChroniLlmSettings, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch } from "./shared/types.js";
+import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, ChroniLlmSettings, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
 import { validateAgentMemoryPatch, validateBoolean, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferencesPatch, validateSourceText } from "./validation.js";
@@ -17,6 +20,8 @@ let store: ChroniStore;
 let apiServer: ReturnType<typeof startChroniApiServer> | undefined;
 let deadlineAgent: DeadlineAgent;
 let agentTools: DeadlineAgentTools;
+let agentScheduler: AgentScheduler;
+let lastTaskFingerprint = "";
 
 app.setName("Chroni");
 const gotLock = app.requestSingleInstanceLock();
@@ -30,6 +35,7 @@ if (!gotLock) {
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");
     store = new ChroniStore(app.getPath("userData"), createSecretCodec());
     installDeadlineAgent();
+    lastTaskFingerprint = taskFingerprint(store.snapshot());
     installIpc();
     createAppWindows({
       petPlacement: store.petPlacement(),
@@ -43,6 +49,9 @@ if (!gotLock) {
         applyPreferences(snapshot.preferences);
         registerHotkey();
       }
+      const nextFingerprint = taskFingerprint(snapshot);
+      if (reason === "data" && lastTaskFingerprint && nextFingerprint !== lastTaskFingerprint) agentScheduler.scheduleTaskChange();
+      lastTaskFingerprint = nextFingerprint;
       broadcast("chroni:snapshot-updated", snapshot);
       refreshScheduleAfterUpdate();
     }, {
@@ -51,6 +60,7 @@ if (!gotLock) {
     });
     refreshCompanionFromSchedule();
     refreshReminders();
+    void agentScheduler.runStartupIfNeeded().catch((error) => console.error("Automatic Agent startup inspection failed.", error));
     console.log("Chroni desktop shell ready.");
   }).catch((error) => {
     console.error("Failed to start Chroni.", error);
@@ -65,6 +75,7 @@ app.on("window-all-closed", () => {
 app.on("activate", () => showControlCenter());
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("before-quit", () => {
+  agentScheduler?.dispose();
   if (apiServer?.listening) apiServer.close();
 });
 
@@ -77,6 +88,7 @@ function installIpc(): void {
     const result = await processIntake(validatedPayload, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
     revealScheduleAfterIntake(result.ok);
+    if (result.ok) scheduleAgentForTaskChange();
     return result;
   });
   ipcMain.handle("chroni:companion-clicked", () => {
@@ -97,11 +109,13 @@ function installIpc(): void {
   });
   ipcMain.handle("chroni:item-update", (_event, id: string, patch: ItemPatch) => {
     const snapshot = store.updateItem(validateIdentifier(id, "item id"), validateItemPatch(patch));
+    scheduleAgentForTaskChange();
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
   ipcMain.handle("chroni:item-delete", (_event, id: string) => {
     const snapshot = store.deleteItem(validateIdentifier(id, "item id"));
+    scheduleAgentForTaskChange();
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
@@ -134,6 +148,7 @@ function installIpc(): void {
     const result = await processIntake(payload, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
     revealScheduleAfterIntake(result.ok);
+    if (result.ok) scheduleAgentForTaskChange();
     return result;
   });
   ipcMain.handle("chroni:open-control", () => showControlCenter());
@@ -145,6 +160,7 @@ function installIpc(): void {
     const result = await reprocessSource(sourceId, store);
     broadcast("chroni:snapshot-updated", result.snapshot);
     refreshScheduleAfterUpdate();
+    if (result.ok) scheduleAgentForTaskChange();
     return result;
   });
   ipcMain.handle("chroni:source-update-text", (_event, sourceId: string, text: string) => {
@@ -168,22 +184,46 @@ function installDeadlineAgent(): void {
     },
     sendReminder: async (task) => {
       const preferences = store.snapshot().preferences;
-      if (!preferences.remindersEnabled || !Notification.isSupported()) return;
+      const item = store.snapshot().items.find((candidate) => candidate.id === task.taskId);
+      const outcome = reminderEligibility({
+        enabled: preferences.remindersEnabled,
+        supported: Notification.isSupported(),
+        inQuietHours: inQuietHours(preferences.quietHoursEnabled, preferences.quietHoursStart, preferences.quietHoursEnd),
+        lastRemindedAt: item?.lastRemindedAt,
+        now: new Date(),
+      });
+      if (!outcome.sent) return outcome;
       new Notification({
         title: "Chroni Agent：高风险 DDL",
         body: `${task.title} · ${task.reasons[0] ?? "需要优先处理"}`,
       }).show();
+      store.markItemReminded(task.taskId);
+      return outcome;
     },
+    persistPlan: (plan) => { store.saveAppliedAgentPlan(plan); },
   });
   deadlineAgent = new DeadlineAgent({
     tools: agentTools,
     getMemory: () => store.snapshot().agent.memory,
     saveRun: (result) => { store.saveAgentRun(result); },
+    planner: {
+      propose: (context) => {
+        const settings = resolveLlmSettings(store.snapshot().preferences.llm);
+        if (!settings.enabled || !settings.apiKey || !settings.model) return Promise.resolve({ fallbackReason: "unavailable" });
+        return createLlmAgentPlanner(settings).propose(context);
+      },
+    },
+  });
+  agentScheduler = new AgentScheduler({
+    run: (trigger) => runDeadlineAgentAndPublish(trigger),
+    getMemory: () => store.snapshot().agent.memory,
+    getLatestRun: () => store.snapshot().agent.latestRun,
+    getLastAutomaticRunAt: () => store.snapshot().agent.lastAutomaticRunAt,
   });
 }
 
-async function runDeadlineAgentAndPublish(): Promise<AgentRunResult> {
-  const result = await deadlineAgent.run();
+async function runDeadlineAgentAndPublish(trigger: AgentRunTrigger = "manual"): Promise<AgentRunResult> {
+  const result = await deadlineAgent.run(trigger);
   const highRiskCount = result.priorities.filter((item) => item.riskLevel === "high" || item.riskLevel === "critical").length;
   const bubble = highRiskCount
     ? `Agent 巡检完成：${highRiskCount} 个高风险 DDL。`
@@ -192,6 +232,15 @@ async function runDeadlineAgentAndPublish(): Promise<AgentRunResult> {
   broadcast("chroni:snapshot-updated", snapshot);
   refreshScheduleAfterUpdate();
   return result;
+}
+
+function scheduleAgentForTaskChange(): void {
+  lastTaskFingerprint = taskFingerprint(store.snapshot());
+  agentScheduler.scheduleTaskChange();
+}
+
+function taskFingerprint(snapshot: ChroniSnapshot): string {
+  return snapshot.items.map((item) => [item.id, item.title, item.dueAt, item.importance, item.completed, item.snoozedUntil ?? "", item.estimatedMinutes ?? "", item.progressPercent ?? ""].join("|")).sort().join("\n");
 }
 
 function agentApiOperations(): AgentApiOperations {

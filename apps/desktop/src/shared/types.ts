@@ -33,11 +33,15 @@ export type AgentMemory = {
   workdayStart: string;
   workdayEnd: string;
   reminderFrequency: AgentReminderFrequency;
+  automaticInspectionEnabled: boolean;
+  useLlmPlanning: boolean;
 };
 
 export type AgentMemoryPatch = Partial<AgentMemory>;
 
 export type AgentRiskLevel = "low" | "medium" | "high" | "critical";
+export type AgentRunTrigger = "manual" | "startup" | "task-change";
+export type AgentPlannerSource = "rules" | "llm" | "rules-fallback";
 
 export type AgentTaskAssessment = {
   taskId: string;
@@ -70,9 +74,20 @@ export type AgentWorkBlock = {
 
 export type AgentPlan = {
   blocks: AgentWorkBlock[];
+  requestedMinutes?: number;
   plannedMinutes: number;
   overflowMinutes: number;
   unplannedTaskIds: string[];
+  plannerSource?: AgentPlannerSource;
+  fallbackReason?: string;
+  coverage?: AgentTaskCoverage[];
+};
+
+export type AgentTaskCoverage = {
+  taskId: string;
+  requiredMinutes: number;
+  allocatedMinutes: number;
+  coveragePercent: number;
 };
 
 export type AgentTraceStage = "observe" | "plan" | "act" | "verify";
@@ -99,6 +114,9 @@ export type AgentVerification = {
   unplannedPriorityTaskIds: string[];
   capacityOverflowMinutes: number;
   summary: string;
+  highRiskTaskIds?: string[];
+  mitigatedHighRiskTaskIds?: string[];
+  coveragePercent?: number;
 };
 
 export type AgentRunResult = {
@@ -112,11 +130,15 @@ export type AgentRunResult = {
   verification: AgentVerification;
   suggestions: string[];
   trace: AgentTraceEntry[];
+  trigger?: AgentRunTrigger;
+  plannerSource?: AgentPlannerSource;
 };
 
 export type AgentSnapshot = {
   memory: AgentMemory;
   latestRun?: AgentRunResult;
+  appliedPlan?: AgentPlan;
+  lastAutomaticRunAt?: string;
 };
 
 export type AgentIcsExportResult = {
@@ -136,6 +158,8 @@ export type DdlItem = {
   completed: boolean;
   snoozedUntil?: string;
   lastRemindedAt?: string;
+  estimatedMinutes?: number;
+  progressPercent?: number;
 };
 
 export type SourceRecord = {
@@ -235,4 +259,4 @@ export type IntakeResult =
   | { ok: true; created: DdlItem[]; message: string; snapshot: ChroniSnapshot }
   | { ok: false; reason: string; snapshot: ChroniSnapshot };
 
-export type ItemPatch = Partial<Pick<DdlItem, "title" | "importance" | "dueAt" | "sourceSummary" | "completed" | "snoozedUntil">>;
+export type ItemPatch = Partial<Pick<DdlItem, "title" | "importance" | "dueAt" | "sourceSummary" | "completed" | "snoozedUntil" | "estimatedMinutes" | "progressPercent">>;

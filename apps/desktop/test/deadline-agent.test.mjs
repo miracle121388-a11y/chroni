@@ -18,8 +18,8 @@ function task(id, dueAt, importance = "medium") {
   };
 }
 
-function harness(items, memoryPatch = {}) {
-  const calls = { read: 0, plan: 0, replan: 0, reminder: 0, save: 0 };
+function harness(items, memoryPatch = {}, options = {}) {
+  const calls = { read: 0, plan: 0, replan: 0, reminder: 0, persist: 0, save: 0 };
   let saved;
   const tools = {
     async readTasks() {
@@ -37,10 +37,13 @@ function harness(items, memoryPatch = {}) {
     },
     async sendReminder() {
       calls.reminder += 1;
+      return options.reminderResult ?? { sent: true, reason: "sent" };
     },
+    async persistPlan() { calls.persist += 1; },
   };
   const agent = new DeadlineAgent({
     tools,
+    planner: options.planner,
     getMemory: () => createAgentMemory(memoryPatch),
     saveRun: async (result) => {
       calls.save += 1;
@@ -60,13 +63,14 @@ test("DeadlineAgent performs a high-risk observe-plan-act-verify loop", async ()
 
   const result = await agent.run();
 
-  assert.deepEqual(calls, { read: 1, plan: 1, replan: 1, reminder: 1, save: 1 });
+  assert.deepEqual(calls, { read: 1, plan: 1, replan: 1, reminder: 1, persist: 1, save: 1 });
   assert.equal(result.id, "agent-run-test");
   assert.equal(result.observation.activeCount, 2);
   assert.equal(result.priorities[0].taskId, "overdue");
-  assert.equal(result.actions.some((action) => action.tool === "replan" && action.status === "success"), true);
+  assert.equal(result.actions.some((action) => action.tool === "replan"), true);
   assert.deepEqual(result.trace.map((entry) => entry.stage), ["observe", "plan", "act", "act", "verify"]);
-  assert.equal(result.verification.status, "attention");
+  assert.equal(result.verification.status, "healthy");
+  assert.equal(result.trigger, "manual");
   assert.equal(saved()?.id, result.id);
 });
 
@@ -109,4 +113,48 @@ test("daily reminder frequency notifies the highest priority non-high-risk task"
 
   assert.equal(calls.replan, 0);
   assert.equal(calls.reminder, 1);
+});
+
+test("DeadlineAgent uses a valid model proposal and persists the applied plan", async () => {
+  const planner = {
+    async propose() {
+      return { proposal: { allocations: [{ taskId: "urgent", minutes: 60 }], suggestions: ["先完成紧急报告。"] } };
+    },
+  };
+  const { agent, calls } = harness([
+    { ...task("urgent", new Date(2026, 6, 11, 12, 0).toISOString(), "high"), estimatedMinutes: 60 },
+  ], {}, { planner });
+
+  const result = await agent.run("startup");
+
+  assert.equal(result.plan.plannerSource, "llm");
+  assert.equal(result.plannerSource, "llm");
+  assert.equal(result.trigger, "startup");
+  assert.equal(calls.persist, 1);
+  assert.match(result.suggestions[0], /紧急报告/);
+});
+
+test("DeadlineAgent records model fallback and a disabled reminder truthfully", async () => {
+  const planner = { async propose() { return { fallbackReason: "request-failed" }; } };
+  const { agent } = harness([
+    task("urgent", new Date(2026, 6, 11, 12, 0).toISOString(), "high"),
+  ], {}, { planner, reminderResult: { sent: false, reason: "disabled" } });
+
+  const result = await agent.run();
+
+  assert.equal(result.plan.plannerSource, "rules-fallback");
+  assert.equal(result.actions.find((action) => action.tool === "reminder")?.status, "skipped");
+  assert.match(result.actions.find((action) => action.tool === "reminder")?.summary ?? "", /disabled/);
+  assert.equal(result.trace.some((entry) => entry.data.fallbackReason === "request-failed"), true);
+});
+
+test("DeadlineAgent falls back when an injected planner throws", async () => {
+  const planner = { async propose() { throw new Error("secret upstream detail"); } };
+  const { agent } = harness([task("urgent", new Date(2026, 6, 11, 12, 0).toISOString(), "high")], {}, { planner });
+
+  const result = await agent.run();
+
+  assert.equal(result.plan.plannerSource, "rules-fallback");
+  assert.equal(result.trace.some((entry) => entry.data.fallbackReason === "request-failed"), true);
+  assert.equal(JSON.stringify(result).includes("secret upstream detail"), false);
 });

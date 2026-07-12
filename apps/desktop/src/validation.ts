@@ -32,7 +32,7 @@ export function validateIntakePayload(value: unknown): IntakePayload {
 
 export function validateItemPatch(value: unknown): ItemPatch {
   const patch = record(value, "item patch");
-  const allowed = ["title", "importance", "dueAt", "sourceSummary", "completed", "snoozedUntil"];
+  const allowed = ["title", "importance", "dueAt", "sourceSummary", "completed", "snoozedUntil", "estimatedMinutes", "progressPercent"];
   knownKeys(patch, allowed, "item patch");
   if (!Object.keys(patch).length) fail("item patch must contain at least one field.");
   const result: ItemPatch = {};
@@ -45,6 +45,14 @@ export function validateItemPatch(value: unknown): ItemPatch {
   if (patch.sourceSummary !== undefined) result.sourceSummary = boundedString(patch.sourceSummary, "sourceSummary", 500);
   if (patch.completed !== undefined) result.completed = booleanValue(patch.completed, "completed");
   if (patch.snoozedUntil !== undefined) result.snoozedUntil = dateString(patch.snoozedUntil, "snoozedUntil");
+  if (patch.estimatedMinutes !== undefined) {
+    if (!Number.isInteger(patch.estimatedMinutes) || (patch.estimatedMinutes as number) < 15 || (patch.estimatedMinutes as number) > 1_440) fail("estimatedMinutes must be an integer from 15 to 1440.");
+    result.estimatedMinutes = patch.estimatedMinutes as number;
+  }
+  if (patch.progressPercent !== undefined) {
+    if (!Number.isInteger(patch.progressPercent) || (patch.progressPercent as number) < 0 || (patch.progressPercent as number) > 100) fail("progressPercent must be an integer from 0 to 100.");
+    result.progressPercent = patch.progressPercent as number;
+  }
   return result;
 }
 
@@ -90,7 +98,7 @@ export function validateLlmSettings(value: unknown): ChroniLlmSettings {
 
 export function validateAgentMemoryPatch(value: unknown, current?: AgentMemory): AgentMemoryPatch {
   const patch = record(value, "agent memory");
-  knownKeys(patch, ["maxDailyMinutes", "workdayStart", "workdayEnd", "reminderFrequency"], "agent memory");
+  knownKeys(patch, ["maxDailyMinutes", "workdayStart", "workdayEnd", "reminderFrequency", "automaticInspectionEnabled", "useLlmPlanning"], "agent memory");
   const result: AgentMemoryPatch = {};
   if (patch.maxDailyMinutes !== undefined) {
     if (!Number.isInteger(patch.maxDailyMinutes) || (patch.maxDailyMinutes as number) < 30 || (patch.maxDailyMinutes as number) > 720) {
@@ -106,6 +114,8 @@ export function validateAgentMemoryPatch(value: unknown, current?: AgentMemory):
     }
     result.reminderFrequency = patch.reminderFrequency;
   }
+  if (patch.automaticInspectionEnabled !== undefined) result.automaticInspectionEnabled = booleanValue(patch.automaticInspectionEnabled, "agent memory.automaticInspectionEnabled");
+  if (patch.useLlmPlanning !== undefined) result.useLlmPlanning = booleanValue(patch.useLlmPlanning, "agent memory.useLlmPlanning");
   const start = result.workdayStart ?? current?.workdayStart ?? "09:00";
   const end = result.workdayEnd ?? current?.workdayEnd ?? "18:00";
   if (minutesOfClock(start) >= minutesOfClock(end)) fail("agent memory.workdayStart must be before workdayEnd.");

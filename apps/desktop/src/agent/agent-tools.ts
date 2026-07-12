@@ -5,7 +5,8 @@ export type DeadlineAgentTools = {
   assessRisks(tasks: DdlItem[], now: Date): AgentTaskAssessment[];
   plan(risks: AgentTaskAssessment[], memory: AgentMemory, now: Date): AgentPlan;
   replan(risks: AgentTaskAssessment[], memory: AgentMemory, now: Date): AgentPlan | Promise<AgentPlan>;
-  sendReminder(task: AgentTaskAssessment): Promise<void>;
+  sendReminder(task: AgentTaskAssessment): Promise<AgentReminderResult | void>;
+  persistPlan?(plan: AgentPlan): Promise<void> | void;
   intakeText?(text: string): Promise<IntakeResult>;
   exportIcs?(): Promise<AgentIcsExportResult>;
 };
@@ -14,7 +15,8 @@ export type AgentToolDependencies = {
   readTasks(): DdlItem[];
   intakeText(text: string): Promise<IntakeResult>;
   writeIcs(content: string, fileName: string): string | Promise<string>;
-  sendReminder(task: AgentTaskAssessment): Promise<void>;
+  sendReminder(task: AgentTaskAssessment): Promise<AgentReminderResult | void>;
+  persistPlan?(plan: AgentPlan): Promise<void> | void;
   now?: () => Date;
 };
 
@@ -24,8 +26,9 @@ export function createAgentTools(dependencies: AgentToolDependencies): DeadlineA
     readTasks: async () => dependencies.readTasks().map((item) => ({ ...item })),
     assessRisks: assessTaskRisks,
     plan: planWorkBlocks,
-    replan: planWorkBlocks,
+    replan: replanWorkBlocks,
     sendReminder: dependencies.sendReminder,
+    persistPlan: dependencies.persistPlan,
     intakeText: dependencies.intakeText,
     async exportIcs() {
       const tasks = dependencies.readTasks().filter((item) => !item.completed);
@@ -35,6 +38,11 @@ export function createAgentTools(dependencies: AgentToolDependencies): DeadlineA
     },
   };
 }
+
+export type AgentReminderResult = {
+  sent: boolean;
+  reason: "sent" | "disabled" | "unsupported" | "quiet-hours" | "duplicate" | "not-needed";
+};
 
 export function observeTasks(items: DdlItem[], now = new Date()): AgentObservation {
   const incomplete = items.filter((item) => !item.completed);
@@ -67,6 +75,7 @@ export function planWorkBlocks(assessments: AgentTaskAssessment[], memory: Agent
   const unplannedTaskIds: string[] = [];
 
   for (const assessment of assessments) {
+    if (assessment.estimatedMinutes <= 0) continue;
     if (remainingCapacity <= 0) {
       unplannedTaskIds.push(assessment.taskId);
       continue;
@@ -88,10 +97,70 @@ export function planWorkBlocks(assessments: AgentTaskAssessment[], memory: Agent
   const plannedMinutes = blocks.reduce((sum, block) => sum + block.allocatedMinutes, 0);
   return {
     blocks,
+    requestedMinutes: totalRequested,
     plannedMinutes,
     overflowMinutes: Math.max(0, totalRequested - plannedMinutes),
     unplannedTaskIds,
+    plannerSource: "rules",
+    coverage: planCoverage(assessments, blocks),
   };
+}
+
+export function replanWorkBlocks(assessments: AgentTaskAssessment[], memory: AgentMemory, now = new Date()): AgentPlan {
+  const workdayStart = atLocalClock(now, memory.workdayStart);
+  const workdayEnd = atLocalClock(now, memory.workdayEnd);
+  const cursor = new Date(Math.max(now.getTime(), workdayStart.getTime()));
+  let capacity = Math.min(memory.maxDailyMinutes, Math.max(0, Math.floor((workdayEnd.getTime() - cursor.getTime()) / 60_000)));
+  const allocations = new Map(assessments.map((item) => [item.taskId, 0]));
+  const urgent = assessments.filter((item) => item.riskLevel === "high" || item.riskLevel === "critical");
+
+  for (const item of urgent) {
+    if (capacity < 15) break;
+    const minutes = Math.min(item.estimatedMinutes, 15, capacity);
+    allocations.set(item.taskId, minutes);
+    capacity -= minutes;
+  }
+  for (const item of assessments) {
+    if (capacity <= 0) break;
+    const allocated = allocations.get(item.taskId) ?? 0;
+    const minutes = Math.min(item.estimatedMinutes - allocated, capacity);
+    allocations.set(item.taskId, allocated + minutes);
+    capacity -= minutes;
+  }
+
+  let blockCursor = cursor;
+  const blocks: AgentPlan["blocks"] = [];
+  for (const item of assessments) {
+    const allocatedMinutes = allocations.get(item.taskId) ?? 0;
+    if (allocatedMinutes <= 0) continue;
+    const end = new Date(blockCursor.getTime() + allocatedMinutes * 60_000);
+    blocks.push({ taskId: item.taskId, title: item.title, startAt: blockCursor.toISOString(), endAt: end.toISOString(), allocatedMinutes });
+    blockCursor = end;
+  }
+  const requestedMinutes = assessments.reduce((sum, item) => sum + item.estimatedMinutes, 0);
+  const plannedMinutes = blocks.reduce((sum, block) => sum + block.allocatedMinutes, 0);
+  const coverage = planCoverage(assessments, blocks);
+  return {
+    blocks,
+    requestedMinutes,
+    plannedMinutes,
+    overflowMinutes: Math.max(0, requestedMinutes - plannedMinutes),
+    unplannedTaskIds: coverage.filter((item) => item.allocatedMinutes < item.requiredMinutes).map((item) => item.taskId),
+    plannerSource: "rules",
+    coverage,
+  };
+}
+
+export function planCoverage(assessments: AgentTaskAssessment[], blocks: AgentPlan["blocks"]): NonNullable<AgentPlan["coverage"]> {
+  return assessments.map((item) => {
+    const allocatedMinutes = blocks.filter((block) => block.taskId === item.taskId).reduce((sum, block) => sum + block.allocatedMinutes, 0);
+    return {
+      taskId: item.taskId,
+      requiredMinutes: item.estimatedMinutes,
+      allocatedMinutes,
+      coveragePercent: item.estimatedMinutes ? Math.min(100, Math.round(allocatedMinutes / item.estimatedMinutes * 100)) : 100,
+    };
+  });
 }
 
 export function serializeTasksToIcs(items: DdlItem[], generatedAt = new Date()): string {
@@ -147,9 +216,15 @@ function assessTaskRisk(item: DdlItem, now: Date): AgentTaskAssessment {
     importance: item.importance,
     riskLevel: score >= 90 ? "critical" : score >= 60 ? "high" : score >= 35 ? "medium" : "low",
     score,
-    estimatedMinutes: item.importance === "high" ? 90 : item.importance === "medium" ? 60 : 30,
+    estimatedMinutes: remainingEffort(item),
     reasons,
   };
+}
+
+function remainingEffort(item: DdlItem): number {
+  const estimate = item.estimatedMinutes ?? (item.importance === "high" ? 90 : item.importance === "medium" ? 60 : 30);
+  const progress = item.progressPercent ?? 0;
+  return Math.max(0, Math.ceil(estimate * (100 - progress) / 100));
 }
 
 function atLocalClock(date: Date, value: string): Date {

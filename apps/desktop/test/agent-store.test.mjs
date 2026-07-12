@@ -35,10 +35,49 @@ test("store persists Agent memory and latest run with bounded trace history", ()
       workdayStart: "10:00",
       workdayEnd: "17:00",
       reminderFrequency: "daily",
+      automaticInspectionEnabled: true,
+      useLlmPlanning: true,
     });
     assert.equal(reloaded.snapshot().agent.latestRun?.id, "run-11");
     assert.equal(reloaded.agentTraceHistory().length, 10);
     assert.equal(reloaded.agentTraceHistory()[0][0].data.index, 11);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("store persists the applied Agent plan", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-agent-plan-store-"));
+  try {
+    const store = new ChroniStore(dir);
+    const plan = {
+      blocks: [{ taskId: "ddl-1", title: "Report", startAt: "2026-07-12T09:00:00.000Z", endAt: "2026-07-12T10:00:00.000Z", allocatedMinutes: 60 }],
+      requestedMinutes: 90,
+      plannedMinutes: 60,
+      overflowMinutes: 30,
+      unplannedTaskIds: ["ddl-1"],
+      plannerSource: "rules",
+      coverage: [{ taskId: "ddl-1", requiredMinutes: 90, allocatedMinutes: 60, coveragePercent: 67 }],
+    };
+
+    store.saveAppliedAgentPlan(plan);
+
+    assert.deepEqual(new ChroniStore(dir).snapshot().agent.appliedPlan, plan);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("store remembers the last automatic Agent run independently", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-agent-auto-store-"));
+  try {
+    const store = new ChroniStore(dir);
+    store.saveAgentRun({ ...runResult(1), trigger: "startup" });
+    store.saveAgentRun({ ...runResult(2), trigger: "manual" });
+
+    const agent = new ChroniStore(dir).snapshot().agent;
+    assert.equal(agent.latestRun?.trigger, "manual");
+    assert.equal(agent.lastAutomaticRunAt, runResult(1).completedAt);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

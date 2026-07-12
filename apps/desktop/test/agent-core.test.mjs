@@ -3,7 +3,8 @@ import test from "node:test";
 
 import { createAgentMemory, updateAgentMemory } from "../dist/agent/agent-memory.js";
 import { createTraceRecorder } from "../dist/agent/agent-trace.js";
-import { assessTaskRisks, observeTasks, planWorkBlocks, serializeTasksToIcs } from "../dist/agent/agent-tools.js";
+import { assessTaskRisks, observeTasks, planWorkBlocks, replanWorkBlocks, serializeTasksToIcs } from "../dist/agent/agent-tools.js";
+import { verifyAgentPlan } from "../dist/agent/agent-state.js";
 
 function task(id, title, dueAt, importance = "medium", extra = {}) {
   return {
@@ -25,12 +26,16 @@ test("agent memory has stable defaults and applies explicit patches", () => {
     workdayStart: "09:00",
     workdayEnd: "18:00",
     reminderFrequency: "important-only",
+    automaticInspectionEnabled: true,
+    useLlmPlanning: true,
   });
   assert.deepEqual(updateAgentMemory(createAgentMemory(), { maxDailyMinutes: 180, workdayStart: "10:00" }), {
     maxDailyMinutes: 180,
     workdayStart: "10:00",
     workdayEnd: "18:00",
     reminderFrequency: "important-only",
+    automaticInspectionEnabled: true,
+    useLlmPlanning: true,
   });
 });
 
@@ -83,6 +88,49 @@ test("work planning stays inside preferred hours and daily capacity", () => {
   assert.equal(plan.overflowMinutes, 30);
   assert.equal(plan.blocks[0].startAt, new Date(2026, 6, 11, 10, 0, 0, 0).toISOString());
   assert.equal(plan.blocks[1].endAt, new Date(2026, 6, 11, 12, 0, 0, 0).toISOString());
+});
+
+test("risk-first replanning gives every high-risk task useful coverage", () => {
+  const now = new Date(2026, 6, 11, 9, 0, 0, 0);
+  const memory = { ...createAgentMemory(), maxDailyMinutes: 90 };
+  const risks = assessTaskRisks([
+    task("a", "Critical report", new Date(2026, 6, 11, 10, 0).toISOString(), "high", { estimatedMinutes: 90 }),
+    task("b", "Critical demo", new Date(2026, 6, 11, 11, 0).toISOString(), "high", { estimatedMinutes: 90 }),
+  ], now);
+
+  const initial = planWorkBlocks(risks, memory, now);
+  const replanned = replanWorkBlocks(risks, memory, now);
+
+  assert.equal(initial.coverage.filter((item) => item.allocatedMinutes === 0).length, 1);
+  assert.equal(replanned.coverage.filter((item) => item.allocatedMinutes === 0).length, 0);
+  assert.equal(replanned.plannerSource, "rules");
+});
+
+test("verification treats fully covered high-risk tasks as mitigated", () => {
+  const now = new Date(2026, 6, 11, 9, 0, 0, 0);
+  const risks = assessTaskRisks([
+    task("a", "Urgent report", new Date(2026, 6, 11, 12, 0).toISOString(), "high", { estimatedMinutes: 60 }),
+  ], now);
+  const plan = planWorkBlocks(risks, { ...createAgentMemory(), maxDailyMinutes: 120 }, now);
+
+  const verification = verifyAgentPlan(risks, plan);
+
+  assert.deepEqual(verification.mitigatedHighRiskTaskIds, ["a"]);
+  assert.deepEqual(verification.unresolvedHighRiskTaskIds, []);
+  assert.equal(verification.status, "healthy");
+  assert.equal(verification.coveragePercent, 100);
+});
+
+test("planning does not create zero-minute blocks for fully progressed tasks", () => {
+  const now = new Date(2026, 6, 11, 9, 0, 0, 0);
+  const risks = assessTaskRisks([
+    task("done-work", "Awaiting confirmation", new Date(2026, 6, 11, 12, 0).toISOString(), "high", { estimatedMinutes: 60, progressPercent: 100 }),
+  ], now);
+
+  const plan = planWorkBlocks(risks, createAgentMemory(), now);
+
+  assert.deepEqual(plan.blocks, []);
+  assert.equal(plan.coverage[0].coveragePercent, 100);
 });
 
 test("ICS serialization exports active tasks without source text", () => {
