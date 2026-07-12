@@ -1,4 +1,17 @@
 const { spawn } = require("node:child_process");
+const { existsSync } = require("node:fs");
+const { resolve } = require("node:path");
+
+const defaultEnvPath = resolve(__dirname, "../../..", ".env");
+
+function loadChroniEnvironment(filePath = defaultEnvPath, loadEnvFile = process.loadEnvFile) {
+  if (!existsSync(filePath)) return false;
+  if (typeof loadEnvFile !== "function") {
+    throw new Error("Chroni .env loading requires Node.js 22.13 or newer.");
+  }
+  loadEnvFile(filePath);
+  return true;
+}
 
 function sanitizedElectronEnvironment(source = process.env) {
   const environment = { ...source };
@@ -7,6 +20,7 @@ function sanitizedElectronEnvironment(source = process.env) {
 }
 
 function runElectron(args = process.argv.slice(2)) {
+  loadChroniEnvironment();
   const electronPath = require("electron");
   const child = spawn(electronPath, args, {
     cwd: process.cwd(),
@@ -33,4 +47,4 @@ function runElectron(args = process.argv.slice(2)) {
 
 if (require.main === module) runElectron();
 
-module.exports = { runElectron, sanitizedElectronEnvironment };
+module.exports = { loadChroniEnvironment, runElectron, sanitizedElectronEnvironment };

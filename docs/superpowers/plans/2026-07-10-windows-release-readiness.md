@@ -117,7 +117,7 @@
 - [ ] Implement the warning while retaining the valid local result.
 - [ ] Catch renderer async failures and release busy state consistently.
 - [ ] Document Windows startup, DeepSeek configuration, local API authentication, tests, and packaging.
-- [ ] Add a Node 20 CI workflow running `pnpm run check`.
+- [ ] Add a Node 24 CI workflow running `pnpm run check`.
 
 ### Task 7: Release Verification
 

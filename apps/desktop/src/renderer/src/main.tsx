@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { formatOperationError } from "../../shared/errors";
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
-import type { AgentMemory, CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, SourceRecord } from "../../shared/types";
+import type { AgentMemory, CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, ServiceStatus, SourceRecord } from "../../shared/types";
 import "./styles.css";
 
 const api = window.chroni;
@@ -375,7 +375,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
       <section className="content">
         {tab === "schedule" && <CorrectionPane snapshot={snapshot} setSnapshot={setSnapshot} />}
         {tab === "agent" && <AgentPane snapshot={snapshot} setSnapshot={setSnapshot} />}
-        {tab === "preferences" && <PreferencesPane preferences={snapshot.preferences} setSnapshot={setSnapshot} />}
+        {tab === "preferences" && <PreferencesPane preferences={snapshot.preferences} services={snapshot.services} setSnapshot={setSnapshot} />}
         {tab === "services" && <ServicesPane snapshot={snapshot} setSnapshot={setSnapshot} />}
       </section>
     </main>
@@ -596,7 +596,7 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
         return;
       }
       const payload: IntakePayload = { kind: "files", files };
-      const usingLlm = snapshot.preferences.llm.enabled && !!snapshot.preferences.llm.apiKey;
+      const usingLlm = snapshot.services.model === "ready";
       setBusyMessage(usingLlm
         ? (fill ? "正在解析文件并交给 DeepSeek..." : "正在解析文件并由 DeepSeek 抽取...")
         : (fill ? "正在填入日程..." : "正在预览抽取..."));
@@ -779,7 +779,7 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
   );
 }
 
-function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPreferences; setSnapshot: ViewProps["setSnapshot"] }) {
+function PreferencesPane({ preferences, services, setSnapshot }: { preferences: ChroniPreferences; services: ServiceStatus; setSnapshot: ViewProps["setSnapshot"] }) {
   const [llmDraft, setLlmDraft] = useState<Pick<ChroniLlmSettings, "baseUrl" | "model" | "apiKey">>({
     baseUrl: preferences.llm.baseUrl,
     model: preferences.llm.model,
@@ -824,7 +824,8 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
       setLlmBusy(false);
     }
   }
-  const modelMode = preferences.llm.enabled && preferences.llm.apiKey ? "LLM 优先" : "本地规则";
+  const modelMode = services.model === "ready" ? "LLM 优先" : "本地规则";
+  const effectiveLlmEnabled = services.modelEnabledOverride ?? preferences.llm.enabled;
   return (
     <div className="pane narrow settings-pane">
       <header className="pane-head">
@@ -880,7 +881,12 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
           </div>
           <span className="mode-chip">{modelMode}</span>
         </div>
-        <Toggle label="启用 LLM 抽取" checked={preferences.llm.enabled} onChange={(value) => void patch({ llm: { enabled: value } })} />
+        <Toggle
+          label={services.modelEnabledOverride === undefined ? "启用 LLM 抽取" : "启用 LLM 抽取（由环境变量控制）"}
+          checked={effectiveLlmEnabled}
+          disabled={services.modelEnabledOverride !== undefined}
+          onChange={(value) => void patch({ llm: { enabled: value } })}
+        />
         <details className="advanced-settings">
           <summary>大模型 API</summary>
           <label className="text-field">Base URL<input value={llmDraft.baseUrl} placeholder="https://api.deepseek.com" onChange={(event) => updateLlmDraft("baseUrl", event.target.value)} /></label>
@@ -893,6 +899,7 @@ function PreferencesPane({ preferences, setSnapshot }: { preferences: ChroniPref
             {llmDirty && <span>有未保存的修改</span>}
           </div>
           {llmFeedback && <p className={`llm-feedback ${llmFeedback.tone}`} role="status" aria-live="polite">{llmFeedback.message}</p>}
+          {services.modelEnvironmentConfigured && <p className="llm-feedback ok" role="status">检测到 `.env` 或系统环境变量中的 LLM 配置；环境变量优先，API Key 不会回填到界面。</p>}
         </details>
       </section>
     </div>
@@ -1313,11 +1320,11 @@ function DdlRow({ item, source, setSnapshot, editable, onAction }: { item: DdlIt
   );
 }
 
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange(value: boolean): void }) {
+function Toggle({ label, checked, disabled = false, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange(value: boolean): void }) {
   return (
     <label className="toggle">
       <span>{label}</span>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
     </label>
   );
 }

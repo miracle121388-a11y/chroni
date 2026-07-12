@@ -185,6 +185,8 @@ export type ServiceStatus = {
   parser: ServiceState;
   ocr: ServiceState;
   model: ServiceState;
+  modelEnvironmentConfigured: boolean;
+  modelEnabledOverride?: boolean;
   storagePath: string;
   privacy: string;
   notes: string[];

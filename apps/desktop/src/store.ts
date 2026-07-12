@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, join } from "node:path";
 import { createAgentMemory, updateAgentMemory } from "./agent/agent-memory.js";
 import { cloneAgentRun } from "./agent/agent-state.js";
+import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveLlmSettings } from "./llm-settings.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
 import type { AgentMemory, AgentMemoryPatch, AgentRunResult, AgentTraceEntry, CompanionState, DdlItem, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, ItemPatch, PetPlacement, ServiceStatus, SourceExtractionStatus, SourceRecord } from "./shared/types.js";
 
@@ -246,14 +247,17 @@ export class ChroniStore {
   }
 
   serviceStatus(): ServiceStatus {
-    const envKey = process.env.CHRONI_LLM_API_KEY ?? "";
     const llm = this.#state.preferences.llm;
-    const modelEnabled = llm.enabled || process.env.CHRONI_LLM_ENABLED === "1";
-    const modelReady = modelEnabled && !!(llm.apiKey || envKey);
+    const resolvedLlm = resolveLlmSettings(llm);
+    const modelEnabled = resolvedLlm.enabled;
+    const modelReady = modelEnabled && !!resolvedLlm.apiKey;
+    const environmentConfigured = hasLlmEnvironmentConfiguration();
     return {
       parser: "ready",
       ocr: "ready",
       model: modelReady ? "ready" : "limited",
+      modelEnvironmentConfigured: environmentConfigured,
+      modelEnabledOverride: llmEnabledEnvironmentOverride(),
       storagePath: this.filePath,
       privacy: modelEnabled
         ? "日程和来源保存在本机；启用 LLM 时，抽取文本会发送到你配置的模型服务。"
@@ -261,7 +265,7 @@ export class ChroniStore {
       notes: [
         "已支持文本、PDF、DOCX、XLSX、CSV、网页/结构化文本和图片 OCR 的本地抽取。",
         modelReady
-          ? `LLM 智能抽取已启用，当前模型：${llm.model || process.env.CHRONI_LLM_MODEL || "未设置"}。`
+          ? `LLM 智能抽取已启用，当前模型：${resolvedLlm.model || "未设置"}${environmentConfigured ? "（环境变量优先）" : ""}。`
           : "未配置 LLM API Key 时会使用本地规则抽取；配置后优先使用大模型抽取并自动回退。",
         this.secretCodec
           ? "LLM API Key 使用操作系统安全存储加密。"

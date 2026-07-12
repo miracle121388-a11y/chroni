@@ -6,6 +6,7 @@ import { createAgentTools, type DeadlineAgentTools } from "./agent/agent-tools.j
 import { startChroniApiServer, type AgentApiOperations } from "./api-server.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import { testLlmConnection } from "./llm-client.js";
+import { resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
 import type { AgentMemoryPatch, AgentRunResult, ChroniLlmSettings, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
@@ -113,7 +114,7 @@ function installIpc(): void {
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
-  ipcMain.handle("chroni:llm-test", (_event, settings: ChroniLlmSettings) => testLlmConnection(validateLlmSettings(settings)));
+  ipcMain.handle("chroni:llm-test", (_event, settings: ChroniLlmSettings) => testLlmConnection(resolveLlmSettings(validateLlmSettings(settings))));
   ipcMain.handle("chroni:agent-run", async () => {
     await runDeadlineAgentAndPublish();
     return store.snapshot();

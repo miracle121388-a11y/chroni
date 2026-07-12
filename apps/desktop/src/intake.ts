@@ -5,6 +5,7 @@ import readXlsxFile from "read-excel-file/node";
 import type { DdlItem, ChroniInputFile, ChroniLlmSettings, ExtractResult, ExtractedFailure, ExtractedInput, Importance, IntakePayload, IntakeResult } from "./shared/types.js";
 import type { ChroniStore } from "./store.js";
 import { requestChatCompletion } from "./llm-client.js";
+import { resolveLlmSettings } from "./llm-settings.js";
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
 const documentExtensions = new Set([".docx", ".pdf"]);
@@ -92,13 +93,8 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
     }
 
     const llm = await extractWithLlmIfAvailable(extracted, options.llm);
-    const modelSources = new Set(extracted
-      .filter((input) => llm.items.some((item) => item.sourceSummary.startsWith(`${input.sourceName}:`)))
-      .map((input) => input.sourceName));
-    const ruleItems = extracted.flatMap((input) => modelSources.has(input.sourceName)
-      ? []
-      : extractDdlItemsFromText(input.text, input.sourceName));
-    const items = mergeDuplicateItems([...llm.items, ...ruleItems]);
+    const ruleItems = extracted.flatMap((input) => extractDdlItemsFromText(input.text, input.sourceName));
+    const items = mergeModelAndRuleItems(llm.items, ruleItems);
     if (!items.length) {
       if (llm.errors.length && isLlmEnabled(options.llm)) {
         return { ok: false, reason: `模型服务不可用：${llm.errors[0]}`, extracted, failures, items: [] };
@@ -147,7 +143,7 @@ function recordExtractionFailures(store: ChroniStore, failures: ExtractedFailure
 }
 
 function isLlmEnabled(settings?: ChroniLlmSettings): boolean {
-  return !!(settings?.enabled || process.env.CHRONI_LLM_ENABLED === "1");
+  return resolveLlmSettings(settings).enabled;
 }
 
 function hasPossibleTaskWithoutDeadline(text: string): boolean {
@@ -172,15 +168,11 @@ function fallbackExtractedInputs(payload: IntakePayload, extracted: ExtractedInp
 }
 
 async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?: ChroniLlmSettings): Promise<LlmExtraction> {
-  const envApiKey = process.env.CHRONI_LLM_API_KEY ?? "";
-  const enabled = settings?.enabled || process.env.CHRONI_LLM_ENABLED === "1";
-  const apiKey = settings?.apiKey || envApiKey;
-  const baseUrl = settings?.baseUrl || process.env.CHRONI_LLM_BASE_URL || "https://api.openai.com/v1";
-  const model = settings?.model || process.env.CHRONI_LLM_MODEL || "gpt-4.1-mini";
+  const resolvedSettings = resolveLlmSettings(settings);
   const result: LlmExtraction = { items: [], attempted: 0, rejected: 0, errors: [] };
-  if (!enabled || !apiKey || !model) return result;
+  if (!resolvedSettings.enabled || !resolvedSettings.apiKey || !resolvedSettings.model) return result;
 
-  const resolvedSettings: ChroniLlmSettings = { enabled: true, provider: "openai-compatible", baseUrl, apiKey, model };
+  const { baseUrl } = resolvedSettings;
   const today = new Date().toISOString();
   for (const [sourceIndex, input] of extracted.entries()) {
     const sourceId = `source-${sourceIndex + 1}`;
@@ -560,6 +552,22 @@ function mergeDuplicateItems(items: DdlItem[]): DdlItem[] {
     if (!map.has(key)) map.set(key, item);
   }
   return [...map.values()];
+}
+
+function mergeModelAndRuleItems(modelItems: DdlItem[], ruleItems: DdlItem[]): DdlItem[] {
+  const ruleFallbacks = ruleItems.filter((ruleItem) => !modelItems.some((modelItem) => sameExtractedDeadline(modelItem, ruleItem)));
+  return mergeDuplicateItems([...modelItems, ...ruleFallbacks]);
+}
+
+function sameExtractedDeadline(modelItem: DdlItem, ruleItem: DdlItem): boolean {
+  const modelSource = modelItem.sourceSummary.split(":", 1)[0]?.trim().toLowerCase() ?? "";
+  const ruleSource = ruleItem.sourceSummary.split(":", 1)[0]?.trim().toLowerCase() ?? "";
+  if (modelSource !== ruleSource || modelItem.dueAt.slice(0, 16) !== ruleItem.dueAt.slice(0, 16)) return false;
+  const modelText = normalizeEvidenceText(`${modelItem.title} ${modelItem.sourceSummary}`);
+  const ruleText = normalizeEvidenceText(`${ruleItem.title} ${ruleItem.sourceSummary}`);
+  const modelTitle = normalizeEvidenceText(modelItem.title);
+  const ruleTitle = normalizeEvidenceText(ruleItem.title);
+  return modelTitle === ruleTitle || modelText.includes(ruleTitle) || ruleText.includes(modelTitle);
 }
 
 function dateFromText(text: string): string | null {

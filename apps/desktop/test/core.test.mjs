@@ -513,6 +513,38 @@ test("DeepSeek extraction processes every source independently", async () => {
   }
 });
 
+test("local rules fill deadlines that the model missed within the same source", async () => {
+  const originalFetch = globalThis.fetch;
+  const firstDeadline = new Date(2026, 6, 20, 23, 59, 0, 0).toISOString();
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    choices: [{ message: { content: JSON.stringify({
+      items: [{
+        title: "课程报告",
+        dueAt: firstDeadline,
+        importance: "high",
+        sourceSummary: "7月20日 23:59 提交课程报告",
+      }],
+    }) } }],
+  }), { status: 200 });
+  try {
+    const result = await extractPayload({
+      kind: "files",
+      files: [{
+        name: "two-deadlines.txt",
+        contentBase64: Buffer.from("7月20日 23:59 提交课程报告\n7月22日 18:00 提交实验报告", "utf8").toString("base64"),
+      }],
+    }, {
+      llm: { enabled: true, provider: "openai-compatible", baseUrl: "https://api.deepseek.com", apiKey: "sk-test-only", model: "deepseek-v4-flash" },
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.items.map((item) => item.title).sort(), ["实验报告", "课程报告"]);
+    assert.equal(result.items.filter((item) => item.dueAt === firstDeadline).length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("DeepSeek extraction chunks long sources without dropping the end", async () => {
   const originalFetch = globalThis.fetch;
   const prompts = [];
