@@ -78,6 +78,7 @@ function App() {
 function PetView({ snapshot, setSnapshot }: ViewProps) {
   const dragPointerId = useRef<number | null>(null);
   const dragStartPoint = useRef<{ x: number; y: number } | null>(null);
+  const dragCaptureTarget = useRef<HTMLElement | null>(null);
   const suppressClick = useRef(false);
   const [hovering, setHovering] = useState(false);
   const [movingPet, setMovingPet] = useState(false);
@@ -147,7 +148,11 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         if (!event.isPrimary || event.button !== 0) return;
         dragPointerId.current = event.pointerId;
         dragStartPoint.current = { x: event.screenX, y: event.screenY };
-        event.currentTarget.setPointerCapture(event.pointerId);
+        const captureTarget = api.platform === "darwin" && event.target instanceof HTMLElement
+          ? event.target
+          : event.currentTarget;
+        dragCaptureTarget.current = captureTarget;
+        captureTarget.setPointerCapture(event.pointerId);
         suppressClick.current = false;
         api.startWindowDrag(event.screenX, event.screenY);
       }}
@@ -164,7 +169,9 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         if (dragPointerId.current !== event.pointerId) return;
         dragPointerId.current = null;
         dragStartPoint.current = null;
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        const captureTarget = dragCaptureTarget.current;
+        dragCaptureTarget.current = null;
+        if (captureTarget?.hasPointerCapture(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
         setMovingPet(false);
         api.endWindowDrag();
       }}
@@ -172,7 +179,9 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         if (dragPointerId.current !== event.pointerId) return;
         dragPointerId.current = null;
         dragStartPoint.current = null;
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        const captureTarget = dragCaptureTarget.current;
+        dragCaptureTarget.current = null;
+        if (captureTarget?.hasPointerCapture(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
         suppressClick.current = false;
         setMovingPet(false);
         api.endWindowDrag();
