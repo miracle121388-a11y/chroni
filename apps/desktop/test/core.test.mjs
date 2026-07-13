@@ -173,6 +173,58 @@ test("reprocess failure keeps previous source items and records the failure", as
   });
 });
 
+test("reprocess preserves pending model clarifications on the original source", async () => {
+  await withStore(async (store) => {
+    const initial = await processIntake({
+      kind: "files",
+      files: [{ name: "notice.md", contentBase64: Buffer.from("7月20日 23:59 提交课程报告").toString("base64") }],
+    }, store);
+    const source = initial.snapshot.sources[0];
+    const sourceText = "7月20日 23:59 提交课程报告 PDF。英语展示在 7月22日下午第二节课，具体钟点未说明。";
+    store.updateSourceText(source.id, sourceText);
+    store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-v4-flash" } });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        items: [{
+          title: "课程报告提交",
+          dueAt: "2026-07-20T23:59:00+08:00",
+          importance: "high",
+          sourceSummary: "7月20日 23:59 提交课程报告 PDF",
+          contextExcerpt: "7月20日 23:59 提交课程报告 PDF",
+          deliverables: ["课程报告 PDF"],
+        }],
+        pendingItems: [{
+          title: "英语展示",
+          importance: "medium",
+          sourceSummary: "英语展示在 7月22日下午第二节课，具体钟点未说明",
+          contextExcerpt: "英语展示在 7月22日下午第二节课，具体钟点未说明",
+          deliverables: [],
+          question: "下午第二节课具体几点开始？",
+          reason: "课次无法安全换算为精确钟点。",
+        }],
+      }) } }],
+    }), { status: 200 });
+    try {
+      const result = await reprocessSource(source.id, store);
+
+      assert.equal(result.ok, true);
+      assert.equal(result.snapshot.sources.length, 1);
+      assert.equal(result.snapshot.sources[0].id, source.id);
+      assert.equal(result.snapshot.sources[0].extractionStatus, "success");
+      assert.equal(result.snapshot.items.length, 1);
+      assert.equal(result.snapshot.items[0].sourceId, source.id);
+      assert.match(result.snapshot.items[0].sourceSummary, /^notice\.md:/);
+      assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending").length, 1);
+      assert.equal(result.snapshot.clarifications[0].sourceId, source.id);
+      assert.equal(result.snapshot.intakeDrafts[0].sourceName, "notice.md");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 test("parses common compact and next-week deadline expressions", () => {
   const compact = extractDdlItemsFromText("7.12 23:59 提交课程报告");
   const nextWeek = extractDdlItemsFromText("下周五 18:00 小组汇报");
@@ -434,6 +486,163 @@ test("llm candidates must be grounded in the extracted source text", () => {
     importance: "medium",
     sourceSummary: "7月12日 23:59 提交课程报告",
   }, sourceText), null);
+});
+
+test("markdown formatting differences do not reject grounded model details", () => {
+  const sourceText = [
+    "机器学习项目需要在 **2026 年 7 月 20 日 23:59 前** 提交。",
+    "提交内容包括：项目源码压缩包；`README.md`；实验报告 PDF。",
+    "提交方式：课程平台期末项目入口上传。",
+  ].join("\n");
+  const item = itemFromLlmCandidate({
+    title: "机器学习期末项目",
+    dueAt: "2026-07-20T23:59:00+08:00",
+    importance: "high",
+    sourceSummary: "机器学习项目需要在 2026 年 7 月 20 日 23:59 前提交。",
+    contextExcerpt: "机器学习项目需要在 2026 年 7 月 20 日 23:59 前提交。提交内容包括：项目源码压缩包；README.md；实验报告 PDF。提交方式：课程平台期末项目入口上传。",
+    deliverables: ["项目源码压缩包", "README.md", "实验报告 PDF"],
+    submissionMethod: "课程平台期末项目入口上传",
+    risks: [],
+    uncertainties: [],
+    reminderSuggestions: ["提前一天完成最终测试"],
+  }, sourceText, "notice.md");
+
+  assert.ok(item);
+  assert.deepEqual(item.extraction.deliverables, ["项目源码压缩包", "README.md", "实验报告 PDF"]);
+  assert.equal(item.extraction.submissionMethod, "课程平台期末项目入口上传");
+});
+
+test("local fallback merges repeated evidence and does not invent a time for vague mornings", () => {
+  const repeated = extractDdlItemsFromText([
+    "数据库系统作业五已经发布。请在 **2026-07-16 22:00** 前提交。",
+    "请在 **2026-07-16 22:00** 前提交",
+  ].join("\n"), "notice.md");
+  const vague = extractDdlItemsFromText("请系统提醒我明天上午确认数据库作业截止时间。", "notice.md");
+  const event = extractDdlItemsFromText("项目组将于 2026 年 7 月 18 日上午 10:00 进行线上预路演。", "notice.md");
+  const classPeriod = extractDdlItemsFromText("英语展示日期：2026 年 7 月 22 日下午第二节课。", "notice.md");
+  const numberedRequirement = extractDdlItemsFromText("1. 5 页以内的路演 PPT；", "notice.md");
+
+  assert.equal(repeated.length, 1);
+  assert.equal(vague.length, 0);
+  assert.equal(event.length, 1);
+  assert.equal(classPeriod.length, 0);
+  assert.equal(numberedRequirement.length, 0);
+});
+
+test("DeepSeek can return a resumable task when the exact deadline is missing", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    choices: [{ message: { content: JSON.stringify({
+      items: [{
+        title: "英语小组展示",
+        dueAt: "2026-07-22T14:00:00+08:00",
+        importance: "medium",
+        sourceSummary: "展示日期：2026 年 7 月 22 日下午第二节课",
+        deliverables: ["英文 PPT", "小组成员分工表"],
+      }],
+      pendingItems: [],
+    }) } }],
+  }), { status: 200 });
+  try {
+    const result = await extractPayload({ kind: "text", text: "英语小组展示：展示日期：**2026 年 7 月 22 日下午第二节课**。需要准备英文 PPT 和小组成员分工表，具体钟点未说明。" }, {
+      llm: { enabled: true, provider: "openai-compatible", baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-v4-flash" },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.items.length, 0);
+    assert.equal(result.pendingItems.length, 1);
+    assert.equal(result.pendingItems[0].title, "英语小组展示");
+    assert.match(result.pendingItems[0].reason, /无法安全换算/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("conditional rule deadlines are suppressed when the model requests confirmation", () => {
+  const base = {
+    id: "model-db",
+    title: "数据库作业五提交",
+    importance: "high",
+    dueAt: "2026-07-16T14:00:00.000Z",
+    sourceSummary: "notice.md: 数据库系统作业五请在 2026-07-16 22:00 前提交",
+    createdAt: "2026-07-13T00:00:00.000Z",
+    updatedAt: "2026-07-13T00:00:00.000Z",
+    completed: false,
+  };
+  const pending = {
+    sourceName: "notice.md",
+    sourceType: "md",
+    title: "数据库作业五可能提前",
+    importance: "high",
+    sourceSummary: "notice.md: 数据库作业五可能改为 2026-07-15 23:59 前邮件提交。最终以明天上午通知为准。",
+    extraction: { contextExcerpt: "数据库作业五可能改为 2026-07-15 23:59 前邮件提交。最终以明天上午通知为准。", deliverables: [], constraints: [], risks: [], uncertainties: [], reminderSuggestions: [] },
+    question: "最终截止时间是否提前？",
+    reason: "最终通知尚未发布。",
+  };
+  const result = mergeModelAndRuleItems([base], [{
+    ...base,
+    id: "rule-db",
+    title: "数据库作业五可能改为",
+    dueAt: "2026-07-15T15:59:00.000Z",
+    sourceSummary: "notice.md: 如果平台未恢复，数据库作业五可能改为 2026-07-15 23:59 前邮件提交。最终以明天上午通知为准。",
+  }], [pending]);
+
+  assert.deepEqual(result.map((item) => item.id), ["model-db"]);
+});
+
+test("intake persists model tasks, detailed plans, and pending clarifications together", async () => {
+  await withStore(async (store) => {
+    store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-v4-flash" } });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      const planning = body.messages[0].content.includes("单任务拆解 Agent");
+      const content = planning
+        ? {
+          goal: "完成课程报告",
+          taskType: "coursework",
+          deliverables: ["课程报告 PDF"],
+          constraints: ["课程平台上传"],
+          bufferMinutes: 30,
+          summary: "按报告撰写和提交拆解。",
+          uncertainties: [],
+          steps: [{ clientId: "report", title: "完成并提交课程报告", description: "撰写、检查并上传。", estimatedMinutes: 90, dependsOn: [], completionCriteria: ["平台显示提交成功"] }],
+        }
+        : {
+          items: [{
+            title: "课程报告提交",
+            dueAt: "2026-07-20T23:59:00+08:00",
+            importance: "high",
+            sourceSummary: "7月20日 23:59 提交课程报告",
+            contextExcerpt: "7月20日 23:59 提交课程报告，提交课程报告 PDF 到课程平台。",
+            deliverables: ["课程报告 PDF"],
+            submissionMethod: "课程平台",
+          }],
+          pendingItems: [{
+            title: "英语展示",
+            importance: "medium",
+            sourceSummary: "英语展示日期：7月22日下午第二节课",
+            contextExcerpt: "英语展示日期：7月22日下午第二节课",
+            deliverables: ["英文 PPT"],
+            question: "下午第二节课具体几点开始？",
+            reason: "课次无法换算为精确钟点。",
+          }],
+        };
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }), { status: 200 });
+    };
+    try {
+      const result = await processIntake({ kind: "text", text: "7月20日 23:59 提交课程报告，提交课程报告 PDF 到课程平台。\n英语展示日期：7月22日下午第二节课，需要英文 PPT。" }, store);
+
+      assert.equal(result.ok, true);
+      assert.equal(result.snapshot.items.length, 1);
+      assert.equal(result.snapshot.taskPlans[0].plannerSource, "llm");
+      assert.deepEqual(result.snapshot.taskPlans[0].deliverables, ["课程报告 PDF"]);
+      assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending").length, 1);
+      assert.equal(result.snapshot.sources[0].extractionStatus, "success");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 test("invalid quiet hour preference patches are rejected", async () => {

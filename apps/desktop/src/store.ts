@@ -105,10 +105,21 @@ export class ChroniStore {
     if (existing) return this.snapshot();
     let sourceId = draft.sourceId;
     if (extracted) {
-      const source = sourceRecordFromInput(extracted, "failed", "等待用户补全截止时间等必要信息");
-      source.summary = `${source.sourceName}，等待确认截止信息`;
-      this.#state.sources = pruneSources([source, ...this.#state.sources]);
-      sourceId = source.id;
+      const existingSource = this.#state.sources.find((source) => source.sourceName === extracted.sourceName && source.text === extracted.text);
+      if (existingSource) {
+        sourceId = existingSource.id;
+        if (!existingSource.itemIds.length) {
+          existingSource.extractionStatus = "failed";
+          existingSource.lastError = "等待用户补全截止时间等必要信息";
+          existingSource.summary = `${existingSource.sourceName}，等待确认截止信息`;
+          existingSource.updatedAt = new Date().toISOString();
+        }
+      } else {
+        const source = sourceRecordFromInput(extracted, "failed", "等待用户补全截止时间等必要信息");
+        source.summary = `${source.sourceName}，等待确认截止信息`;
+        this.#state.sources = pruneSources([source, ...this.#state.sources]);
+        sourceId = source.id;
+      }
     }
     const storedDraft = { ...structuredClone(draft), sourceId };
     this.#state.intakeDrafts = [storedDraft, ...this.#state.intakeDrafts.filter((item) => item.id !== draft.id)].slice(0, 100);
@@ -687,7 +698,8 @@ function itemFromDraft(draft: IntakeDraft): DdlItem {
     estimatedMinutes: draft.candidate.estimatedMinutes,
     progressPercent: draft.candidate.progressPercent,
     sourceId: draft.sourceId,
-    sourceSummary: `${draft.sourceName}: 用户补全后创建`,
+    sourceSummary: draft.candidate.sourceSummary ?? `${draft.sourceName}: 用户补全后创建`,
+    extraction: draft.candidate.extraction,
     createdAt: now,
     updatedAt: now,
     completed: false,
@@ -814,7 +826,7 @@ function hasSourceEvidence(summary: string, sourceText: string): boolean {
 function normalizeEvidence(value: string): string {
   return value
     .replace(/\s+/g, "")
-    .replace(/[，。！？、；：,.!?:;()[\]【】《》"'“”‘’]/g, "")
+    .replace(/[，。！？、；：,.!?:;()[\]【】《》"'“”‘’*_`#>~\-]/g, "")
     .toLowerCase();
 }
 

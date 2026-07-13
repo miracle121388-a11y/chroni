@@ -160,6 +160,16 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
         <span className={`plan-status ${draft?.status ?? "missing"}`}>{planStatus(draft)}</span>
       </header>
       <div className="task-facts"><span>DDL {formatDate(task.dueAt)}</span><span>{task.importance}</span><span>{task.progressPercent ?? 0}% 完成</span><span>{task.sourceSummary}</span></div>
+      {task.extraction && (
+        <section className="extracted-requirements" aria-label="原文提取要求">
+          <header><h3>原文要求</h3><span>已校验来源</span></header>
+          {!!task.extraction.deliverables.length && <div><b>提交物</b><ul>{task.extraction.deliverables.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+          {task.extraction.submissionMethod && <p><b>提交方式</b><span>{task.extraction.submissionMethod}</span></p>}
+          {!!task.extraction.constraints.length && <div><b>限制</b><ul>{task.extraction.constraints.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+          {!!task.extraction.risks.length && <div><b>风险</b><ul>{task.extraction.risks.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+          {!!task.extraction.uncertainties.length && <div><b>待确认</b><ul>{task.extraction.uncertainties.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+        </section>
+      )}
       {!draft ? (
         <section className="plan-empty"><h3>尚未生成任务规划</h3><p>生成后可先检查草案，再由你确认是否启用。</p><button type="button" disabled={!!busy} onClick={() => void generate()}>{busy ? "生成中..." : "生成规划草案"}</button></section>
       ) : (

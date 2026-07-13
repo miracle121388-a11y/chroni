@@ -2975,6 +2975,40 @@ details.source-history[open] > summary::after {
   overflow-wrap: anywhere;
 }
 
+.extracted-requirements {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+
+.extracted-requirements header,
+.extracted-requirements p {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.extracted-requirements h3,
+.extracted-requirements p,
+.extracted-requirements ul {
+  margin: 0;
+}
+
+.extracted-requirements header span,
+.extracted-requirements p span,
+.extracted-requirements li {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.extracted-requirements ul {
+  display: grid;
+  gap: 3px;
+  padding: 4px 0 0 18px;
+}
+
 .plan-empty {
   padding: 24px 0;
   border-top: 1px solid var(--line);

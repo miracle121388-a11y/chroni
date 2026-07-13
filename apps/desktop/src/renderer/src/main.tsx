@@ -754,6 +754,12 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
               <span>{importanceLabel(item.importance)} · {formatDue(item.dueAt)} · {remainingText(item.dueAt)}</span>
             </article>
           ))}
+          {preview.pendingItems.map((item) => (
+            <article key={`${item.sourceName}-${item.title}-pending`} className="preview-failure">
+              <b>{item.title} · 待确认</b>
+              <span>{item.question}</span>
+            </article>
+          ))}
           {preview.ok && (
             <button type="button" disabled={isBusy} onClick={async () => {
               if (isBusy) return;

@@ -152,6 +152,16 @@ export type AgentIcsExportResult = {
   itemCount: number;
 };
 
+export type DdlExtractionContext = {
+  contextExcerpt: string;
+  deliverables: string[];
+  submissionMethod?: string;
+  constraints: string[];
+  risks: string[];
+  uncertainties: string[];
+  reminderSuggestions: string[];
+};
+
 export type DdlItem = {
   id: string;
   title: string;
@@ -166,6 +176,7 @@ export type DdlItem = {
   lastRemindedAt?: string;
   estimatedMinutes?: number;
   progressPercent?: number;
+  extraction?: DdlExtractionContext;
 };
 
 export type ClarificationField =
@@ -212,6 +223,8 @@ export type IntakeDraftCandidate = {
   progressPercent?: number;
   deliverables?: string[];
   taskType?: string;
+  sourceSummary?: string;
+  extraction?: DdlExtractionContext;
 };
 
 export type IntakeDraft = {
@@ -451,9 +464,21 @@ export type ExtractedFailure = ExtractedInput & {
   reason: string;
 };
 
+export type PendingExtractedTask = {
+  sourceName: string;
+  sourceType: string;
+  title: string;
+  importance: Importance;
+  taskType?: string;
+  sourceSummary: string;
+  extraction: DdlExtractionContext;
+  question: string;
+  reason: string;
+};
+
 export type ExtractResult =
-  | { ok: true; extracted: ExtractedInput[]; failures: ExtractedFailure[]; items: DdlItem[]; message: string }
-  | { ok: false; reason: string; extracted: ExtractedInput[]; failures: ExtractedFailure[]; items: [] };
+  | { ok: true; extracted: ExtractedInput[]; failures: ExtractedFailure[]; items: DdlItem[]; pendingItems: PendingExtractedTask[]; message: string }
+  | { ok: false; reason: string; extracted: ExtractedInput[]; failures: ExtractedFailure[]; items: []; pendingItems: [] };
 
 export type IntakeResult =
   | { ok: true; created: DdlItem[]; message: string; snapshot: ChroniSnapshot }

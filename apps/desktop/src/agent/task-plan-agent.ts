@@ -11,6 +11,7 @@ type PlanCandidate = {
   estimatedTotalMinutes?: unknown;
   bufferMinutes?: unknown;
   summary?: unknown;
+  uncertainties?: unknown;
   steps?: unknown;
 };
 
@@ -28,7 +29,9 @@ export async function generateTaskPlan(
         content: [
           "你是 Chroni 的单任务拆解 Agent，只输出 JSON。",
           "不得修改任务标题或最终截止时间，不得声称任务已完成。",
-          "输出 goal、taskType、deliverables、constraints、estimatedTotalMinutes、bufferMinutes、summary、steps。",
+          "输出 goal、taskType、deliverables、constraints、estimatedTotalMinutes、bufferMinutes、summary、uncertainties、steps。",
+          "必须覆盖输入中已经抽取的提交物、提交方式、限制、风险、不确定性和提醒建议，不得用泛化步骤替代明确要求。",
+          "uncertainties 只保留尚未确认的事实；不得把不确定事项当作已确认结论。",
           "steps 为 1 到 12 项；每项包含 clientId、title、description、estimatedMinutes、dependsOn、completionCriteria。",
           "每步 15 到 480 分钟，dependsOn 只能引用当前 steps 的 clientId，禁止循环依赖。",
         ].join("\n"),
@@ -37,7 +40,16 @@ export async function generateTaskPlan(
         role: "user",
         content: JSON.stringify({
           now: now.toISOString(),
-          task: { id: task.id, title: task.title, dueAt: task.dueAt, importance: task.importance, estimatedMinutes: task.estimatedMinutes, progressPercent: task.progressPercent, sourceSummary: task.sourceSummary.slice(0, 500) },
+          task: {
+            id: task.id,
+            title: task.title,
+            dueAt: task.dueAt,
+            importance: task.importance,
+            estimatedMinutes: task.estimatedMinutes,
+            progressPercent: task.progressPercent,
+            sourceSummary: task.sourceSummary.slice(0, 500),
+            extraction: task.extraction,
+          },
           preferences: preferences.map((item) => ({ id: item.id, key: item.key, value: item.value, scope: item.scope, confidence: item.confidence })),
         }),
       },
@@ -92,8 +104,13 @@ export function createRuleTaskPlan(task: DdlItem, preferences: PlanningPreferenc
     version: 1,
     goal: `完成并交付${task.title}`,
     taskType: inferTaskType(task),
-    deliverables: [task.title],
-    constraints: ["不得晚于最终 DDL", "最终完成状态由用户确认"],
+    deliverables: task.extraction?.deliverables.length ? [...task.extraction.deliverables] : [task.title],
+    constraints: [
+      "不得晚于最终 DDL",
+      "最终完成状态由用户确认",
+      ...(task.extraction?.submissionMethod ? [`提交方式：${task.extraction.submissionMethod}`] : []),
+      ...(task.extraction?.constraints ?? []),
+    ],
     steps,
     estimatedTotalMinutes,
     bufferMinutes,
@@ -101,7 +118,10 @@ export function createRuleTaskPlan(task: DdlItem, preferences: PlanningPreferenc
     plannerSource: "rules",
     memoryPreferenceIds: preferences.map((item) => item.id),
     summary: preferences.length ? `已应用 ${preferences.length} 条个性化偏好生成可编辑计划。` : "按理解、执行、检查三个阶段生成可编辑计划。",
-    uncertainties: insufficient ? [`当前剩余时间不足，至少缺少 ${Math.ceil((now.getTime() - new Date(latestSafeStartAt).getTime()) / 60_000)} 分钟。`] : [],
+    uncertainties: [
+      ...(task.extraction?.uncertainties ?? []),
+      ...(insufficient ? [`当前剩余时间不足，至少缺少 ${Math.ceil((now.getTime() - new Date(latestSafeStartAt).getTime()) / 60_000)} 分钟。`] : []),
+    ],
     status: "draft",
     createdAt,
     updatedAt: createdAt,
@@ -146,7 +166,7 @@ function planFromCandidate(candidate: PlanCandidate, task: DdlItem, preferences:
     plannerSource: preferences.length ? "personalized-llm" : "llm",
     memoryPreferenceIds: preferences.map((item) => item.id),
     summary: String(candidate.summary ?? "大模型已生成结构化任务计划。").slice(0, 500),
-    uncertainties: [],
+    uncertainties: Array.isArray(candidate.uncertainties) ? candidate.uncertainties.map(String).slice(0, 12) : [...(task.extraction?.uncertainties ?? [])],
     status: "draft",
     createdAt,
     updatedAt: createdAt,
