@@ -1,6 +1,6 @@
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type NativeImage } from "electron";
 import { join } from "node:path";
-import type { ChroniPreferences, ChroniView, PetPlacement } from "./shared/types.js";
+import type { ChroniPreferences, ChroniView, PetAction, PetActionCommand, PetPlacement } from "./shared/types.js";
 import { draggedWindowPosition, interpolatedPosition, normalizedWindowPlacement, restoredWindowPosition, snappedWindowPosition, windowsDrawerPosition, type WindowPosition } from "./window-geometry.js";
 
 type WindowSet = {
@@ -15,12 +15,17 @@ let scheduleExpanded = false;
 let macScheduleHideTimer: NodeJS.Timeout | undefined;
 const windowDragSessions = new Map<number, { startWindow: WindowPosition; startCursor: WindowPosition }>();
 let scheduleAnimationGeneration = 0;
+let petVisibilityGeneration = 0;
+let lastAppliedCompanionEnabled: boolean | undefined;
+let quitAfterSleep = false;
+let onCompanionVisibilityRequested: ((visible: boolean) => void) | undefined;
 let lastPetPlacement: PetPlacement | undefined;
 let onPetPlacementChanged: ((placement: PetPlacement) => void) | undefined;
 
 const windowsDrawerWidth = 384;
 const macPopoverWidth = 348;
 const macPopoverHeight = 418;
+const petSleepAnimationMs = 2_850;
 
 export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPlacementChanged?: (placement: PetPlacement) => void } = {}): void {
   lastPetPlacement = options.petPlacement;
@@ -89,7 +94,8 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
   });
 }
 
-export function createTray(): void {
+export function createTray(options: { onCompanionVisibilityRequested?: (visible: boolean) => void } = {}): void {
+  onCompanionVisibilityRequested = options.onCompanionVisibilityRequested;
   windows.tray = new Tray(createTrayIcon());
   const menu = Menu.buildFromTemplate(appMenuTemplate());
   windows.tray.setToolTip("Chroni");
@@ -164,11 +170,46 @@ export function toggleScheduleSurface(): void {
 }
 
 export function applyPreferences(preferences: ChroniPreferences): void {
-  if (preferences.companionEnabled) {
-    if (!windows.pet?.isVisible()) windows.pet?.showInactive();
-  } else {
+  if (lastAppliedCompanionEnabled === preferences.companionEnabled) return;
+  const initial = lastAppliedCompanionEnabled === undefined;
+  lastAppliedCompanionEnabled = preferences.companionEnabled;
+  if (preferences.companionEnabled) showPet(!initial);
+  else hidePet(!initial);
+}
+
+export function requestPetAction(action: PetAction, mode: PetActionCommand["mode"] = "enqueue"): void {
+  if (!windows.pet || windows.pet.isDestroyed()) return;
+  const command: PetActionCommand = { action, mode, requestedAt: new Date().toISOString() };
+  windows.pet.webContents.send("chroni:pet-action", command);
+}
+
+export function showPet(animate = true): void {
+  petVisibilityGeneration += 1;
+  windows.pet?.showInactive();
+  if (animate) requestPetAction("wake", "replace");
+}
+
+export function hidePet(animate = true): void {
+  const generation = ++petVisibilityGeneration;
+  if (!animate || !windows.pet?.isVisible()) {
     windows.pet?.hide();
+    return;
   }
+  requestPetAction("sleep", "replace");
+  setTimeout(() => {
+    if (generation === petVisibilityGeneration) windows.pet?.hide();
+  }, petSleepAnimationMs);
+}
+
+function quitChroni(): void {
+  if (quitAfterSleep) return;
+  if (!windows.pet?.isVisible()) {
+    app.quit();
+    return;
+  }
+  quitAfterSleep = true;
+  requestPetAction("sleep", "replace");
+  setTimeout(() => app.quit(), petSleepAnimationMs);
 }
 
 export function refreshScheduleAfterUpdate(): void {
@@ -325,10 +366,10 @@ function appMenuTemplate(): MenuItemConstructorOptions[] {
     { label: "查看日程", click: () => showSchedule(true, true) },
     { label: "打开控制中心", click: () => showControlCenter() },
     { type: "separator" },
-    { label: "显示桌宠", click: () => windows.pet?.showInactive() },
-    { label: "隐藏桌宠", click: () => windows.pet?.hide() },
+    { label: "显示桌宠", click: () => { if (onCompanionVisibilityRequested) onCompanionVisibilityRequested(true); else showPet(true); } },
+    { label: "隐藏桌宠", click: () => { if (onCompanionVisibilityRequested) onCompanionVisibilityRequested(false); else hidePet(true); } },
     { label: "隐藏日程表", click: () => hideSchedule() },
     { type: "separator" },
-    { label: "退出 Chroni", click: () => app.quit() },
+    { label: "退出 Chroni", click: () => quitChroni() },
   ];
 }

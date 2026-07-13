@@ -38,6 +38,16 @@ test("behavior memory activates only after repeated consistent evidence", () => 
   assert.equal(memory.preferences[0].evidenceCount, 3);
 });
 
+test("multiple step edits in one save count as one behavioral observation", () => {
+  const singleSave = event(1);
+  singleSave.changes = ["a", "b", "c"].map((stepId) => ({ type: "duration-changed", stepId, beforeMinutes: 30, afterMinutes: 45 }));
+  const memory = applyFeedbackEvent(createBehaviorMemory(), singleSave);
+
+  assert.equal(memory.preferences[0].status, "candidate");
+  assert.equal(memory.preferences[0].evidenceCount, 1);
+  assert.equal(memory.recentFeedbackEvents.length, 1);
+});
+
 test("preference selection is scoped and ignores disabled preferences", () => {
   let memory = createBehaviorMemory();
   memory = applyFeedbackEvent(applyFeedbackEvent(applyFeedbackEvent(memory, event(1)), event(2)), event(3));

@@ -96,19 +96,16 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
   }
 
   const blocking: Array<{ input: ExtractedInput; analysis: Awaited<ReturnType<typeof analyzeCompletenessWithLlm>> }> = [];
-  for (const input of result.extracted.filter((candidate) => /下周(?![一二三四五六日天])/.test(candidate.text))) {
+  for (const input of result.extracted.flatMap(ambiguousTaskInputs)) {
     const analysis = await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.llmSettings()));
     if (analysis.clarifications.some((item) => item.required && item.field === "dueAt")) blocking.push({ input, analysis });
   }
-  const blockedSourceNames = new Set(blocking.map((entry) => entry.input.sourceName));
-  const safeItems = result.items.filter((item) => ![...blockedSourceNames].some((sourceName) => item.sourceSummary.startsWith(`${sourceName}:`)));
+  const safeItems = result.items.filter((item) => !containsAmbiguousNextWeek(item.extraction?.contextExcerpt ?? sourceEvidence(item.sourceSummary)));
   const beforeIds = new Set(store.snapshot().items.map((item) => item.id));
-  let snapshot = store.addItems(safeItems, result.message, result.extracted.filter((input) => !blockedSourceNames.has(input.sourceName)));
+  let snapshot = store.addItems(safeItems, result.message, result.extracted);
   const created = snapshot.items.filter((item) => !beforeIds.has(item.id));
-  for (const item of created) {
-    await ensureTaskPlan(item.id, store);
-    snapshot = store.snapshot();
-  }
+  await ensureTaskPlans(created.map((item) => item.id), store, created.length > 1 ? "rules-only" : "default");
+  snapshot = store.snapshot();
   for (const pending of result.pendingItems) {
     const input = result.extracted.find((candidate) => candidate.sourceName === pending.sourceName);
     snapshot = savePendingExtractedTask(pending, store, input);
@@ -116,7 +113,13 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
   for (const entry of blocking) snapshot = store.saveIntakeDraft(entry.analysis.draft, entry.analysis.clarifications, entry.input);
   snapshot = recordExtractionFailures(store, result.failures) ?? snapshot;
   if (!created.length && blocking.length && !result.pendingItems.length) return { ok: false, reason: `需要确认：${blocking[0].analysis.clarifications[0]?.question ?? "请补充截止时间。"}`, snapshot };
-  const message = blocking.length ? `${result.message} 另有 ${blocking.length} 项等待确认。` : result.message;
+  const clarificationMessage = blocking.length ? `${result.message} 另有 ${blocking.length} 项等待确认。` : result.message;
+  const resolvedPlanningSettings = resolveLlmSettings(store.llmSettings());
+  const bulkPlanningMessage = created.length > 1 && snapshot.agent.memory.useLlmPlanning && resolvedPlanningSettings.enabled && resolvedPlanningSettings.apiKey
+    ? " 批量任务已先生成本地草案；可在任务详情中按需使用大模型优化。"
+    : "";
+  const message = `${clarificationMessage}${bulkPlanningMessage}`;
+  if (created.length && bulkPlanningMessage) snapshot = store.setCompanion("success", message);
   return { ok: true, created, message, snapshot };
 }
 
@@ -158,7 +161,7 @@ function savePendingExtractedTask(pending: PendingExtractedTask, store: ChroniSt
   return store.saveIntakeDraft(draft, [clarification], input);
 }
 
-export async function ensureTaskPlan(taskId: string, store: ChroniStore, regenerate = false) {
+export async function ensureTaskPlan(taskId: string, store: ChroniStore, regenerate = false, mode: "default" | "rules-only" = "default") {
   const snapshot = store.snapshot();
   const task = snapshot.items.find((item) => item.id === taskId);
   if (!task) throw new Error("找不到要规划的任务。");
@@ -167,8 +170,23 @@ export async function ensureTaskPlan(taskId: string, store: ChroniStore, regener
   const preferences = selectPlanningPreferences(snapshot.agent.behaviorMemory, { taskType, importance: task.importance, dueAt: task.dueAt });
   const applied = snapshot.agent.behaviorMemory.autoApplyEnabled ? preferences : preferences.filter((item) => item.source === "explicit");
   const settings = resolveLlmSettings(store.llmSettings());
-  const plan = await generateTaskPlan(task, applied, settings);
+  const planningSettings = mode === "rules-only" || !snapshot.agent.memory.useLlmPlanning
+    ? { ...settings, enabled: false }
+    : settings;
+  const plan = await generateTaskPlan(task, applied, planningSettings);
   return store.saveGeneratedTaskPlan(plan).plan;
+}
+
+async function ensureTaskPlans(taskIds: string[], store: ChroniStore, mode: "default" | "rules-only", regenerate = false): Promise<void> {
+  const queue = [...new Set(taskIds)];
+  const workerCount = Math.min(mode === "rules-only" ? 1 : 3, queue.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    for (;;) {
+      const taskId = queue.shift();
+      if (!taskId) return;
+      await ensureTaskPlan(taskId, store, regenerate, mode);
+    }
+  }));
 }
 
 export async function reprocessSource(sourceId: string, store: ChroniStore): Promise<IntakeResult> {
@@ -199,7 +217,23 @@ export async function reprocessSource(sourceId: string, store: ChroniStore): Pro
       sourceSummary: `${source.sourceName}: ${pending.sourceSummary.replace(/^直接文本:\s*/, "")}`,
     }, store, extracted);
   }
-  return { ok: true, created: nextItems, message, snapshot };
+  const refreshedTaskIds = snapshot.items.filter((item) => item.sourceId === sourceId).map((item) => item.id);
+  await ensureTaskPlans(refreshedTaskIds, store, refreshedTaskIds.length > 1 ? "rules-only" : "default", true);
+  snapshot = store.snapshot();
+  const refreshedItems = snapshot.items.filter((item) => refreshedTaskIds.includes(item.id));
+  return { ok: true, created: refreshedItems, message, snapshot };
+}
+
+function ambiguousTaskInputs(input: ExtractedInput): ExtractedInput[] {
+  const segments = input.text
+    .split(/[\r\n。；;.!?？]+/)
+    .map((segment) => segment.trim())
+    .filter((segment) => containsAmbiguousNextWeek(segment) && hasPossibleTaskWithoutDeadline(segment));
+  return [...new Set(segments)].map((text) => ({ ...input, text }));
+}
+
+function containsAmbiguousNextWeek(text: string): boolean {
+  return /下周(?![一二三四五六日天])/.test(text);
 }
 
 export async function extractPayload(payload: IntakePayload, options: ExtractOptions = {}): Promise<ExtractResult> {
@@ -782,7 +816,9 @@ function normalizeText(text: string): string {
 function candidateLines(text: string): string[] {
   const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
   const sentenceParts = lines.flatMap((line) => line.split(/[。；;.!?？]+/).map((part) => part.trim()).filter(Boolean));
-  return [...new Set([...lines, ...sentenceParts])].filter((line) => line.length <= 280);
+  // Prefer the smallest grounded sentence so one ambiguous task cannot taint a
+  // separate explicit task that happens to share the same source line.
+  return [...new Set([...sentenceParts, ...lines])].filter((line) => line.length <= 280);
 }
 
 function hasDeadlineIntent(text: string): boolean {

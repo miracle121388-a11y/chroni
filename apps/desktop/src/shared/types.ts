@@ -13,6 +13,25 @@ export type CompanionState =
   | "celebrating"
   | "sleeping";
 
+export type PetAction =
+  | "idle"
+  | "drag"
+  | "cling"
+  | "walk"
+  | "wake"
+  | "study"
+  | "eat"
+  | "pet"
+  | "play"
+  | "cat"
+  | "sleep";
+
+export type PetActionCommand = {
+  action: PetAction;
+  mode: "enqueue" | "replace";
+  requestedAt: string;
+};
+
 export type Importance = "high" | "medium" | "low";
 
 export type ServiceState = "ready" | "limited" | "unavailable";
@@ -41,19 +60,23 @@ export type AgentMemory = {
 export type AgentMemoryPatch = Partial<AgentMemory>;
 
 export type AgentRiskLevel = "low" | "medium" | "high" | "critical";
-export type AgentRunTrigger = "manual" | "startup" | "task-change";
+export type AgentRunTrigger = "manual" | "startup" | "daily" | "task-change";
 export type AgentPlannerSource = "rules" | "llm" | "rules-fallback";
 
 export type AgentTaskAssessment = {
   taskId: string;
   nextStepId?: string;
   nextStepTitle?: string;
+  nextStepMinutes?: number;
   title: string;
   dueAt: string;
   importance: Importance;
   riskLevel: AgentRiskLevel;
   score: number;
   estimatedMinutes: number;
+  availableMinutesUntilDue?: number;
+  slackMinutes?: number;
+  actionable?: boolean;
   reasons: string[];
 };
 
@@ -78,6 +101,8 @@ export type AgentWorkBlock = {
 
 export type AgentPlan = {
   blocks: AgentWorkBlock[];
+  forecastBlocks?: AgentWorkBlock[];
+  forecastHorizonDays?: number;
   requestedMinutes?: number;
   plannedMinutes: number;
   overflowMinutes: number;

@@ -17,8 +17,10 @@ export class AgentScheduler {
   readonly #now: () => Date;
   readonly #debounceMs: number;
   #timer?: ReturnType<typeof setTimeout>;
+  #dailyTimer?: ReturnType<typeof setTimeout>;
   #running?: Promise<void>;
   #pendingTaskChange = false;
+  #disposed = false;
 
   constructor(options: AgentSchedulerOptions) {
     this.#run = options.run;
@@ -35,6 +37,29 @@ export class AgentScheduler {
     const lastAutomaticRunAt = this.#getLastAutomaticRunAt?.() ?? (latest?.trigger !== "manual" ? latest?.completedAt : undefined);
     if (lastAutomaticRunAt && localDateKey(new Date(lastAutomaticRunAt)) === localDateKey(this.#now())) return;
     await this.#execute("startup");
+  }
+
+  async runDailyIfNeeded(): Promise<void> {
+    if (!this.#getMemory().automaticInspectionEnabled) return;
+    const latest = this.#getLatestRun();
+    const lastAutomaticRunAt = this.#getLastAutomaticRunAt?.() ?? (latest?.trigger !== "manual" ? latest?.completedAt : undefined);
+    if (lastAutomaticRunAt && localDateKey(new Date(lastAutomaticRunAt)) === localDateKey(this.#now())) return;
+    await this.#execute("daily");
+  }
+
+  startDailyChecks(intervalMs = 60_000): void {
+    this.#disposed = false;
+    if (this.#dailyTimer) clearTimeout(this.#dailyTimer);
+    const tick = async () => {
+      try {
+        await this.runDailyIfNeeded();
+      } catch {
+        // Keep the daily watcher alive; the next tick can retry after a transient failure.
+      } finally {
+        if (!this.#disposed) this.#dailyTimer = setTimeout(() => { void tick(); }, intervalMs);
+      }
+    };
+    this.#dailyTimer = setTimeout(() => { void tick(); }, intervalMs);
   }
 
   scheduleTaskChange(): void {
@@ -58,8 +83,11 @@ export class AgentScheduler {
   }
 
   dispose(): void {
+    this.#disposed = true;
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = undefined;
+    if (this.#dailyTimer) clearTimeout(this.#dailyTimer);
+    this.#dailyTimer = undefined;
     this.#pendingTaskChange = false;
   }
 

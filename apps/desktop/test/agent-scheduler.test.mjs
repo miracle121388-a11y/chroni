@@ -38,6 +38,27 @@ test("Agent scheduler does not repeat startup after a later manual run", async (
   assert.deepEqual(calls, []);
 });
 
+test("Agent scheduler runs a daily inspection after the local date changes", async () => {
+  const calls = [];
+  let current = new Date(2026, 6, 12, 23, 59);
+  let lastAutomaticRunAt = current.toISOString();
+  const scheduler = new AgentScheduler({
+    run: async (trigger) => { calls.push(trigger); lastAutomaticRunAt = current.toISOString(); },
+    getMemory: () => enabledMemory,
+    getLatestRun: () => undefined,
+    getLastAutomaticRunAt: () => lastAutomaticRunAt,
+    now: () => current,
+  });
+
+  await scheduler.runDailyIfNeeded();
+  current = new Date(2026, 6, 13, 0, 1);
+  await scheduler.runDailyIfNeeded();
+  await scheduler.runDailyIfNeeded();
+
+  assert.deepEqual(calls, ["daily"]);
+  scheduler.dispose();
+});
+
 test("Agent scheduler coalesces task changes and one in-flight follow-up", async () => {
   const calls = [];
   let release;

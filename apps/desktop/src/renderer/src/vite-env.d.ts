@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
+import type { AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult, PetActionCommand, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
 
 declare global {
   interface Window {
@@ -41,6 +41,7 @@ declare global {
       endWindowDrag(): void;
       filePath(file: File): string;
       onSnapshotUpdated(callback: (snapshot: ChroniSnapshot) => void): () => void;
+      onPetAction(callback: (command: PetActionCommand) => void): () => void;
     };
   }
 }

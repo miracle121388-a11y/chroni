@@ -12,11 +12,17 @@ clarification answer -> merge validated value -> completeness check
 
 plan save -> validate baseVersion and dependencies -> structured diff
   -> TaskPlanRevision -> PlanningFeedbackEvent -> Behavior Memory
+
+source reprocess -> preserve matching task identity and active plan
+  -> prune orphan Agent state -> generate a reviewable replacement draft
+
+DeadlineAgent -> capacity-aware risk/slack -> ready-step selection
+  -> today blocks + seven-day forecast -> reminder/persistence -> verify
 ```
 
 ## Permission boundaries
 
-- LLM output is a proposal. Local validators decide whether it is accepted.
+- LLM output is a proposal. Local validators decide whether it is accepted and require extracted deliverables, submission method, constraints, and uncertainties to remain present.
 - The clarification model may improve questions and options only for locally detected missing fields.
 - A generated task plan remains a draft until the user activates it.
 - Regeneration never replaces an active user plan.
@@ -31,7 +37,7 @@ Planning edits produce deterministic signals. Duration edits create a scoped `pr
 clamp(0.30 + 0.12 * positiveEvidence - 0.15 * negativeEvidence, 0, 0.95)
 ```
 
-A preference becomes active at three or more evidence points and confidence of at least 0.65. Explicit preferences have confidence 1 and take precedence. Selection matches task type, importance, and due-window scope, then returns at most eight preferences.
+A preference becomes active at three or more independent feedback events and confidence of at least 0.65. Multiple edits of the same signal type in one save are aggregated into one evidence point. Explicit preferences have confidence 1 and take precedence. Selection matches task type, importance, and due-window scope, then returns at most eight preferences.
 
 ## Persistence and privacy
 
@@ -43,5 +49,6 @@ Trace entries contain only stage summaries, IDs, counts, planner source, version
 
 - Clarification LLM unavailable: deterministic local completeness rules create a manual question.
 - Task planning LLM unavailable or invalid: a three-stage rules fallback creates an editable draft.
+- Multi-task intake: local rule drafts are created immediately; model regeneration remains available per task to avoid long serial waits and unexpected API cost.
 - Behavior Memory is fully local and does not require an LLM.
 - Tasks without an active TaskPlan continue using `DdlItem.estimatedMinutes`.

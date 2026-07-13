@@ -11,9 +11,9 @@ import { ensureTaskPlan, extractPayload, processIntake, reprocessSource } from "
 import { testLlmConnection } from "./llm-client.js";
 import { resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
-import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniLlmSettings, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniLlmSettings, CompanionState, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
-import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
+import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
 import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
 
 let store: ChroniStore;
@@ -22,6 +22,7 @@ let deadlineAgent: DeadlineAgent;
 let agentTools: DeadlineAgentTools;
 let agentScheduler: AgentScheduler;
 let lastTaskFingerprint = "";
+let companionBeforeFileHover: { state: CompanionState; bubble: string } | undefined;
 
 app.setName("Chroni");
 const gotLock = app.requestSingleInstanceLock();
@@ -42,7 +43,13 @@ if (!gotLock) {
       petPlacement: store.petPlacement(),
       onPetPlacementChanged: (placement) => store.updatePetPlacement(placement),
     });
-    createTray();
+    createTray({
+      onCompanionVisibilityRequested: (visible) => {
+        const snapshot = store.updatePreferences({ companionEnabled: visible });
+        applyPreferences(snapshot.preferences);
+        broadcast("chroni:snapshot-updated", snapshot);
+      },
+    });
     applyPreferences(store.snapshot().preferences);
     registerHotkey();
     apiServer = startChroniApiServer(store, (snapshot, reason) => {
@@ -62,6 +69,7 @@ if (!gotLock) {
     refreshCompanionFromSchedule();
     refreshReminders();
     void agentScheduler.runStartupIfNeeded().catch((error) => console.error("Automatic Agent startup inspection failed.", error));
+    agentScheduler.startDailyChecks();
     console.log("Chroni desktop shell ready.");
   }).catch((error) => {
     console.error("Failed to start Chroni.", error);
@@ -82,29 +90,43 @@ app.on("before-quit", () => {
 
 function installIpc(): void {
   ipcMain.handle("chroni:snapshot", () => store.snapshot());
-  ipcMain.handle("chroni:extract", async (_event, payload: IntakePayload) => extractPayload(validateIntakePayload(payload), { llm: store.llmSettings() }));
+  ipcMain.handle("chroni:extract", async (_event, payload: IntakePayload) => {
+    const validatedPayload = validateIntakePayload(payload);
+    const previousCompanion = beginPetInput(validatedPayload, "正在预览并理解输入...");
+    try {
+      return await extractPayload(validatedPayload, { llm: store.llmSettings() });
+    } finally {
+      restoreCompanionAfterWork(previousCompanion);
+    }
+  });
   ipcMain.handle("chroni:intake", async (_event, payload: IntakePayload) => {
     const validatedPayload = validateIntakePayload(payload);
-    broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
-    const result = await processIntake(validatedPayload, store);
-    broadcast("chroni:snapshot-updated", result.snapshot);
-    revealScheduleAfterIntake(result.ok);
-    if (result.ok) scheduleAgentForTaskChange();
-    return result;
+    beginPetInput(validatedPayload, "正在识别 DDL...");
+    try {
+      const result = await processIntake(validatedPayload, store);
+      broadcast("chroni:snapshot-updated", result.snapshot);
+      revealScheduleAfterIntake(result.ok);
+      if (result.ok) scheduleAgentForTaskChange();
+      return result;
+    } catch (error) {
+      publishUnexpectedPetFailure(error, "识别输入失败");
+      throw error;
+    }
   });
   ipcMain.handle("chroni:companion-clicked", () => {
-    const current = companionStateForItems(store.snapshot().items);
-    const snapshot = store.setCompanion("clicked", current.bubble);
-    broadcast("chroni:snapshot-updated", snapshot);
     toggleScheduleSurface();
-    return snapshot;
+    return store.snapshot();
   });
   ipcMain.handle("chroni:companion-hover", (_event, hovering: boolean) => {
     hovering = validateBoolean(hovering, "hovering");
-    const current = companionStateForItems(store.snapshot().items);
+    const current = store.snapshot();
+    if (hovering && current.companion.state !== "hover_accept") companionBeforeFileHover = { ...current.companion };
     const snapshot = hovering
-      ? store.setCompanion("hover_accept", "松手就能自动识别。")
-      : store.setCompanion(current.state, current.bubble);
+      ? store.setCompanion("hover_accept", "松手后我会开始阅读。")
+      : current.companion.state === "hover_accept" && companionBeforeFileHover
+        ? store.setCompanion(companionBeforeFileHover.state, companionBeforeFileHover.bubble)
+        : current;
+    if (!hovering) companionBeforeFileHover = undefined;
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
@@ -159,9 +181,19 @@ function installIpc(): void {
   ipcMain.handle("chroni:intake-draft-cancel", (_event, id: string) => publishStoreSnapshot(store.cancelIntakeDraft(validateIdentifier(id, "draft id"))));
   ipcMain.handle("chroni:task-plan-generate", async (_event, taskId: string, regenerate: boolean) => {
     taskId = validateIdentifier(taskId, "task id");
-    await ensureTaskPlan(taskId, store, validateBoolean(regenerate, "regenerate"));
-    const snapshot = publishStoreSnapshot(store.snapshot());
-    return { ok: true, plan: store.taskPlanByTaskId(taskId), snapshot, message: "任务规划草案已生成。" };
+    const previousCompanion = beginPetWork("正在拆解任务计划...");
+    try {
+      await ensureTaskPlan(taskId, store, validateBoolean(regenerate, "regenerate"));
+      const plan = store.taskPlanByTaskId(taskId);
+      if (!plan) throw new Error("任务规划生成失败。");
+      restoreCompanionAfterWork(previousCompanion);
+      const snapshot = publishStoreSnapshot(store.snapshot());
+      const source = plan.plannerSource === "llm" || plan.plannerSource === "personalized-llm" ? "大模型" : plan.plannerSource === "rules-fallback" ? "本地回退" : "本地规则";
+      return { ok: true, plan, snapshot, message: `${source}规划草案已生成，确认后才会启用。` };
+    } catch (error) {
+      publishUnexpectedPetFailure(error, "任务规划失败");
+      throw error;
+    }
   });
   ipcMain.handle("chroni:task-plan-activate", (_event, taskId: string, planId: string) => {
     const result = store.activateTaskPlan(validateIdentifier(taskId, "task id"), validateIdentifier(planId, "plan id"));
@@ -182,24 +214,34 @@ function installIpc(): void {
   ipcMain.handle("chroni:behavior-memory-clear", () => publishStoreSnapshot(store.clearBehaviorMemory()));
   ipcMain.handle("chroni:quick-add", async (_event, text: string) => {
     const payload = validateIntakePayload({ kind: "text", text });
-    broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
-    const result = await processIntake(payload, store);
-    broadcast("chroni:snapshot-updated", result.snapshot);
-    revealScheduleAfterIntake(result.ok);
-    if (result.ok) scheduleAgentForTaskChange();
-    return result;
+    beginPetInput(payload, "正在识别 DDL...");
+    try {
+      const result = await processIntake(payload, store);
+      broadcast("chroni:snapshot-updated", result.snapshot);
+      revealScheduleAfterIntake(result.ok);
+      if (result.ok) scheduleAgentForTaskChange();
+      return result;
+    } catch (error) {
+      publishUnexpectedPetFailure(error, "快速添加失败");
+      throw error;
+    }
   });
   ipcMain.handle("chroni:open-control", () => showControlCenter());
   ipcMain.handle("chroni:open-pet-menu", (event) => showPetMenu(BrowserWindow.fromWebContents(event.sender)));
   ipcMain.handle("chroni:show-schedule", (_event, expanded: boolean) => showSchedule(expanded));
   ipcMain.handle("chroni:source-reprocess", async (_event, sourceId: string) => {
     sourceId = validateIdentifier(sourceId, "source id");
-    broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在重新识别来源..."));
-    const result = await reprocessSource(sourceId, store);
-    broadcast("chroni:snapshot-updated", result.snapshot);
-    refreshScheduleAfterUpdate();
-    if (result.ok) scheduleAgentForTaskChange();
-    return result;
+    beginPetWork("正在重新识别来源...");
+    try {
+      const result = await reprocessSource(sourceId, store);
+      broadcast("chroni:snapshot-updated", result.snapshot);
+      refreshScheduleAfterUpdate();
+      if (result.ok) scheduleAgentForTaskChange();
+      return result;
+    } catch (error) {
+      publishUnexpectedPetFailure(error, "重新识别失败");
+      throw error;
+    }
   });
   ipcMain.handle("chroni:source-update-text", (_event, sourceId: string, text: string) => {
     const snapshot = store.updateSourceText(validateIdentifier(sourceId, "source id"), validateSourceText(text));
@@ -213,6 +255,35 @@ function publishStoreSnapshot(snapshot: ChroniSnapshot): ChroniSnapshot {
   broadcast("chroni:snapshot-updated", snapshot);
   refreshScheduleAfterUpdate();
   return snapshot;
+}
+
+function beginPetInput(payload: IntakePayload, bubble: string): { state: CompanionState; bubble: string } {
+  const previous = { ...store.snapshot().companion };
+  requestPetAction(payload.kind === "text" ? "eat" : "idle", "replace");
+  broadcast("chroni:snapshot-updated", store.setCompanion("processing", bubble));
+  return previous;
+}
+
+function beginPetWork(bubble: string): { state: CompanionState; bubble: string } {
+  const previous = { ...store.snapshot().companion };
+  requestPetAction("idle", "replace");
+  broadcast("chroni:snapshot-updated", store.setCompanion("processing", bubble));
+  return previous;
+}
+
+function restoreCompanionAfterWork(previous?: { state: CompanionState; bubble: string }): ChroniSnapshot {
+  const current = store.snapshot();
+  if (current.companion.state !== "processing") return current;
+  const restored = previous
+    ? store.setCompanion(previous.state, previous.bubble)
+    : refreshCompanionSnapshot();
+  broadcast("chroni:snapshot-updated", restored);
+  return restored;
+}
+
+function publishUnexpectedPetFailure(error: unknown, prefix: string): void {
+  const detail = error instanceof Error && error.message ? `：${error.message}` : "。";
+  broadcast("chroni:snapshot-updated", store.setCompanion("confused", `${prefix}${detail}`));
 }
 
 function installDeadlineAgent(): void {
@@ -243,6 +314,7 @@ function installDeadlineAgent(): void {
         body: `${task.title} · ${task.reasons[0] ?? "需要优先处理"}`,
       }).show();
       store.markItemReminded(task.taskId);
+      requestPetAction("wake", "enqueue");
       return outcome;
     },
     persistPlan: (plan) => { store.saveAppliedAgentPlan(plan); },
@@ -268,7 +340,18 @@ function installDeadlineAgent(): void {
 }
 
 async function runDeadlineAgentAndPublish(trigger: AgentRunTrigger = "manual"): Promise<AgentRunResult> {
-  const result = await deadlineAgent.run(trigger);
+  if (trigger === "manual") {
+    beginPetWork("Agent 正在巡检并安排任务...");
+  } else {
+    broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在进行自动日程巡检..."));
+  }
+  let result: AgentRunResult;
+  try {
+    result = await deadlineAgent.run(trigger);
+  } catch (error) {
+    publishUnexpectedPetFailure(error, "Agent 巡检失败");
+    throw error;
+  }
   const highRiskCount = result.priorities.filter((item) => item.riskLevel === "high" || item.riskLevel === "critical").length;
   const bubble = highRiskCount
     ? `Agent 巡检完成：${highRiskCount} 个高风险 DDL。`
@@ -329,7 +412,11 @@ function agentApiOperations(): AgentApiOperations {
 
 function refreshCompanionFromSchedule(): void {
   const current = store.snapshot();
-  if (current.companion.state !== "processing" && current.companion.state !== "hover_accept") {
+  const protectedState = current.companion.state === "processing"
+    || current.companion.state === "hover_accept"
+    || current.companion.state === "needs_clarification"
+    || (current.companion.state === "sleeping" && !current.preferences.companionEnabled);
+  if (!protectedState) {
     const snapshot = refreshCompanionSnapshot();
     broadcast("chroni:snapshot-updated", snapshot);
   }
@@ -369,6 +456,7 @@ function refreshReminders(): void {
       }).show();
       const next = store.markItemReminded(item.id);
       broadcast("chroni:snapshot-updated", next);
+      requestPetAction("wake", "enqueue");
     }
   }
   setTimeout(refreshReminders, 60_000);

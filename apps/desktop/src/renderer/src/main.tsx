@@ -1,42 +1,59 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { buildAgentDashboard } from "../../shared/agent-dashboard";
 import { formatOperationError } from "../../shared/errors";
+import { attentionPetAction, basePetAction, isOneShotPetAction, petMotionReducer, resolvedPetAction } from "../../shared/pet-actions";
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
-import type { AgentMemory, CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
+import type { AgentMemory, CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
 import "./styles.css";
 
 const api = window.chroni;
-type PetAction = "idle" | "drag" | "wake" | "study" | "pet" | "cat" | "sleep";
 const petFrameModules = import.meta.glob("./assets/tongluv/frames/*/*.png", { eager: true, query: "?url", import: "default" }) as Record<string, string>;
 const petAnimationFrames: Record<PetAction, string[]> = {
   idle: collectPetFrames("idle"),
   drag: collectPetFrames("drag"),
+  cling: collectPetFrames("cling"),
+  walk: collectPetFrames("walk"),
   wake: collectPetFrames("wake"),
   study: collectPetFrames("study"),
+  eat: collectPetFrames("eat"),
   pet: collectPetFrames("pet"),
+  play: collectPetFrames("play"),
   cat: collectPetFrames("cat"),
   sleep: collectPetFrames("sleep"),
 };
 const petAnimationFps: Record<PetAction, number> = {
   idle: 1,
   drag: 1,
+  cling: 1,
+  walk: 10,
   wake: 12,
   study: 12,
+  eat: 10,
   pet: 12,
+  play: 10,
   cat: 10,
   sleep: 10,
 };
 const petAnimationLoops: Record<PetAction, boolean> = {
   idle: true,
   drag: true,
+  cling: false,
+  walk: false,
   wake: false,
   study: true,
+  eat: false,
   pet: false,
+  play: false,
   cat: false,
   sleep: false,
 };
+
+function petCommand(action: PetAction, mode: PetActionCommand["mode"] = "enqueue"): PetActionCommand {
+  return { action, mode, requestedAt: new Date().toISOString() };
+}
 
 function useSnapshot(): [ChroniSnapshot | null, React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>, string] {
   const [snapshot, setSnapshot] = useState<ChroniSnapshot | null>(null);
@@ -81,11 +98,48 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
   const dragStartPoint = useRef<{ x: number; y: number } | null>(null);
   const dragCaptureTarget = useRef<HTMLElement | null>(null);
   const suppressClick = useRef(false);
+  const clickTimer = useRef<number | undefined>(undefined);
+  const previousCompanionState = useRef(snapshot.companion.state);
+  const previousCompletion = useRef(new Map(snapshot.items.map((item) => [item.id, item.completed])));
   const [hovering, setHovering] = useState(false);
   const [movingPet, setMovingPet] = useState(false);
   const [bubbleVisible, setBubbleVisible] = useState(false);
   const [localBubble, setLocalBubble] = useState("");
-  const visualAction = movingPet ? "drag" : petAction(snapshot.companion.state);
+  const [motion, dispatchMotion] = useReducer(petMotionReducer, {
+    active: snapshot.preferences.companionEnabled ? "wake" : undefined,
+    queue: [],
+  });
+  const baseAction = basePetAction(snapshot.companion.state);
+  const visualAction = resolvedPetAction({ moving: movingPet, base: baseAction, active: motion.active });
+
+  useEffect(() => api.onPetAction((command) => dispatchMotion({ type: "command", command })), []);
+
+  useEffect(() => {
+    const previous = previousCompanionState.current;
+    previousCompanionState.current = snapshot.companion.state;
+    const action = attentionPetAction(previous, snapshot.companion.state);
+    if (action) dispatchMotion({ type: "command", command: petCommand(action, "enqueue") });
+  }, [snapshot.companion.state]);
+
+  useEffect(() => {
+    const previous = previousCompletion.current;
+    const next = new Map(snapshot.items.map((item) => [item.id, item.completed]));
+    const newlyCompleted = snapshot.items.some((item) => item.completed && previous.get(item.id) === false);
+    previousCompletion.current = next;
+    if (newlyCompleted) dispatchMotion({ type: "command", command: petCommand("play", "replace") });
+  }, [snapshot.items]);
+
+  useEffect(() => {
+    if (snapshot.companion.state !== "idle" || motion.active || movingPet || hovering) return;
+    const timeout = window.setTimeout(() => {
+      dispatchMotion({ type: "command", command: petCommand("walk") });
+    }, 20_000 + Math.round(Math.random() * 15_000));
+    return () => window.clearTimeout(timeout);
+  }, [hovering, motion.active, movingPet, snapshot.companion.state]);
+
+  useEffect(() => () => {
+    if (clickTimer.current !== undefined) window.clearTimeout(clickTimer.current);
+  }, []);
 
   useEffect(() => {
     if (localBubble) {
@@ -116,6 +170,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
       const droppedFiles = Array.from(event.dataTransfer.files);
       const droppedText = event.dataTransfer.getData("text/plain");
       const files = await filesFromFileList(droppedFiles);
+      dispatchMotion({ type: "command", command: petCommand(files.length ? "idle" : "eat", "replace") });
       await api.companionHover(false).catch(() => undefined);
       const result = files.length
         ? await api.intake({ kind: "files", files })
@@ -123,7 +178,37 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
       setSnapshot(result.snapshot);
     } catch (error) {
       setLocalBubble(formatOperationError(error, "拖放处理失败"));
+    } finally {
+      void api.companionHover(false).then(setSnapshot).catch(() => undefined);
     }
+  }
+
+  function runSingleClick(): void {
+    dispatchMotion({ type: "command", command: petCommand(snapshot.companion.state === "sleeping" ? "wake" : "pet", "replace") });
+    void api.companionClicked().then(setSnapshot).catch(() => setLocalBubble("暂时无法打开日程。"));
+  }
+
+  function handlePetClick(event: React.MouseEvent<HTMLButtonElement>): void {
+    if (suppressClick.current) {
+      event.preventDefault();
+      suppressClick.current = false;
+      return;
+    }
+    if (event.detail >= 2) {
+      if (clickTimer.current !== undefined) window.clearTimeout(clickTimer.current);
+      clickTimer.current = undefined;
+      dispatchMotion({ type: "command", command: petCommand("cat", "replace") });
+      return;
+    }
+    if (event.detail === 0) {
+      runSingleClick();
+      return;
+    }
+    if (clickTimer.current !== undefined) window.clearTimeout(clickTimer.current);
+    clickTimer.current = window.setTimeout(() => {
+      clickTimer.current = undefined;
+      runSingleClick();
+    }, 220);
   }
 
   return (
@@ -161,13 +246,17 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         if (dragPointerId.current !== event.pointerId || (event.buttons & 1) === 0) return;
         const start = dragStartPoint.current;
         if (start && Math.abs(event.screenX - start.x) + Math.abs(event.screenY - start.y) > 2) {
-          suppressClick.current = true;
-          setMovingPet(true);
+          if (!suppressClick.current) {
+            suppressClick.current = true;
+            setMovingPet(true);
+            dispatchMotion({ type: "command", command: petCommand("idle", "replace") });
+          }
         }
         api.moveWindowDrag();
       }}
       onPointerUp={(event) => {
         if (dragPointerId.current !== event.pointerId) return;
+        const wasMoved = suppressClick.current;
         dragPointerId.current = null;
         dragStartPoint.current = null;
         const captureTarget = dragCaptureTarget.current;
@@ -175,6 +264,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         if (captureTarget?.hasPointerCapture(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
         setMovingPet(false);
         api.endWindowDrag();
+        if (wasMoved && baseAction !== "sleep") dispatchMotion({ type: "command", command: petCommand("cling", "replace") });
       }}
       onPointerCancel={(event) => {
         if (dragPointerId.current !== event.pointerId) return;
@@ -187,21 +277,23 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         setMovingPet(false);
         api.endWindowDrag();
       }}
+      onLostPointerCapture={(event) => {
+        if (dragPointerId.current !== event.pointerId) return;
+        dragPointerId.current = null;
+        dragStartPoint.current = null;
+        dragCaptureTarget.current = null;
+        suppressClick.current = false;
+        setMovingPet(false);
+        api.endWindowDrag();
+      }}
     >
       <button
         className="pet-body"
         type="button"
-        onClick={(event) => {
-          if (suppressClick.current) {
-            event.preventDefault();
-            suppressClick.current = false;
-            return;
-          }
-          void api.companionClicked().then(setSnapshot).catch(() => setLocalBubble("暂时无法打开日程。"));
-        }}
-        aria-label="Chroni 桌宠"
+        onClick={handlePetClick}
+        aria-label={`Chroni 桌宠，当前动作：${petActionLabel(visualAction)}`}
       >
-        <PetSprite action={visualAction} />
+        <PetSprite action={visualAction} onFinished={(action) => dispatchMotion({ type: "finished", action })} />
       </button>
       <div className={`bubble ${bubbleVisible ? "show" : ""}`} role="status" aria-live="polite">{localBubble || snapshot.companion.bubble}</div>
     </main>
@@ -212,23 +304,41 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   const scheduleClock = useScheduleClock();
   const surface = useMemo(() => buildScheduleSurface(snapshot.items, new Date(scheduleClock)), [scheduleClock, snapshot.items]);
   const [quickText, setQuickText] = useState("");
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [feedback, setFeedback] = useState<ActionNotice | null>(null);
   const [feedbackHovered, setFeedbackHovered] = useState(false);
   const [feedbackFocused, setFeedbackFocused] = useState(false);
   const [busyMessage, setBusyMessage] = useState("");
   const [undoing, setUndoing] = useState(false);
   const undoButtonRef = useRef<HTMLButtonElement>(null);
+  const quickAddInputRef = useRef<HTMLInputElement>(null);
   const isWindowsDrawer = api.platform === "win32";
   const isBusy = !!busyMessage;
   const feedbackPaused = feedbackHovered || feedbackFocused;
 
+  function closeQuickAdd(): void {
+    setQuickAddOpen(false);
+    setQuickText("");
+  }
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape" && !document.querySelector(".snooze-menu")) void api.showSchedule(false);
+      if (event.key !== "Escape" || document.querySelector(".snooze-menu")) return;
+      if (!isWindowsDrawer && quickAddOpen) {
+        closeQuickAdd();
+        return;
+      }
+      void api.showSchedule(false);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [isWindowsDrawer, quickAddOpen]);
+
+  useEffect(() => {
+    if (isWindowsDrawer || !quickAddOpen) return;
+    const frame = window.requestAnimationFrame(() => quickAddInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [isWindowsDrawer, quickAddOpen]);
 
   useEffect(() => {
     if (!feedback || feedbackPaused) return;
@@ -256,7 +366,10 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
       const result = await api.quickAdd(quickText);
       setSnapshot(result.snapshot);
       showFeedback({ message: result.ok ? result.message : result.reason, tone: result.ok ? "ok" : "warn" });
-      if (result.ok) setQuickText("");
+      if (result.ok) {
+        setQuickText("");
+        if (!isWindowsDrawer) setQuickAddOpen(false);
+      }
     } catch (error) {
       showFeedback({ message: formatOperationError(error, "识别失败"), tone: "warn" });
     } finally {
@@ -277,6 +390,12 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
     }
   }
 
+  const overviewParts = [
+    surface.counts.overdue ? `${surface.counts.overdue} 项已逾期` : "",
+    surface.counts.today ? `${surface.counts.today} 项今天截止` : "",
+    surface.counts.upcoming + surface.counts.later ? `${surface.counts.upcoming + surface.counts.later} 项接下来` : "",
+  ].filter(Boolean);
+
   return (
     <main
       className={`schedule-shell ${isWindowsDrawer ? "drawer-shell" : "popover-shell"}`}
@@ -292,31 +411,58 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
         <header className="panel-head">
           <div>
             <p>Chroni</p>
-            <h1>最近要注意</h1>
+            <h1>{isWindowsDrawer ? "最近要注意" : "日程"}</h1>
           </div>
           <div className="panel-actions">
-            <button className="icon-btn" type="button" onClick={() => void api.openControlCenter()} title="控制中心" aria-label="打开控制中心">⚙</button>
+            {isWindowsDrawer ? (
+              <button className="icon-btn" type="button" onClick={() => void api.openControlCenter()} title="控制中心" aria-label="打开控制中心">⚙</button>
+            ) : (
+              <button className="schedule-manage" type="button" onClick={() => void api.openControlCenter()}>管理</button>
+            )}
             <button className="icon-btn quiet" type="button" onClick={() => void api.showSchedule(false)} title="收起日程" aria-label="收起日程">×</button>
           </div>
         </header>
-        <div className="mini-stats" aria-label="日程概览">
-          <span className={surface.counts.overdue ? "alert" : ""}><b>{surface.counts.overdue}</b> 逾期</span>
-          <span><b>{surface.counts.today}</b> 今天</span>
-          <span><b>{surface.counts.upcoming + surface.counts.later}</b> 接下来</span>
-        </div>
-        <div className="quick-add">
-          <input
-            value={quickText}
-            disabled={isBusy}
-            aria-label="快速添加日程"
-            onChange={(event) => setQuickText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void quickAdd();
-            }}
-            placeholder="快速添加：7月12日 23:59 课程报告"
-          />
-          <button type="button" disabled={isBusy || !quickText.trim()} onClick={() => void quickAdd()} aria-label="识别并添加日程">＋</button>
-        </div>
+        {isWindowsDrawer ? (
+          <div className="mini-stats" aria-label="日程概览">
+            <span className={surface.counts.overdue ? "alert" : ""}><b>{surface.counts.overdue}</b> 逾期</span>
+            <span><b>{surface.counts.today}</b> 今天</span>
+            <span><b>{surface.counts.upcoming + surface.counts.later}</b> 接下来</span>
+          </div>
+        ) : (
+          <p className={`schedule-overview ${surface.counts.overdue ? "urgent" : ""}`} aria-label="日程概览">
+            {overviewParts.length ? overviewParts.join(" · ") : "当前没有待处理事项"}
+          </p>
+        )}
+        {isWindowsDrawer ? (
+          <div className="quick-add">
+            <input
+              value={quickText}
+              disabled={isBusy}
+              aria-label="快速添加日程"
+              onChange={(event) => setQuickText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void quickAdd();
+              }}
+              placeholder="快速添加：7月12日 23:59 课程报告"
+            />
+            <button type="button" disabled={isBusy || !quickText.trim()} onClick={() => void quickAdd()} aria-label="识别并添加日程">＋</button>
+          </div>
+        ) : quickAddOpen ? (
+          <form className="quick-add schedule-quick-add" onSubmit={(event) => { event.preventDefault(); void quickAdd(); }}>
+            <input
+              ref={quickAddInputRef}
+              value={quickText}
+              disabled={isBusy}
+              aria-label="快速添加日程"
+              onChange={(event) => setQuickText(event.target.value)}
+              placeholder="例如：明晚 8 点交课程报告"
+            />
+            <button className="quick-add-submit" type="submit" disabled={isBusy || !quickText.trim()} aria-label="添加日程">＋</button>
+            <button className="quick-add-cancel" type="button" disabled={isBusy} onClick={closeQuickAdd} aria-label="取消添加">×</button>
+          </form>
+        ) : (
+          <button className="schedule-add-trigger" type="button" onClick={() => setQuickAddOpen(true)}><span>＋</span>添加日程</button>
+        )}
         {busyMessage && <p className="inline-feedback info" role="status" aria-live="polite">{busyMessage}</p>}
         {feedback && (
           <div
@@ -340,7 +486,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
                   <span>{group.label}</span>
                   <b>{group.items.length}</b>
                 </header>
-              <DdlList items={group.items} plans={snapshot.taskPlans} setSnapshot={setSnapshot} compact onAction={showFeedback} ariaLabel={`${group.label}日程`} />
+              <DdlList items={group.items} plans={snapshot.taskPlans} setSnapshot={setSnapshot} compact minimal={!isWindowsDrawer} onAction={showFeedback} ariaLabel={`${group.label}日程`} />
               </section>
             ))}
           </div>
@@ -350,7 +496,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
         {surface.hiddenParts.length > 0 && (
           <button className="schedule-hidden-summary" type="button" onClick={() => void api.openControlCenter()}>
             <span>另有 {surface.hiddenParts.join(" · ")}</span>
-            <b>在控制中心查看</b>
+            <b>{isWindowsDrawer ? "在控制中心查看" : "查看全部"}</b>
           </button>
         )}
       </section>
@@ -394,11 +540,11 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
 
 function AgentPane({ snapshot, setSnapshot }: ViewProps) {
   const latest = snapshot.agent.latestRun;
+  const dashboard = buildAgentDashboard(latest);
   const [memoryDraft, setMemoryDraft] = useState<AgentMemory>({ ...snapshot.agent.memory });
   const [memoryDirty, setMemoryDirty] = useState(false);
   const [busyAction, setBusyAction] = useState<"run" | "memory" | "export" | "">("");
   const [feedback, setFeedback] = useState("");
-  const highRisk = latest?.priorities.filter((item) => item.riskLevel === "high" || item.riskLevel === "critical") ?? [];
 
   useEffect(() => {
     if (!memoryDirty) setMemoryDraft({ ...snapshot.agent.memory });
@@ -459,120 +605,156 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
     <div className="pane agent-pane">
       <header className="pane-head agent-head">
         <div>
-          <p>Observe · Plan · Act · Verify</p>
-          <h2>今日 Agent 巡检</h2>
+          <p>Deadline Agent</p>
+          <h2>今天怎么安排</h2>
+          <span className="agent-head-copy">自动检查截止风险，并给出今天可以直接执行的安排。</span>
         </div>
-        {latest && <span className={`agent-planner-badge planner-${latest.plan.plannerSource ?? "rules"}`}>{agentPlannerLabel(latest.plan.plannerSource)}</span>}
         <button className="agent-run" type="button" disabled={!!busyAction} onClick={() => void runInspection()}>
-          {busyAction === "run" ? "巡检中..." : "运行巡检"}
+          {busyAction === "run" ? "正在检查..." : latest ? "重新检查" : "开始检查"}
         </button>
       </header>
 
       {feedback && <p className={`inline-feedback ${isPositiveFeedback(feedback) ? "ok" : "warn"}`} role="status" aria-live="polite">{feedback}</p>}
       <ClarificationPanel snapshot={snapshot} setSnapshot={setSnapshot} />
 
-      <section className={`agent-status status-${latest?.verification.status ?? "idle"}`}>
-        <div>
-          <span>当前状态</span>
-          <b>{latest ? agentStatusLabel(latest.verification.status) : "尚未巡检"}</b>
-        </div>
-        <div>
-          <span>高风险</span>
-          <b>{highRisk.length}</b>
-        </div>
-        <div>
-          <span>今日安排</span>
-          <b>{latest?.plan.plannedMinutes ?? 0} 分钟</b>
-        </div>
-        <div>
-          <span>最近运行</span>
-          <b>{latest ? `${agentTriggerLabel(latest.trigger)} · ${formatAgentTime(latest.completedAt)}` : "--"}</b>
-        </div>
-        <div>
-          <span>计划覆盖</span>
-          <b>{latest?.verification.coveragePercent ?? 0}%</b>
-        </div>
-      </section>
-
       {!latest ? (
-        <div className="empty agent-empty">运行巡检后，这里会显示今日优先级、工作块和 Agent Trace。</div>
+        <section className="agent-welcome">
+          <span className="agent-welcome-mark">A</span>
+          <div>
+            <h3>让 Agent 帮你排好今天</h3>
+            <p>它会检查现有 DDL，找出可能来不及的任务，并在你的可用时间内生成今日行动安排。</p>
+          </div>
+          <button type="button" disabled={!!busyAction} onClick={() => void runInspection()}>{busyAction === "run" ? "正在检查..." : "开始第一次检查"}</button>
+        </section>
       ) : (
         <>
-          <section className="agent-section">
-            <header className="section-head">
-              <div><h3>今日建议</h3><p>{latest.verification.summary}</p></div>
-            </header>
-            <ol className="agent-suggestions">{latest.suggestions.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ol>
-          </section>
-
-          <section className="agent-section">
-            <header className="section-head"><div><h3>执行结果</h3><p>{latest.actions.filter((action) => action.status === "failed").length} 项失败</p></div></header>
-            <div className="agent-action-list">
-              {latest.actions.map((action, index) => <p className={`agent-action action-${action.status}`} key={`${action.tool}-${index}`}><b>{action.tool}</b><span>{action.summary}</span></p>)}
+          <section className={`agent-overview status-${latest.verification.status}`}>
+            <div className="agent-overview-copy">
+              <span className="agent-overview-kicker"><i aria-hidden="true" /> Agent 已完成检查</span>
+              <h3>{agentStatusLabel(latest.verification.status)}</h3>
+              <p>{latest.verification.summary}</p>
+              <small>{agentTriggerLabel(latest.trigger)} · {formatAgentTime(latest.completedAt)}</small>
+              {dashboard.suggestions[0] && <div className="agent-primary-advice"><b>现在建议</b><span>{dashboard.suggestions[0]}</span></div>}
+            </div>
+            <div className="agent-overview-side">
+              <div className="agent-overview-metrics">
+                <div><span>高风险</span><b>{dashboard.highRiskCount}</b></div>
+                <div><span>今日安排</span><b>{formatAgentMinutes(latest.plan.plannedMinutes)}</b></div>
+                <div><span>计划覆盖</span><b>{dashboard.coveragePercent}%</b></div>
+              </div>
+              <div className="agent-coverage" aria-label={`计划覆盖 ${dashboard.coveragePercent}%`}>
+                <span style={{ width: `${dashboard.coveragePercent}%` }} />
+              </div>
             </div>
           </section>
 
-          <div className="agent-columns">
-            <section className="agent-section">
-              <header className="section-head"><div><h3>优先任务</h3><p>{highRisk.length} 条高风险</p></div></header>
-              <div className="agent-risk-list">
-                {latest.priorities.slice(0, 6).map((item) => (
-                  <article className={`agent-risk-row risk-${item.riskLevel}`} key={item.taskId}>
-                    <div><b>{item.title}</b><span>{item.reasons.join(" · ")}</span></div>
-                    <em>{agentRiskLabel(item.riskLevel)}</em>
-                  </article>
-                ))}
-                {!latest.priorities.length && <div className="empty compact-empty">没有待处理任务。</div>}
-              </div>
-            </section>
-
-            <section className="agent-section">
-              <header className="section-head"><div><h3>工作块</h3><p>{latest.plan.blocks.length} 段 · {latest.plan.plannedMinutes} 分钟</p></div></header>
+          <div className="agent-focus-grid">
+            <section className="agent-focus-card">
+              <header><div><span>01</span><h3>今天先做这些</h3></div><p>{latest.plan.blocks.length} 个时间段</p></header>
               <div className="agent-block-list">
-                {latest.plan.blocks.map((block) => (
+                {dashboard.todayBlocks.map((block) => (
                   <article className="agent-block-row" key={`${block.taskId}-${block.startAt}`}>
                     <time>{formatAgentClock(block.startAt)}–{formatAgentClock(block.endAt)}</time>
                     <div><b>{block.title}</b><span>{block.allocatedMinutes} 分钟</span></div>
                   </article>
                 ))}
-                {!latest.plan.blocks.length && <div className="empty compact-empty">今日没有生成工作块。</div>}
+                {!dashboard.todayBlocks.length && <div className="agent-calm-state"><b>今天没有需要安排的工作块</b><span>可以按现有节奏推进任务。</span></div>}
               </div>
+              {latest.plan.blocks.length > dashboard.todayBlocks.length && <p className="agent-more-hint">另有 {latest.plan.blocks.length - dashboard.todayBlocks.length} 个时间段，可在巡检详情中查看。</p>}
+            </section>
+
+            <section className="agent-focus-card attention-card">
+              <header><div><span>02</span><h3>需要留意</h3></div><p>{dashboard.highRiskCount} 个高风险</p></header>
+              <div className="agent-risk-list">
+                {dashboard.attentionTasks.map((item) => (
+                  <article className={`agent-risk-row risk-${item.riskLevel}`} key={item.taskId}>
+                    <div><b>{item.title}</b><span>{formatAgentTime(item.dueAt)} · {item.reasons[0] ?? "需要优先处理"}{item.actionable === false ? " · 等待解除阻塞" : ""}</span></div>
+                    <em>{agentRiskLabel(item.riskLevel)}</em>
+                  </article>
+                ))}
+                {!dashboard.attentionTasks.length && <div className="agent-calm-state"><b>暂时没有高风险任务</b><span>当前安排处于可控范围。</span></div>}
+              </div>
+              {dashboard.highRiskCount > dashboard.attentionTasks.length && <p className="agent-more-hint">其余 {dashboard.highRiskCount - dashboard.attentionTasks.length} 项已收进巡检详情。</p>}
             </section>
           </div>
 
-          <section className="agent-section">
-            <header className="section-head"><div><h3>Agent Trace</h3><p>{latest.trace.length} 个审计步骤</p></div></header>
-            <div className="agent-trace">
-              {latest.trace.map((entry) => (
-                <article className={entry.success ? "" : "failed"} key={`${entry.sequence}-${entry.id}`}>
-                  <span>{entry.sequence}</span>
-                  <div><b>{agentStageLabel(entry.stage)}</b><p>{entry.summary}</p></div>
-                  <time>{formatAgentClock(entry.timestamp)}</time>
-                </article>
-              ))}
+          <details className="agent-details">
+            <summary><span>查看巡检详情</span><small>{latest.trace.length} 个审计步骤 · {dashboard.failedActionCount ? `${dashboard.failedActionCount} 项执行失败` : "执行正常"}</small></summary>
+            <div className="agent-details-content">
+              {dashboard.suggestions.length > 1 && (
+                <section className="agent-section">
+                  <header className="section-head"><div><h3>其他建议</h3><p>按优先级整理</p></div></header>
+                  <ol className="agent-suggestions">{dashboard.suggestions.slice(1).map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ol>
+                </section>
+              )}
+
+              {!!latest.plan.forecastBlocks?.length && (
+                <section className="agent-section">
+                  <header className="section-head"><div><h3>未来一周预排</h3><p>{latest.plan.forecastBlocks.length} 段 · 会随进度重算</p></div></header>
+                  <div className="agent-block-list">
+                    {latest.plan.forecastBlocks.map((block) => (
+                      <article className="agent-block-row" key={`forecast-${block.taskId}-${block.startAt}`}>
+                        <time>{formatAgentTime(block.startAt)}–{formatAgentClock(block.endAt)}</time>
+                        <div><b>{block.title}</b><span>{block.allocatedMinutes} 分钟</span></div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <section className="agent-section">
+                <header className="section-head"><div><h3>执行记录</h3><p>{dashboard.failedActionCount ? `${dashboard.failedActionCount} 项失败` : "全部正常"}</p></div></header>
+                <div className="agent-action-list">
+                  {latest.actions.map((action, index) => <p className={`agent-action action-${action.status}`} key={`${action.tool}-${index}`}><b>{agentToolLabel(action.tool)}</b><span>{agentActionSummary(action.summary)}</span></p>)}
+                </div>
+              </section>
+
+              <section className="agent-section">
+                <header className="section-head"><div><h3>运行轨迹</h3><p>观察 → 规划 → 执行 → 验证</p></div></header>
+                <div className="agent-trace">
+                  {latest.trace.map((entry) => (
+                    <article className={entry.success ? "" : "failed"} key={`${entry.sequence}-${entry.id}`}>
+                      <span>{entry.sequence}</span>
+                      <div><b>{agentStageLabel(entry.stage)}</b><p>{entry.summary}</p></div>
+                      <time>{formatAgentClock(entry.timestamp)}</time>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <div className="agent-run-meta">
+                <span>规划方式：<b>{agentPlannerLabel(latest.plan.plannerSource)}</b></span>
+                <span>待处理：<b>{latest.observation.activeCount}</b></span>
+                <span>未安排：<b>{latest.plan.unplannedTaskIds.length}</b></span>
+              </div>
             </div>
-          </section>
+          </details>
         </>
       )}
 
-      <details className="agent-settings advanced-settings">
-        <summary>Agent Memory 与导出</summary>
+      <details className="agent-details agent-settings advanced-settings">
+        <summary><span>Agent 设置与导出</span><small>工作时间、容量、提醒和规划方式</small></summary>
+        <div className="agent-details-content">
         <div className="agent-memory-grid">
-          <label>每日容量（分钟）<input type="number" min="30" max="720" step="30" value={memoryDraft.maxDailyMinutes} onChange={(event) => patchMemory({ maxDailyMinutes: Number(event.target.value) })} /></label>
+          <label>每天可安排（分钟）<input type="number" min="30" max="720" step="30" value={memoryDraft.maxDailyMinutes} onChange={(event) => patchMemory({ maxDailyMinutes: Number(event.target.value) })} /></label>
           <label>开始时间<input type="time" value={memoryDraft.workdayStart} onChange={(event) => patchMemory({ workdayStart: event.target.value })} /></label>
           <label>结束时间<input type="time" value={memoryDraft.workdayEnd} onChange={(event) => patchMemory({ workdayEnd: event.target.value })} /></label>
           <label>提醒频率<select value={memoryDraft.reminderFrequency} onChange={(event) => patchMemory({ reminderFrequency: event.target.value as AgentMemory["reminderFrequency"] })}><option value="important-only">仅高风险</option><option value="daily">每日</option><option value="off">关闭</option></select></label>
         </div>
         <div className="agent-setting-toggles">
           <Toggle label="自动巡检" checked={memoryDraft.automaticInspectionEnabled} onChange={(value) => patchMemory({ automaticInspectionEnabled: value })} />
-          <Toggle label="使用大模型辅助规划" checked={memoryDraft.useLlmPlanning} onChange={(value) => patchMemory({ useLlmPlanning: value })} />
+          <Toggle label="Agent 规划使用大模型（不影响信息抽取）" checked={memoryDraft.useLlmPlanning} onChange={(value) => patchMemory({ useLlmPlanning: value })} />
         </div>
         <div className="agent-settings-actions">
-          <button className="secondary" type="button" disabled={!!busyAction || !memoryDirty} onClick={() => void saveMemory()}>{busyAction === "memory" ? "保存中..." : "保存 Memory"}</button>
-          <button className="secondary" type="button" disabled={!!busyAction} onClick={() => void exportIcs()}>{busyAction === "export" ? "导出中..." : "导出 ICS"}</button>
+          <button className="secondary" type="button" disabled={!!busyAction || !memoryDirty} onClick={() => void saveMemory()}>{busyAction === "memory" ? "保存中..." : "保存设置"}</button>
+          <button className="secondary" type="button" disabled={!!busyAction} onClick={() => void exportIcs()}>{busyAction === "export" ? "导出中..." : "导出日历文件"}</button>
+        </div>
         </div>
       </details>
-      <BehaviorMemoryPane snapshot={snapshot} setSnapshot={setSnapshot} />
+      <details className="agent-details agent-personalization">
+        <summary><span>个性化规划</span><small>{snapshot.agent.behaviorMemory.preferences.filter((item) => item.status === "active").length} 条偏好生效</small></summary>
+        <div className="agent-details-content"><BehaviorMemoryPane snapshot={snapshot} setSnapshot={setSnapshot} embedded /></div>
+      </details>
     </div>
   );
 }
@@ -1116,19 +1298,19 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
   );
 }
 
-function DdlList({ items, sources = [], plans = [], setSnapshot, compact = false, editable = false, emptyText = "暂时没有需要马上处理的 DDL。", onAction, onOpenTask, ariaLabel }: { items: DdlItem[]; sources?: SourceRecord[]; plans?: TaskPlan[]; setSnapshot: ViewProps["setSnapshot"]; compact?: boolean; editable?: boolean; emptyText?: string; onAction?(notice: ActionNotice): void; onOpenTask?(taskId: string): void; ariaLabel?: string }) {
+function DdlList({ items, sources = [], plans = [], setSnapshot, compact = false, minimal = false, editable = false, emptyText = "暂时没有需要马上处理的 DDL。", onAction, onOpenTask, ariaLabel }: { items: DdlItem[]; sources?: SourceRecord[]; plans?: TaskPlan[]; setSnapshot: ViewProps["setSnapshot"]; compact?: boolean; minimal?: boolean; editable?: boolean; emptyText?: string; onAction?(notice: ActionNotice): void; onOpenTask?(taskId: string): void; ariaLabel?: string }) {
   if (!items.length) return <div className="empty">{emptyText}</div>;
   const sourceMap = new Map(sources.map((source) => [source.id, source]));
   return (
     <div className={`ddl-list ${compact ? "compact" : ""}`} role="list" aria-label={ariaLabel}>
       {items.map((item) => (
-        <DdlRow key={item.id} item={item} plan={plans.filter((plan) => plan.taskId === item.id && plan.status !== "superseded").sort((left, right) => right.version - left.version)[0]} source={item.sourceId ? sourceMap.get(item.sourceId) : undefined} setSnapshot={setSnapshot} editable={editable} onAction={onAction} onOpenTask={onOpenTask} />
+        <DdlRow key={item.id} item={item} plan={plans.filter((plan) => plan.taskId === item.id && plan.status !== "superseded").sort((left, right) => right.version - left.version)[0]} source={item.sourceId ? sourceMap.get(item.sourceId) : undefined} setSnapshot={setSnapshot} editable={editable} minimal={minimal} onAction={onAction} onOpenTask={onOpenTask} />
       ))}
     </div>
   );
 }
 
-function DdlRow({ item, source, plan, setSnapshot, editable, onAction, onOpenTask }: { item: DdlItem; source?: SourceRecord; plan?: TaskPlan; setSnapshot: ViewProps["setSnapshot"]; editable?: boolean; onAction?(notice: ActionNotice): void; onOpenTask?(taskId: string): void }) {
+function DdlRow({ item, source, plan, setSnapshot, editable, minimal = false, onAction, onOpenTask }: { item: DdlItem; source?: SourceRecord; plan?: TaskPlan; setSnapshot: ViewProps["setSnapshot"]; editable?: boolean; minimal?: boolean; onAction?(notice: ActionNotice): void; onOpenTask?(taskId: string): void }) {
   const urgency = urgencyTone(item);
   const [draft, setDraft] = useState(item);
   const [busyAction, setBusyAction] = useState("");
@@ -1347,14 +1529,14 @@ function DdlRow({ item, source, plan, setSnapshot, editable, onAction, onOpenTas
   return (
     <article className={`ddl-row compact-row tone-${urgency} ${snoozeMenuOpen ? "menu-open" : ""} ${isBusy ? "busy" : ""}`} role="listitem" aria-busy={isBusy}>
       <button className="check" type="button" title="完成" aria-label={`完成 ${item.title}`} disabled={isBusy} onClick={() => void completeItem()}>✓</button>
-      <button className="row-main" type="button" onClick={() => void api.openControlCenter().catch(() => onAction?.({ message: "暂时无法打开控制中心。", tone: "warn" }))}>
+      <button className={`row-main ${minimal ? "minimal" : ""} ${minimal && item.importance === "high" ? "has-priority" : ""}`} type="button" onClick={() => void api.openControlCenter().catch(() => onAction?.({ message: "暂时无法打开控制中心。", tone: "warn" }))}>
         <span className="title-line">
           <strong>{item.title}</strong>
           {fresh && <b className="new-chip">新</b>}
         </span>
-        <span>{importanceLabel(item.importance)}</span>
-        <time>{formatDue(item.dueAt)}</time>
-        <em>{remainingText(item.dueAt)}</em>
+        {(!minimal || item.importance === "high") && <span className="importance-label">{minimal ? "高优先" : importanceLabel(item.importance)}</span>}
+        <time className="due-time">{formatDue(item.dueAt)}</time>
+        <em className="remaining-text">{remainingText(item.dueAt)}</em>
       </button>
       <div className="snooze-control" ref={snoozeControlRef}>
         <button ref={snoozeToggleRef} className="snooze" type="button" title="稍后提醒" aria-label={`稍后提醒 ${item.title}`} aria-expanded={snoozeMenuOpen} aria-controls={snoozeMenuId} disabled={isBusy} onClick={() => setSnoozeMenuOpen((current) => !current)}>⏱</button>
@@ -1452,8 +1634,25 @@ function agentPlannerLabel(source: NonNullable<ChroniSnapshot["agent"]["latestRu
   return "本地规划";
 }
 
+function agentToolLabel(tool: string): string {
+  if (tool === "replan") return "重新排程";
+  if (tool === "reminder") return "提醒";
+  if (tool === "persist-plan") return "保存计划";
+  return tool;
+}
+
+function agentActionSummary(summary: string): string {
+  return summary
+    .replace(/未发送提醒：disabled\b/g, "未发送提醒：提醒功能已关闭")
+    .replace(/未发送提醒：unsupported\b/g, "未发送提醒：当前系统不支持通知")
+    .replace(/未发送提醒：quiet-hours\b/g, "未发送提醒：当前处于免打扰时段")
+    .replace(/未发送提醒：duplicate\b/g, "未发送提醒：近期已提醒")
+    .replace(/未发送提醒：not-needed\b/g, "未发送提醒：当前无需提醒");
+}
+
 function agentTriggerLabel(trigger: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["trigger"] | undefined): string {
   if (trigger === "startup") return "启动巡检";
+  if (trigger === "daily") return "每日巡检";
   if (trigger === "task-change") return "变更巡检";
   return "手动巡检";
 }
@@ -1464,6 +1663,13 @@ function formatAgentClock(value: string): string {
 
 function formatAgentTime(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+}
+
+function formatAgentMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `${hours}小时${remainder}分` : `${hours}小时`;
 }
 
 const companionStyleOptions: { value: CompanionStyle; label: string }[] = [
@@ -1649,15 +1855,27 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function PetSprite({ action }: { action: PetAction }) {
+function PetSprite({ action, onFinished }: { action: PetAction; onFinished(action: PetAction): void }) {
   const frames = petAnimationFrames[action].length ? petAnimationFrames[action] : petAnimationFrames.idle;
   const [frameIndex, setFrameIndex] = useState(0);
   const [finished, setFinished] = useState(false);
+  const onFinishedRef = useRef(onFinished);
+
+  useEffect(() => {
+    onFinishedRef.current = onFinished;
+  }, [onFinished]);
 
   useEffect(() => {
     setFrameIndex(0);
     setFinished(false);
-    if (frames.length <= 1) return;
+    if (frames.length <= 1) {
+      if (!isOneShotPetAction(action)) return;
+      const timeout = window.setTimeout(() => {
+        setFinished(true);
+        onFinishedRef.current(action);
+      }, 650);
+      return () => window.clearTimeout(timeout);
+    }
     const loop = petAnimationLoops[action];
     const interval = window.setInterval(() => {
       setFrameIndex((current) => {
@@ -1666,6 +1884,7 @@ function PetSprite({ action }: { action: PetAction }) {
         if (loop) return 0;
         window.clearInterval(interval);
         setFinished(true);
+        window.setTimeout(() => onFinishedRef.current(action), 0);
         return current;
       });
     }, 1000 / petAnimationFps[action]);
@@ -1684,21 +1903,21 @@ function collectPetFrames(action: PetAction): string[] {
     .map(([, url]) => url);
 }
 
-function petAction(state: CompanionState): PetAction {
-  const map: Record<CompanionState, PetAction> = {
-    idle: "idle",
-    clicked: "wake",
-    hover_accept: "drag",
-    processing: "study",
-    needs_clarification: "wake",
-    success: "pet",
-    confused: "cat",
-    deadline_near: "study",
-    overdue: "study",
-    celebrating: "pet",
-    sleeping: "sleep",
+function petActionLabel(action: PetAction): string {
+  const labels: Record<PetAction, string> = {
+    idle: "待机",
+    drag: "被提起",
+    cling: "落地缓冲",
+    walk: "散步",
+    wake: "醒来",
+    study: "读书",
+    eat: "吃汉堡",
+    pet: "摸头",
+    play: "打羽毛球",
+    cat: "和猫猫玩",
+    sleep: "睡觉",
   };
-  return map[state];
+  return labels[action];
 }
 
 function isPersistentPetFeedback(state: CompanionState): boolean {

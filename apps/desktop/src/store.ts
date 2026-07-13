@@ -101,8 +101,6 @@ export class ChroniStore {
   }
 
   saveIntakeDraft(draft: IntakeDraft, clarifications: PendingClarification[], extracted?: ExtractedInput): ChroniSnapshot {
-    const existing = this.#state.intakeDrafts.find((item) => item.status === "needs-clarification" && item.sourceName === draft.sourceName && item.candidate.title === draft.candidate.title);
-    if (existing) return this.snapshot();
     let sourceId = draft.sourceId;
     if (extracted) {
       const existingSource = this.#state.sources.find((source) => source.sourceName === extracted.sourceName && source.text === extracted.text);
@@ -121,6 +119,10 @@ export class ChroniStore {
         sourceId = source.id;
       }
     }
+    const existing = this.#state.intakeDrafts.find((item) => item.status === "needs-clarification"
+      && item.sourceId === sourceId
+      && item.candidate.title === draft.candidate.title);
+    if (existing) return this.snapshot();
     const storedDraft = { ...structuredClone(draft), sourceId };
     this.#state.intakeDrafts = [storedDraft, ...this.#state.intakeDrafts.filter((item) => item.id !== draft.id)].slice(0, 100);
     this.#state.clarifications = [
@@ -266,6 +268,7 @@ export class ChroniStore {
           : ["createdByUser"];
         return { ...step, taskId, order: index + 1, origin: previous?.origin ?? "user", userModifiedFields: [...new Set([...(previous?.userModifiedFields ?? []), ...modifiedFields])], updatedAt };
       }),
+      latestSafeStartAt: new Date(new Date(task.dueAt).getTime() - (payload.steps.reduce((sum, step) => sum + step.estimatedMinutes, 0) + payload.bufferMinutes) * 60_000).toISOString(),
       updatedAt,
     };
     validateTaskPlan(next, task);
@@ -419,9 +422,16 @@ export class ChroniStore {
     }
     this.#state.items = this.#state.items.map((item) => item.id === id ? { ...item, ...patch, updatedAt: new Date().toISOString() } : item);
     const updated = this.#state.items.find((item) => item.id === id);
+    if (updated && patch.dueAt !== undefined) {
+      this.#state.taskPlans = this.#state.taskPlans.map((plan) => plan.taskId === id
+        ? { ...plan, latestSafeStartAt: new Date(new Date(updated.dueAt).getTime() - (plan.estimatedTotalMinutes + plan.bufferMinutes) * 60_000).toISOString(), updatedAt: new Date().toISOString() }
+        : plan);
+    }
+    const scheduleCompanion = companionStateForItems(this.#state.items);
     this.#state.companion = updated?.completed && patch.completed === true
+      && scheduleCompanion.state !== "deadline_near" && scheduleCompanion.state !== "overdue"
       ? { state: "celebrating", bubble: "完成得很干脆。" }
-      : companionStateForItems(this.#state.items);
+      : scheduleCompanion;
     this.#save();
     return this.snapshot();
   }
@@ -451,10 +461,32 @@ export class ChroniStore {
       this.#save();
       return this.snapshot();
     }
+    const previousSourceItems = this.#state.items.filter((item) => item.sourceId === sourceId);
+    const previousByKey = new Map(previousSourceItems.map((item) => [dedupeKey(item), item]));
+    const retainedCandidates = items.map((item) => {
+      const previous = previousByKey.get(dedupeKey(item));
+      if (!previous) return { ...item, sourceId };
+      return {
+        ...item,
+        id: previous.id,
+        sourceId,
+        completed: previous.completed,
+        snoozedUntil: previous.snoozedUntil,
+        lastRemindedAt: previous.lastRemindedAt,
+        estimatedMinutes: previous.estimatedMinutes ?? item.estimatedMinutes,
+        progressPercent: previous.progressPercent ?? item.progressPercent,
+        createdAt: previous.createdAt,
+      };
+    });
     const existing = this.#state.items.filter((item) => item.sourceId !== sourceId);
-    const accepted = mergeNewItems(existing, items.map((item) => ({ ...item, sourceId })));
+    const accepted = mergeNewItems(existing, retainedCandidates);
     const itemIds = itemIdsForCandidates(accepted, items);
     this.#state.items = accepted;
+    const validTaskIds = new Set(accepted.map((item) => item.id));
+    this.#state.taskPlans = this.#state.taskPlans.filter((plan) => validTaskIds.has(plan.taskId));
+    this.#state.taskPlanRevisions = this.#state.taskPlanRevisions.filter((revision) => validTaskIds.has(revision.taskId));
+    this.#state.clarifications = this.#state.clarifications.filter((clarification) => !clarification.taskId || validTaskIds.has(clarification.taskId));
+    this.#state.agent.behaviorMemory.recentFeedbackEvents = this.#state.agent.behaviorMemory.recentFeedbackEvents.filter((event) => validTaskIds.has(event.taskId));
     this.#state.sources = this.#state.sources.map((record) => record.id === sourceId
       ? {
         ...record,
@@ -510,7 +542,11 @@ export class ChroniStore {
       ...patch,
       llm: { ...this.#state.preferences.llm, ...(patch.llm ?? {}) },
     };
-    if (!this.#state.preferences.companionEnabled) this.#state.companion = { state: "sleeping", bubble: "桌宠入口已暂时关闭。" };
+    if (!this.#state.preferences.companionEnabled) {
+      this.#state.companion = { state: "sleeping", bubble: "桌宠入口已暂时关闭。" };
+    } else if (patch.companionEnabled === true && this.#state.companion.state === "sleeping") {
+      this.#state.companion = companionStateForItems(this.#state.items);
+    }
     this.#save();
     return this.snapshot();
   }

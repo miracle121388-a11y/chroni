@@ -53,7 +53,7 @@ export class DeadlineAgent {
       overdueCount: observation.overdueCount,
     });
 
-    const priorities = this.tools.assessRisks(observation.activeTasks, started);
+    const priorities = this.tools.assessRisks(observation.activeTasks, started, memory);
     const highRisk = priorities.filter((item) => item.riskLevel === "high" || item.riskLevel === "critical");
     let plan = this.tools.plan(priorities, memory, started);
     let modelSuggestions: string[] = [];

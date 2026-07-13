@@ -3,7 +3,8 @@ import test from "node:test";
 
 import { createAgentMemory, updateAgentMemory } from "../dist/agent/agent-memory.js";
 import { createTraceRecorder } from "../dist/agent/agent-trace.js";
-import { assessTaskRisks, observeTasks, planWorkBlocks, replanWorkBlocks, serializeTasksToIcs } from "../dist/agent/agent-tools.js";
+import { assessTaskRisks, createAgentTools, observeTasks, planWorkBlocks, replanWorkBlocks, serializeTasksToIcs } from "../dist/agent/agent-tools.js";
+import { createRuleTaskPlan } from "../dist/agent/task-plan-agent.js";
 import { verifyAgentPlan } from "../dist/agent/agent-state.js";
 
 function task(id, title, dueAt, importance = "medium", extra = {}) {
@@ -73,6 +74,39 @@ test("agent observes active work and detects overdue and near high-risk tasks", 
   assert.equal(risks.find((risk) => risk.taskId === "near")?.riskLevel, "high");
 });
 
+test("risk assessment detects capacity pressure before the deadline is near", () => {
+  const now = new Date(2026, 6, 13, 9, 0);
+  const [risk] = assessTaskRisks([
+    task("large", "Large project", new Date(2026, 6, 18, 18, 0).toISOString(), "low", { estimatedMinutes: 1_500 }),
+  ], now, { ...createAgentMemory(), maxDailyMinutes: 180 });
+
+  assert.equal(["high", "critical"].includes(risk.riskLevel), true);
+  assert.equal(risk.slackMinutes < 0, true);
+  assert.equal(risk.reasons.some((reason) => /每日容量/.test(reason)), true);
+});
+
+test("active plans expose only dependency-ready unblocked steps", () => {
+  const now = new Date(2026, 6, 13, 9, 0);
+  const item = task("planned", "Planned report", new Date(2026, 6, 15, 18, 0).toISOString(), "medium", { estimatedMinutes: 120 });
+  const plan = createRuleTaskPlan(item, [], now);
+  plan.status = "active";
+  plan.steps[0].status = "blocked";
+  const tools = createAgentTools({
+    readTasks: () => [item],
+    readTaskPlans: () => [plan],
+    intakeText: async () => { throw new Error("unused"); },
+    writeIcs: () => "unused",
+    sendReminder: async () => ({ sent: false, reason: "not-needed" }),
+  });
+
+  const [assessment] = tools.assessRisks([item], now, createAgentMemory());
+  const work = tools.plan([assessment], createAgentMemory(), now);
+  assert.equal(assessment.actionable, false);
+  assert.equal(assessment.nextStepId, undefined);
+  assert.deepEqual(work.blocks, []);
+  assert.deepEqual(work.unplannedTaskIds, [item.id]);
+});
+
 test("work planning stays inside preferred hours and daily capacity", () => {
   const now = new Date(2026, 6, 11, 9, 0, 0, 0);
   const memory = { ...createAgentMemory(), maxDailyMinutes: 120, workdayStart: "10:00", workdayEnd: "15:00" };
@@ -88,6 +122,18 @@ test("work planning stays inside preferred hours and daily capacity", () => {
   assert.equal(plan.overflowMinutes, 30);
   assert.equal(plan.blocks[0].startAt, new Date(2026, 6, 11, 10, 0, 0, 0).toISOString());
   assert.equal(plan.blocks[1].endAt, new Date(2026, 6, 11, 12, 0, 0, 0).toISOString());
+});
+
+test("work planning previews unfinished effort across the next week without crossing the deadline", () => {
+  const now = new Date(2026, 6, 13, 9, 0);
+  const dueAt = new Date(2026, 6, 16, 12, 0);
+  const memory = { ...createAgentMemory(), maxDailyMinutes: 60, workdayStart: "09:00", workdayEnd: "18:00" };
+  const risks = assessTaskRisks([task("forecast", "Forecast project", dueAt.toISOString(), "medium", { estimatedMinutes: 180 })], now, memory);
+  const plan = planWorkBlocks(risks, memory, now);
+
+  assert.equal(plan.blocks[0].allocatedMinutes, 60);
+  assert.equal(plan.forecastBlocks.reduce((sum, block) => sum + block.allocatedMinutes, 0), 120);
+  assert.equal(plan.forecastBlocks.every((block) => new Date(block.endAt).getTime() <= dueAt.getTime()), true);
 });
 
 test("risk-first replanning gives every high-risk task useful coverage", () => {

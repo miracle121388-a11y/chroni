@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { ensureOcrCachePath, extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, isReliableOcrResult, mergeModelAndRuleItems, processIntake, recognizeImageWithTesseract, reprocessSource, workbookText } from "../dist/intake.js";
+import { ensureOcrCachePath, ensureTaskPlan, extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, isReliableOcrResult, mergeModelAndRuleItems, processIntake, recognizeImageWithTesseract, reprocessSource, workbookText } from "../dist/intake.js";
 import { lightweightScheduleItems, scheduleBucket, shouldRemindItem, snoozeUntil, visibleScheduleSummary } from "../dist/shared/schedule.js";
 import { companionStateForItems, ChroniStore } from "../dist/store.js";
 
@@ -153,6 +153,54 @@ test("records duplicate intake without creating another schedule item", async ()
     assert.equal(second.snapshot.items.length, itemCountAfterFirst);
     assert.equal(second.snapshot.sources[0].extractionStatus, "duplicate");
     assert.equal(second.snapshot.sources[0].itemIds.length, 1);
+  });
+});
+
+test("an ambiguous task does not block explicit tasks from the same source", async () => {
+  await withStore(async (store) => {
+    const result = await processIntake({ kind: "text", text: "7月20日 18:00 提交课程报告。下周完成机器学习作业。" }, store);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.snapshot.items.length, 1);
+    assert.match(result.snapshot.items[0].title, /课程报告/);
+    assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending").length, 1);
+  });
+});
+
+test("disabling Agent LLM planning keeps extraction enabled but uses a local task plan", async () => {
+  await withStore(async (store) => {
+    const timestamp = "2026-07-20T18:00:00.000Z";
+    store.addItems([{ id: "local-plan", title: "课程作业", dueAt: timestamp, importance: "medium", sourceSummary: "test", createdAt: timestamp, updatedAt: timestamp, completed: false }]);
+    store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-v4-flash" } });
+    store.updateAgentMemory({ useLlmPlanning: false });
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => { calls += 1; throw new Error("planning should remain local"); };
+    try {
+      const plan = await ensureTaskPlan("local-plan", store);
+      assert.equal(plan.plannerSource, "rules");
+      assert.equal(calls, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+test("reprocessing preserves matching task identity and leaves no orphan plans", async () => {
+  await withStore(async (store) => {
+    const initial = await processIntake({ kind: "text", text: "7月20日 23:59 提交课程报告" }, store);
+    const source = initial.snapshot.sources[0];
+    const taskId = initial.snapshot.items[0].id;
+    const initialPlan = store.taskPlanByTaskId(taskId);
+    store.activateTaskPlan(taskId, initialPlan.id);
+    store.updateSourceText(source.id, "7月20日 23:59 提交课程报告\n请使用 PDF 格式");
+
+    const result = await reprocessSource(source.id, store);
+    const taskIds = new Set(result.snapshot.items.map((item) => item.id));
+    assert.equal(result.snapshot.items[0].id, taskId);
+    assert.equal(result.snapshot.taskPlans.every((plan) => taskIds.has(plan.taskId)), true);
+    assert.equal(result.snapshot.taskPlans.some((plan) => plan.taskId === taskId && plan.status === "active"), true);
+    assert.equal(result.snapshot.taskPlans.some((plan) => plan.taskId === taskId && plan.status === "draft"), true);
   });
 });
 
@@ -408,6 +456,39 @@ test("item updates preserve completion feedback and immediately refresh after sn
     const snoozed = store.updateItem(item.id, { snoozedUntil: new Date(Date.now() + 3_600_000).toISOString() });
     assert.equal(snoozed.companion.state, "idle");
     assert.match(snoozed.companion.bubble, /稍后提醒/);
+  });
+});
+
+test("completing one task does not hide another overdue task behind celebration", async () => {
+  await withStore((store) => {
+    const now = new Date();
+    const item = (id, title, dueAt) => ({
+      id,
+      title,
+      importance: "high",
+      dueAt,
+      sourceSummary: "测试",
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      completed: false,
+    });
+    store.addItems([
+      item("finished", "刚刚完成的任务", new Date(now.getTime() + 3_600_000).toISOString()),
+      item("overdue", "仍然逾期的任务", new Date(now.getTime() - 3_600_000).toISOString()),
+    ]);
+
+    const snapshot = store.updateItem("finished", { completed: true });
+    assert.equal(snapshot.companion.state, "overdue");
+    assert.match(snapshot.companion.bubble, /仍然逾期/);
+  });
+});
+
+test("showing a disabled companion restores its schedule state before wake", async () => {
+  await withStore((store) => {
+    assert.equal(store.updatePreferences({ companionEnabled: false }).companion.state, "sleeping");
+    const shown = store.updatePreferences({ companionEnabled: true });
+    assert.equal(shown.preferences.companionEnabled, true);
+    assert.equal(shown.companion.state, "idle");
   });
 });
 

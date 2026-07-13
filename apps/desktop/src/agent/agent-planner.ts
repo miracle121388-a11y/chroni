@@ -1,6 +1,6 @@
 import { requestChatCompletion } from "../llm-client.js";
 import type { AgentMemory, AgentPlan, AgentTaskAssessment, ChroniLlmSettings } from "../shared/types.js";
-import { planCoverage } from "./agent-tools.js";
+import { forecastWorkBlocks, planCoverage } from "./agent-tools.js";
 
 export type AgentPlannerProposal = {
   allocations: Array<{ taskId: string; minutes: number }>;
@@ -49,6 +49,8 @@ export function createLlmAgentPlanner(settings: ChroniLlmSettings, fetchImpl?: t
                 riskLevel: item.riskLevel,
                 score: item.score,
                 remainingMinutes: item.estimatedMinutes,
+                allocatableMinutes: item.nextStepMinutes ?? item.estimatedMinutes,
+                actionable: item.actionable !== false,
                 reasons: item.reasons.slice(0, 3),
               })),
             }),
@@ -79,14 +81,14 @@ export function planFromProposal(proposal: AgentPlannerProposal, context: AgentP
   const blocks = proposal.allocations.map((allocation) => {
     const item = byId.get(allocation.taskId)!;
     const end = new Date(cursor.getTime() + allocation.minutes * 60_000);
-    const block = { taskId: item.taskId, title: item.title, startAt: cursor.toISOString(), endAt: end.toISOString(), allocatedMinutes: allocation.minutes };
+    const block = { taskId: item.taskId, stepId: item.nextStepId, title: item.nextStepTitle ? `${item.title} · ${item.nextStepTitle}` : item.title, startAt: cursor.toISOString(), endAt: end.toISOString(), allocatedMinutes: allocation.minutes };
     cursor = end;
     return block;
   });
   const requestedMinutes = context.assessments.reduce((sum, item) => sum + item.estimatedMinutes, 0);
   const plannedMinutes = blocks.reduce((sum, block) => sum + block.allocatedMinutes, 0);
   const coverage = planCoverage(context.assessments, blocks);
-  return {
+  const plan: AgentPlan = {
     blocks,
     requestedMinutes,
     plannedMinutes,
@@ -95,6 +97,9 @@ export function planFromProposal(proposal: AgentPlannerProposal, context: AgentP
     plannerSource: "llm",
     coverage,
   };
+  plan.forecastBlocks = forecastWorkBlocks(context.assessments, context.memory, context.now, blocks);
+  plan.forecastHorizonDays = 7;
+  return plan;
 }
 
 function validateProposal(value: unknown, context: AgentPlanningContext): AgentPlannerProposal | undefined {
@@ -111,7 +116,7 @@ function validateProposal(value: unknown, context: AgentPlanningContext): AgentP
     if (typeof allocation.taskId !== "string" || !Number.isInteger(allocation.minutes)) return undefined;
     const task = byId.get(allocation.taskId);
     const minutes = allocation.minutes as number;
-    if (!task || seen.has(task.taskId) || minutes < 15 || minutes > task.estimatedMinutes) return undefined;
+    if (!task || task.actionable === false || seen.has(task.taskId) || minutes < 15 || minutes > (task.nextStepMinutes ?? task.estimatedMinutes)) return undefined;
     seen.add(task.taskId);
     total += minutes;
     allocations.push({ taskId: task.taskId, minutes });

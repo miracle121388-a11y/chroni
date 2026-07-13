@@ -41,4 +41,9 @@ contextBridge.exposeInMainWorld("chroni", {
     ipcRenderer.on("chroni:snapshot-updated", listener);
     return () => ipcRenderer.removeListener("chroni:snapshot-updated", listener);
   },
+  onPetAction: (callback) => {
+    const listener = (_event, command) => callback(command);
+    ipcRenderer.on("chroni:pet-action", listener);
+    return () => ipcRenderer.removeListener("chroni:pet-action", listener);
+  },
 });

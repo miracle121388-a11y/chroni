@@ -151,7 +151,7 @@ export function validateTaskPlanUpdate(value: unknown): TaskPlanUpdatePayload {
     baseVersion: payload.baseVersion as number,
     goal: nonEmptyString(payload.goal, "task plan update.goal", 200),
     deliverables: stringArray(payload.deliverables, "task plan update.deliverables", 12, 200),
-    constraints: stringArray(payload.constraints, "task plan update.constraints", 12, 300),
+    constraints: stringArray(payload.constraints, "task plan update.constraints", 16, 300),
     steps,
     bufferMinutes: payload.bufferMinutes as number,
     summary: boundedString(payload.summary, "task plan update.summary", 500),

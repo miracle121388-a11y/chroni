@@ -77,6 +77,8 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
   }, [task.id]);
   useEffect(() => setDraft(storedPlan ? structuredClone(storedPlan) : null), [storedPlan?.id, storedPlan?.version]);
   const revisions = snapshot.taskPlanRevisions.filter((item) => item.taskId === task.id).sort((a, b) => b.toVersion - a.toVersion);
+  const safeStartAt = draft ? calculatedLatestSafeStart(task, draft) : undefined;
+  const safeStartPassed = safeStartAt ? new Date(safeStartAt).getTime() < Date.now() : false;
 
   async function generate(regenerate = false) {
     setBusy(regenerate ? "regenerate" : "generate");
@@ -178,8 +180,10 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
             <label>目标<input value={draft.goal} onChange={(event) => setDraft({ ...draft, goal: event.target.value })} /></label>
             <div className="plan-metrics"><span>{draft.steps.length} 个步骤</span><span>{draft.steps.reduce((sum, step) => sum + step.estimatedMinutes, 0)} 分钟</span><label>缓冲 <input type="number" min="0" max="1440" value={draft.bufferMinutes} onChange={(event) => setDraft({ ...draft, bufferMinutes: Number(event.target.value) })} /> 分钟</label><span>{plannerLabel(draft)}</span></div>
             <p>{draft.summary}</p>
+            {safeStartAt && <p className={safeStartPassed ? "plan-warning" : "memory-applied"}>建议最晚开始：{formatDate(safeStartAt)}{safeStartPassed ? "（已超过，建议立即调整计划）" : ""}</p>}
             {!!draft.memoryPreferenceIds.length && <p className="memory-applied">已使用 {draft.memoryPreferenceIds.length} 条个性化偏好</p>}
             {draft.uncertainties.map((uncertainty) => <p className="plan-warning" key={uncertainty}>{uncertainty}</p>)}
+            <details className="plan-revisions"><summary>计划依据 · {draft.deliverables.length} 项交付物</summary><div><b>交付物</b><ul>{draft.deliverables.map((item) => <li key={item}>{item}</li>)}</ul></div><div><b>约束</b><ul>{draft.constraints.map((item) => <li key={item}>{item}</li>)}</ul></div></details>
           </section>
           <section className="plan-steps" aria-label="任务步骤">
             <header><h3>执行步骤</h3><button type="button" className="secondary" onClick={addStep}>新增步骤</button></header>
@@ -202,7 +206,7 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
               </article>
             ))}
           </section>
-          <div className="plan-actions"><button type="button" disabled={!!busy} onClick={() => void save()}>{busy === "save" ? "保存中..." : "保存修改"}</button>{draft.status === "draft" && <button type="button" disabled={!!busy} onClick={() => void activate()}>{busy === "activate" ? "确认中..." : "确认并启用"}</button>}<button type="button" className="secondary" disabled={!!busy} onClick={() => void generate(true)}>{busy === "regenerate" ? "生成中..." : "重新生成草案"}</button></div>
+          <div className="plan-actions"><button type="button" disabled={!!busy} onClick={() => void save()}>{busy === "save" ? "保存中..." : "保存修改"}</button>{draft.status === "draft" && <button type="button" disabled={!!busy} onClick={() => void activate()}>{busy === "activate" ? "确认中..." : "确认并启用"}</button>}<button type="button" className="secondary" disabled={!!busy} onClick={() => void generate(true)}>{busy === "regenerate" ? "生成中..." : snapshot.agent.memory.useLlmPlanning && snapshot.services.model === "ready" ? "用大模型重新生成" : "重新生成本地草案"}</button></div>
           {!!revisions.length && <details className="plan-revisions"><summary>版本记录 · {revisions.length}</summary>{revisions.map((revision) => <p key={revision.id}>v{revision.fromVersion} → v{revision.toVersion} · {revision.changes.length} 项修改</p>)}</details>}
         </>
       )}
@@ -211,7 +215,7 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
   );
 }
 
-export function BehaviorMemoryPane({ snapshot, setSnapshot }: { snapshot: ChroniSnapshot; setSnapshot: SnapshotSetter }) {
+export function BehaviorMemoryPane({ snapshot, setSnapshot, embedded = false }: { snapshot: ChroniSnapshot; setSnapshot: SnapshotSetter; embedded?: boolean }) {
   const memory = snapshot.agent.behaviorMemory;
   const [stepMinutes, setStepMinutes] = useState("45");
   const [confirmClear, setConfirmClear] = useState(false);
@@ -220,8 +224,8 @@ export function BehaviorMemoryPane({ snapshot, setSnapshot }: { snapshot: Chroni
     try { setSnapshot(await action()); setFeedback(success); } catch (error) { setFeedback(formatOperationError(error, "Memory 操作失败")); }
   }
   return (
-    <section className="behavior-memory" aria-labelledby="behavior-memory-heading">
-      <header><div><p>个性化规划</p><h3 id="behavior-memory-heading">Behavior Memory</h3></div><span>{memory.preferences.filter((item) => item.status === "active").length} 条生效</span></header>
+    <section className="behavior-memory" aria-labelledby={embedded ? undefined : "behavior-memory-heading"} aria-label={embedded ? "个性化规划偏好" : undefined}>
+      {!embedded && <header><div><p>个性化规划</p><h3 id="behavior-memory-heading">Behavior Memory</h3></div><span>{memory.preferences.filter((item) => item.status === "active").length} 条生效</span></header>}
       <div className="memory-controls"><label><input type="checkbox" checked={memory.learningEnabled} onChange={(event) => void run(() => api.updateBehaviorMemory({ learningEnabled: event.target.checked }), "学习设置已更新。" )} /> 从保存的规划修改中学习</label><label><input type="checkbox" checked={memory.autoApplyEnabled} onChange={(event) => void run(() => api.updateBehaviorMemory({ autoApplyEnabled: event.target.checked }), "自动应用设置已更新。" )} /> 自动应用高置信度偏好</label></div>
       <div className="explicit-preference"><label>默认步骤时长 <input type="number" min="15" max="180" step="5" value={stepMinutes} onChange={(event) => setStepMinutes(event.target.value)} /> 分钟</label><button type="button" onClick={() => void run(() => api.upsertPlanningPreference({ key: "preferredStepMinutes", value: Number(stepMinutes) }), "显式偏好已保存。")}>设为明确偏好</button></div>
       <div className="preference-list">{memory.preferences.length ? memory.preferences.map((preference) => <PreferenceRow key={preference.id} preference={preference} onStatus={(status) => run(() => api.setPlanningPreferenceStatus(preference.id, status), "偏好状态已更新。") } onDelete={() => run(() => api.deletePlanningPreference(preference.id), "偏好已删除。") } />) : <p className="empty">尚未形成规划偏好。保存任务规划修改后会在这里显示。</p>}</div>
@@ -262,6 +266,11 @@ function reorder(steps: TaskPlanStep[], id: string, target: number): TaskPlanSte
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function calculatedLatestSafeStart(task: DdlItem, plan: TaskPlan): string {
+  const totalMinutes = plan.steps.reduce((sum, step) => sum + step.estimatedMinutes, 0) + plan.bufferMinutes;
+  return new Date(new Date(task.dueAt).getTime() - totalMinutes * 60_000).toISOString();
 }
 
 function planStatus(plan: TaskPlan | null): string {

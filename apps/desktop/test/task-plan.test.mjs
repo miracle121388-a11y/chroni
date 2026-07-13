@@ -34,6 +34,41 @@ test("task plan validation rejects cycles and inconsistent totals", () => {
   assert.throws(() => validateTaskPlan(plan, task), /总耗时/);
 });
 
+test("task plan validation rejects plans that drop grounded requirements", () => {
+  const groundedTask = {
+    ...task,
+    extraction: {
+      contextExcerpt: "提交源码压缩包，通过课程平台上传，需包含 README。",
+      deliverables: ["源码压缩包"],
+      submissionMethod: "通过课程平台上传",
+      constraints: ["需包含 README"],
+      risks: [],
+      uncertainties: ["API 成本待确认"],
+      reminderSuggestions: [],
+    },
+  };
+  const plan = createRuleTaskPlan(groundedTask, [], new Date("2026-07-12T10:00:00.000Z"));
+  plan.deliverables = [];
+  assert.throws(() => validateTaskPlan(plan, groundedTask), /遗漏原文提交物/);
+});
+
+test("rule planning applies step count, estimate, review, research, and early-start preferences", () => {
+  const preferences = [
+    { id: "count", key: "preferredStepCount", value: 5 },
+    { id: "multiplier", key: "estimateMultiplier", value: 1.5 },
+    { id: "review", key: "preferReviewStep", value: true },
+    { id: "research", key: "preferResearchBeforeExecution", value: true },
+    { id: "early", key: "preferEarlyStart", value: true },
+  ].map((item) => ({ ...item, scope: {}, confidence: 1, evidenceCount: 1, positiveEvidenceCount: 1, negativeEvidenceCount: 0, lastObservedAt: "2026-07-12T00:00:00.000Z", status: "active", source: "explicit", explanation: item.key }));
+  const plan = createRuleTaskPlan(task, preferences, new Date("2026-07-12T10:00:00.000Z"));
+
+  assert.equal(plan.steps.length, 5);
+  assert.equal(plan.estimatedTotalMinutes, 270);
+  assert.equal(plan.bufferMinutes >= 65, true);
+  assert.equal(plan.steps.some((step) => /调研/.test(step.title)), true);
+  assert.equal(plan.steps.at(-1).title, "最终检查并提交");
+});
+
 test("saved plan edits produce structured revisions", () => {
   const before = createRuleTaskPlan(task, [], new Date("2026-07-12T10:00:00.000Z"));
   const after = structuredClone(before);

@@ -58,10 +58,17 @@ type PreferenceSignal = { key: PlanningPreferenceKey; value: number | boolean | 
 
 function signalsFromEvent(event: PlanningFeedbackEvent): PreferenceSignal[] {
   const signals: PreferenceSignal[] = [];
-  for (const change of event.changes) {
-    if (change.type === "duration-changed") signals.push({ key: "preferredStepMinutes", value: clamp(roundToFive(change.afterMinutes), 15, 180), taskType: event.taskType });
-    if (change.type === "buffer-changed" && event.context.finalTotalMinutes > 0) signals.push({ key: "bufferRatio", value: clamp(change.afterMinutes / event.context.finalTotalMinutes, 0, 0.5), taskType: event.taskType });
-    if (change.type === "step-added") signals.push({ key: "preferredStepCount", value: clamp(event.context.finalStepCount, 1, 12), taskType: event.taskType });
+  const durationChanges = event.changes.filter((change) => change.type === "duration-changed");
+  if (durationChanges.length) {
+    const average = durationChanges.reduce((sum, change) => sum + change.afterMinutes, 0) / durationChanges.length;
+    signals.push({ key: "preferredStepMinutes", value: clamp(roundToFive(average), 15, 180), taskType: event.taskType });
+  }
+  const bufferChange = event.changes.find((change) => change.type === "buffer-changed");
+  if (bufferChange?.type === "buffer-changed" && event.context.finalTotalMinutes > 0) {
+    signals.push({ key: "bufferRatio", value: clamp(bufferChange.afterMinutes / event.context.finalTotalMinutes, 0, 0.5), taskType: event.taskType });
+  }
+  if (event.changes.some((change) => change.type === "step-added" || change.type === "step-removed")) {
+    signals.push({ key: "preferredStepCount", value: clamp(event.context.finalStepCount, 1, 12), taskType: event.taskType });
   }
   return signals;
 }
