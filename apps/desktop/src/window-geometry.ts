@@ -16,9 +16,6 @@ export type NormalizedWindowPlacement = {
   yRatio: number;
 };
 
-const windowsDrawerHandleWidth = 34;
-const windowsDrawerMargin = 8;
-
 export function draggedWindowPosition(startWindow: WindowPosition, startCursor: WindowPosition, cursor: WindowPosition): WindowPosition {
   return {
     x: startWindow.x + cursor.x - startCursor.x,
@@ -26,17 +23,21 @@ export function draggedWindowPosition(startWindow: WindowPosition, startCursor: 
   };
 }
 
-export function windowsDrawerPosition(area: WindowBounds, size: WindowSize, expanded: boolean): WindowPosition {
-  return {
-    x: area.x + area.width - (expanded ? size.width + windowsDrawerMargin : windowsDrawerHandleWidth),
-    y: area.y + Math.round((area.height - size.height) / 2),
-  };
-}
+export function schedulePopoverPosition(area: WindowBounds, anchor: WindowBounds | undefined, size: WindowSize, gap = 14, margin = 12): WindowPosition {
+  const minX = area.x + margin;
+  const maxX = Math.max(minX, area.x + area.width - size.width - margin);
+  const minY = area.y + margin;
+  const maxY = Math.max(minY, area.y + area.height - size.height - margin);
+  if (!anchor) {
+    return { x: maxX, y: clamp(area.y + 72, minY, maxY) };
+  }
 
-export function interpolatedPosition(start: WindowPosition, target: WindowPosition, progress: number): WindowPosition {
+  const left = anchor.x - size.width - gap;
+  const right = anchor.x + anchor.width + gap;
+  const x = left >= minX ? left : right <= maxX ? right : clamp(left, minX, maxX);
   return {
-    x: start.x + (target.x - start.x) * progress,
-    y: start.y + (target.y - start.y) * progress,
+    x: Math.round(x),
+    y: Math.round(clamp(anchor.y + (anchor.height - size.height) / 2, minY, maxY)),
   };
 }
 

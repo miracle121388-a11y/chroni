@@ -312,7 +312,6 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   const [undoing, setUndoing] = useState(false);
   const undoButtonRef = useRef<HTMLButtonElement>(null);
   const quickAddInputRef = useRef<HTMLInputElement>(null);
-  const isWindowsDrawer = api.platform === "win32";
   const isBusy = !!busyMessage;
   const feedbackPaused = feedbackHovered || feedbackFocused;
 
@@ -324,7 +323,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
       if (event.key !== "Escape" || document.querySelector(".snooze-menu")) return;
-      if (!isWindowsDrawer && quickAddOpen) {
+      if (quickAddOpen) {
         closeQuickAdd();
         return;
       }
@@ -332,13 +331,13 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isWindowsDrawer, quickAddOpen]);
+  }, [quickAddOpen]);
 
   useEffect(() => {
-    if (isWindowsDrawer || !quickAddOpen) return;
+    if (!quickAddOpen) return;
     const frame = window.requestAnimationFrame(() => quickAddInputRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
-  }, [isWindowsDrawer, quickAddOpen]);
+  }, [quickAddOpen]);
 
   useEffect(() => {
     if (!feedback || feedbackPaused) return;
@@ -368,7 +367,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
       showFeedback({ message: result.ok ? result.message : result.reason, tone: result.ok ? "ok" : "warn" });
       if (result.ok) {
         setQuickText("");
-        if (!isWindowsDrawer) setQuickAddOpen(false);
+        setQuickAddOpen(false);
       }
     } catch (error) {
       showFeedback({ message: formatOperationError(error, "识别失败"), tone: "warn" });
@@ -397,57 +396,22 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   ].filter(Boolean);
 
   return (
-    <main
-      className={`schedule-shell ${isWindowsDrawer ? "drawer-shell" : "popover-shell"}`}
-      onMouseEnter={() => {
-        if (isWindowsDrawer) void api.showSchedule(true);
-      }}
-      onMouseLeave={() => {
-        if (isWindowsDrawer) void api.showSchedule(false);
-      }}
-    >
-      {isWindowsDrawer && <div className="drawer-handle"><span>DDL</span></div>}
+    <main className="schedule-shell popover-shell">
       <section className="schedule-panel" aria-busy={isBusy || undoing}>
         <header className="panel-head">
           <div>
             <p>Chroni</p>
-            <h1>{isWindowsDrawer ? "最近要注意" : "日程"}</h1>
+            <h1>日程</h1>
           </div>
           <div className="panel-actions">
-            {isWindowsDrawer ? (
-              <button className="icon-btn" type="button" onClick={() => void api.openControlCenter()} title="控制中心" aria-label="打开控制中心">⚙</button>
-            ) : (
-              <button className="schedule-manage" type="button" onClick={() => void api.openControlCenter()}>管理</button>
-            )}
+            <button className="schedule-manage" type="button" onClick={() => void api.openControlCenter()}>管理</button>
             <button className="icon-btn quiet" type="button" onClick={() => void api.showSchedule(false)} title="收起日程" aria-label="收起日程">×</button>
           </div>
         </header>
-        {isWindowsDrawer ? (
-          <div className="mini-stats" aria-label="日程概览">
-            <span className={surface.counts.overdue ? "alert" : ""}><b>{surface.counts.overdue}</b> 逾期</span>
-            <span><b>{surface.counts.today}</b> 今天</span>
-            <span><b>{surface.counts.upcoming + surface.counts.later}</b> 接下来</span>
-          </div>
-        ) : (
-          <p className={`schedule-overview ${surface.counts.overdue ? "urgent" : ""}`} aria-label="日程概览">
-            {overviewParts.length ? overviewParts.join(" · ") : "当前没有待处理事项"}
-          </p>
-        )}
-        {isWindowsDrawer ? (
-          <div className="quick-add">
-            <input
-              value={quickText}
-              disabled={isBusy}
-              aria-label="快速添加日程"
-              onChange={(event) => setQuickText(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void quickAdd();
-              }}
-              placeholder="快速添加：7月12日 23:59 课程报告"
-            />
-            <button type="button" disabled={isBusy || !quickText.trim()} onClick={() => void quickAdd()} aria-label="识别并添加日程">＋</button>
-          </div>
-        ) : quickAddOpen ? (
+        <p className={`schedule-overview ${surface.counts.overdue ? "urgent" : ""}`} aria-label="日程概览">
+          {overviewParts.length ? overviewParts.join(" · ") : "当前没有待处理事项"}
+        </p>
+        {quickAddOpen ? (
           <form className="quick-add schedule-quick-add" onSubmit={(event) => { event.preventDefault(); void quickAdd(); }}>
             <input
               ref={quickAddInputRef}
@@ -486,7 +450,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
                   <span>{group.label}</span>
                   <b>{group.items.length}</b>
                 </header>
-              <DdlList items={group.items} plans={snapshot.taskPlans} setSnapshot={setSnapshot} compact minimal={!isWindowsDrawer} onAction={showFeedback} ariaLabel={`${group.label}日程`} />
+              <DdlList items={group.items} plans={snapshot.taskPlans} setSnapshot={setSnapshot} compact minimal onAction={showFeedback} ariaLabel={`${group.label}日程`} />
               </section>
             ))}
           </div>
@@ -496,7 +460,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
         {surface.hiddenParts.length > 0 && (
           <button className="schedule-hidden-summary" type="button" onClick={() => void api.openControlCenter()}>
             <span>另有 {surface.hiddenParts.join(" · ")}</span>
-            <b>{isWindowsDrawer ? "在控制中心查看" : "查看全部"}</b>
+            <b>查看全部</b>
           </button>
         )}
       </section>

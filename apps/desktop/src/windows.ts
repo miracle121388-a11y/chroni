@@ -1,7 +1,7 @@
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type NativeImage } from "electron";
 import { join } from "node:path";
 import type { ChroniPreferences, ChroniView, PetAction, PetActionCommand, PetPlacement } from "./shared/types.js";
-import { draggedWindowPosition, interpolatedPosition, normalizedWindowPlacement, restoredWindowPosition, snappedWindowPosition, windowsDrawerPosition, type WindowPosition } from "./window-geometry.js";
+import { draggedWindowPosition, normalizedWindowPlacement, restoredWindowPosition, schedulePopoverPosition, snappedWindowPosition, type WindowPosition } from "./window-geometry.js";
 
 type WindowSet = {
   pet?: BrowserWindow;
@@ -11,10 +11,8 @@ type WindowSet = {
 };
 
 const windows: WindowSet = {};
-let scheduleExpanded = false;
-let macScheduleHideTimer: NodeJS.Timeout | undefined;
+let scheduleHideTimer: NodeJS.Timeout | undefined;
 const windowDragSessions = new Map<number, { startWindow: WindowPosition; startCursor: WindowPosition }>();
-let scheduleAnimationGeneration = 0;
 let petVisibilityGeneration = 0;
 let lastAppliedCompanionEnabled: boolean | undefined;
 let quitAfterSleep = false;
@@ -22,9 +20,8 @@ let onCompanionVisibilityRequested: ((visible: boolean) => void) | undefined;
 let lastPetPlacement: PetPlacement | undefined;
 let onPetPlacementChanged: ((placement: PetPlacement) => void) | undefined;
 
-const windowsDrawerWidth = 384;
-const macPopoverWidth = 348;
-const macPopoverHeight = 418;
+const schedulePopoverWidth = 348;
+const schedulePopoverHeight = 418;
 const petSleepAnimationMs = 2_850;
 
 export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPlacementChanged?: (placement: PetPlacement) => void } = {}): void {
@@ -48,16 +45,14 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
   screen.on("display-metrics-changed", repositionPetForDisplays);
 
   windows.schedule = createViewWindow("schedule", scheduleWindowOptions());
-  positionScheduleWindow(false);
-  if (process.platform === "darwin") {
-    windows.schedule.on("blur", () => {
-      macScheduleHideTimer = setTimeout(() => hideSchedule(), 160);
-    });
-    windows.schedule.on("focus", () => {
-      if (macScheduleHideTimer) clearTimeout(macScheduleHideTimer);
-      macScheduleHideTimer = undefined;
-    });
-  }
+  positionScheduleWindow();
+  windows.schedule.on("blur", () => {
+    scheduleHideTimer = setTimeout(() => hideSchedule(), 160);
+  });
+  windows.schedule.on("focus", () => {
+    if (scheduleHideTimer) clearTimeout(scheduleHideTimer);
+    scheduleHideTimer = undefined;
+  });
 
   ipcMain.on("chroni:start-window-drag", (event, screenX: number, screenY: number) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -127,46 +122,31 @@ export function showControlCenter(): void {
 }
 
 export function showSchedule(expanded = true, focus = false): void {
-  scheduleExpanded = expanded;
-  if (process.platform === "darwin" && !expanded) {
+  if (!expanded) {
     hideSchedule();
     return;
   }
-  positionScheduleWindow(expanded);
-  if (process.platform === "darwin") {
-    if (macScheduleHideTimer) clearTimeout(macScheduleHideTimer);
-    macScheduleHideTimer = undefined;
-    if (focus) {
-      windows.schedule?.show();
-      windows.schedule?.focus();
-    } else {
-      windows.schedule?.showInactive();
-    }
-    return;
+  positionScheduleWindow();
+  if (scheduleHideTimer) clearTimeout(scheduleHideTimer);
+  scheduleHideTimer = undefined;
+  if (focus) {
+    windows.schedule?.show();
+    windows.schedule?.focus();
+  } else {
+    windows.schedule?.showInactive();
   }
-  windows.schedule?.showInactive();
 }
 
 export function hideSchedule(): void {
-  if (process.platform === "win32") {
-    scheduleExpanded = false;
-    positionScheduleWindow(false);
-    windows.schedule?.showInactive();
-    return;
-  }
   windows.schedule?.hide();
 }
 
 export function toggleScheduleSurface(): void {
-  if (process.platform === "darwin") {
-    if (windows.schedule?.isVisible()) {
-      hideSchedule();
-    } else {
-      showSchedule(true, true);
-    }
-    return;
+  if (windows.schedule?.isVisible()) {
+    hideSchedule();
+  } else {
+    showSchedule(true, true);
   }
-  showSchedule(!scheduleExpanded);
 }
 
 export function applyPreferences(preferences: ChroniPreferences): void {
@@ -213,11 +193,7 @@ function quitChroni(): void {
 }
 
 export function refreshScheduleAfterUpdate(): void {
-  if (process.platform === "win32") {
-    showSchedule(scheduleExpanded);
-    return;
-  }
-  if (windows.schedule?.isVisible()) positionScheduleWindow(true);
+  if (windows.schedule?.isVisible()) positionScheduleWindow();
 }
 
 export function broadcast(channel: string, payload: unknown): void {
@@ -227,18 +203,16 @@ export function broadcast(channel: string, payload: unknown): void {
 }
 
 function scheduleWindowOptions(): BrowserWindowConstructorOptions {
-  const isWindows = process.platform === "win32";
-  const isMac = process.platform === "darwin";
   return {
-    width: isWindows ? windowsDrawerWidth : isMac ? macPopoverWidth : 380,
-    height: isMac ? macPopoverHeight : 430,
+    width: schedulePopoverWidth,
+    height: schedulePopoverHeight,
     transparent: true,
     frame: false,
-    ...(isMac ? { hasShadow: false } : {}),
+    hasShadow: false,
     resizable: false,
     skipTaskbar: true,
-    alwaysOnTop: isWindows,
-    show: !isMac,
+    alwaysOnTop: process.platform === "win32",
+    show: false,
   };
 }
 
@@ -266,57 +240,16 @@ async function loadView(win: BrowserWindow, view: ChroniView): Promise<void> {
   }
 }
 
-function positionScheduleWindow(expanded: boolean): void {
+function positionScheduleWindow(): void {
   const win = windows.schedule;
   if (!win) return;
-  if (process.platform === "win32") {
-    const area = windowsDrawerWorkArea();
-    const bounds = win.getBounds();
-    const height = Math.min(520, area.height - 48);
-    if (bounds.height !== height) win.setSize(bounds.width, height);
-    const target = windowsDrawerPosition(area, { width: bounds.width, height }, expanded);
-    animateWindowTo(win, target.x, target.y);
-  } else if (process.platform === "darwin") {
-    const area = screen.getPrimaryDisplay().workArea;
-    const petBounds = windows.pet?.getBounds();
-    const bounds = win.getBounds();
-    const nearPetLeft = petBounds ? petBounds.x - bounds.width - 14 : Number.NaN;
-    const nearPetRight = petBounds ? petBounds.x + petBounds.width + 14 : Number.NaN;
-    const targetX = petBounds
-      ? (nearPetLeft >= area.x + 12 ? nearPetLeft : nearPetRight)
-      : area.x + area.width - bounds.width - 28;
-    const targetY = petBounds ? petBounds.y + Math.round((petBounds.height - bounds.height) / 2) : area.y + 72;
-    const x = Math.min(Math.max(targetX, area.x + 12), area.x + area.width - bounds.width - 12);
-    const y = Math.min(Math.max(targetY, area.y + 12), area.y + area.height - bounds.height - 12);
-    win.setPosition(Math.round(x), Math.round(y));
-  } else {
-    const area = screen.getPrimaryDisplay().workArea;
-    win.setPosition(area.x + area.width - win.getBounds().width - 28, area.y + 72);
-  }
-}
-
-function animateWindowTo(win: BrowserWindow, targetX: number, targetY: number): void {
-  const [startX, startY] = win.getPosition();
-  const steps = 6;
-  const generation = ++scheduleAnimationGeneration;
-  let step = 0;
-  const advance = () => {
-    if (generation !== scheduleAnimationGeneration || win.isDestroyed()) return;
-    step += 1;
-    const progress = step / steps;
-    const eased = 1 - Math.pow(1 - progress, 3);
-    const position = interpolatedPosition({ x: startX, y: startY }, { x: targetX, y: targetY }, eased);
-    win.setPosition(Math.round(position.x), Math.round(position.y));
-    if (step < steps) setTimeout(advance, 12);
-  };
-  setTimeout(advance, 12);
-}
-
-function windowsDrawerWorkArea() {
   const petBounds = windows.pet && !windows.pet.isDestroyed() ? windows.pet.getBounds() : undefined;
-  return petBounds
-    ? screen.getDisplayMatching(petBounds).workArea
-    : screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const display = petBounds
+    ? screen.getDisplayMatching(petBounds)
+    : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const bounds = win.getBounds();
+  const position = schedulePopoverPosition(display.workArea, petBounds, bounds);
+  win.setPosition(position.x, position.y);
 }
 
 function snapWindowToEdge(win: BrowserWindow): void {
@@ -346,7 +279,7 @@ function restorePetPosition(): void {
 function repositionPetForDisplays(): void {
   if (!windows.pet || windows.pet.isDestroyed()) return;
   restorePetPosition();
-  positionScheduleWindow(scheduleExpanded);
+  positionScheduleWindow();
 }
 
 function persistPetPlacement(win: BrowserWindow): void {
