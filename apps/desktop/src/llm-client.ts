@@ -41,6 +41,7 @@ export async function requestChatCompletion(
         "content-type": "application/json",
       },
       body: JSON.stringify({
+        ...(isDeepSeekBaseUrl(settings.baseUrl) ? { thinking: { type: "disabled" } } : {}),
         ...options.body,
         model: settings.model,
         messages,
@@ -71,7 +72,7 @@ export async function testLlmConnection(settings: ChroniLlmSettings, options: Om
     assertCompleteSettings(settings);
     await requestChatCompletion(settings, [{ role: "user", content: "Reply with OK only." }], {
       ...options,
-      body: { temperature: 0, max_tokens: 8 },
+      body: { temperature: 0, max_tokens: 32 },
     });
     return { ok: true, message: `连接成功，模型 ${settings.model} 可以正常响应。` };
   } catch (error) {
@@ -90,6 +91,14 @@ function assertCompleteSettings(settings: ChroniLlmSettings): void {
 
 function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
+}
+
+function isDeepSeekBaseUrl(value: string): boolean {
+  try {
+    return new URL(value).hostname.toLowerCase() === "api.deepseek.com";
+  } catch {
+    return false;
+  }
 }
 
 function kindForStatus(status: number): LlmRequestFailureKind {

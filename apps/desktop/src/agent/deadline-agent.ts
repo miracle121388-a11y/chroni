@@ -3,7 +3,7 @@ import { verifyAgentPlan } from "./agent-state.js";
 import { createTraceRecorder } from "./agent-trace.js";
 import { observeTasks, type DeadlineAgentTools } from "./agent-tools.js";
 import { planFromProposal, type AgentPlanner } from "./agent-planner.js";
-import type { AgentMemory, AgentPlan, AgentRunResult, AgentRunTrigger, AgentTaskAssessment, DdlItem } from "../shared/types.js";
+import type { AgentMemory, AgentPlan, AgentRunResult, AgentRunTrigger, AgentTaskAssessment } from "../shared/types.js";
 
 export type DeadlineAgentOptions = {
   tools: DeadlineAgentTools;

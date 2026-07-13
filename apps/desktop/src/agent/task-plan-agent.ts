@@ -41,7 +41,7 @@ export async function generateTaskPlan(
           preferences: preferences.map((item) => ({ id: item.id, key: item.key, value: item.value, scope: item.scope, confidence: item.confidence })),
         }),
       },
-    ], { body: { temperature: 0.2, max_tokens: 4_096, response_format: { type: "json_object" }, ...(settings.baseUrl.includes("deepseek.com") ? { thinking: { type: "disabled" } } : {}) } });
+    ], { body: { temperature: 0.2, max_tokens: 4_096, response_format: { type: "json_object" } } });
     const candidate = JSON.parse(content) as PlanCandidate;
     const plan = planFromCandidate(candidate, task, preferences, now);
     return validateTaskPlan(plan, task);

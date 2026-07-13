@@ -5,6 +5,8 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "types": ["vite/client"]
   },
   "include": ["src/renderer/src/**/*.ts", "src/renderer/src/**/*.tsx"]

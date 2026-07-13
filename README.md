@@ -167,6 +167,26 @@ Invoke-RestMethod `
   } | ConvertTo-Json)
 ```
 
+文件可以通过 `contentBase64` 直接交给 API，不需要让调用方访问 Electron 的文件选择器。下面示例会解析并保存文件中的任务；将 `/api/intake` 改为 `/api/extract` 可只预览抽取结果而不写入日程：
+
+```powershell
+$file = Get-Item "D:\资料\课程安排.xlsx"
+$body = @{
+  kind = "files"
+  files = @(@{
+    name = $file.Name
+    contentBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($file.FullName))
+  })
+} | ConvertTo-Json -Depth 4
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "$($discovery.baseUrl)/api/intake" `
+  -Headers $headers `
+  -ContentType "application/json" `
+  -Body $body
+```
+
 主要接口：
 
 ```text
@@ -224,8 +244,13 @@ npx pnpm@11.7.0 run package:desktop
 - 确认文件扩展名在支持列表中且文件不是 0 字节。
 - TXT 支持 UTF-8、UTF-16、GBK 和 GB18030；仍失败时确认文件不是二进制内容伪装成 TXT。
 - 扫描 PDF 会自动进入页面 OCR；页数较多时处理时间会明显增加。
+- XLSX 会读取全部工作表；图片 OCR 首次运行需要初始化中英文识别数据，耗时通常高于纯文本文件。
 - 控制中心会显示“文件无法读取”“文本无法可靠解析”“OCR 置信度不足”或“没有明确截止时间”等具体原因。
 - 同一个文件修正后可以直接再次选择，文件输入会在每次处理后重置。
+
+### DeepSeek 显示“模型返回内容为空”
+
+先确认使用最新代码并重新启动 Chroni。`deepseek-v4-flash` 默认可进入思考模式，Chroni 的结构化抽取、规划和连接探测会统一关闭该模式，避免较小输出预算只产生推理内容而没有最终答案。仍然失败时，在“偏好 -> 高级 -> 大模型 API”点击“保存并测试”，根据界面显示的鉴权、模型、限流或网络分类继续排查；`.env` 和系统环境变量会覆盖界面保存值。
 
 ### 端口 8765 被占用
 

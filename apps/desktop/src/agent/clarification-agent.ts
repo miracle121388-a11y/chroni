@@ -85,7 +85,7 @@ export async function analyzeCompletenessWithLlm(input: ExtractedInput, settings
           requiredFields: local.clarifications.map((item) => item.field),
         }),
       },
-    ], { body: { temperature: 0.1, max_tokens: 1_200, response_format: { type: "json_object" }, ...(settings.baseUrl.includes("deepseek.com") ? { thinking: { type: "disabled" } } : {}) } });
+    ], { body: { temperature: 0.1, max_tokens: 1_200, response_format: { type: "json_object" } } });
     const parsed = JSON.parse(content) as { missingFields?: unknown };
     if (!Array.isArray(parsed.missingFields)) return local;
     const proposals = parsed.missingFields as Array<Record<string, unknown>>;

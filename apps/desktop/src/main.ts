@@ -33,6 +33,7 @@ if (!gotLock) {
   });
   app.whenReady().then(() => {
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");
+    process.env.CHRONI_OCR_CACHE_PATH ||= join(app.getPath("userData"), "cache", "ocr");
     store = new ChroniStore(app.getPath("userData"), createSecretCodec());
     installDeadlineAgent();
     lastTaskFingerprint = taskFingerprint(store.snapshot());
@@ -81,7 +82,7 @@ app.on("before-quit", () => {
 
 function installIpc(): void {
   ipcMain.handle("chroni:snapshot", () => store.snapshot());
-  ipcMain.handle("chroni:extract", async (_event, payload: IntakePayload) => extractPayload(validateIntakePayload(payload), { llm: store.snapshot().preferences.llm }));
+  ipcMain.handle("chroni:extract", async (_event, payload: IntakePayload) => extractPayload(validateIntakePayload(payload), { llm: store.llmSettings() }));
   ipcMain.handle("chroni:intake", async (_event, payload: IntakePayload) => {
     const validatedPayload = validateIntakePayload(payload);
     broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在识别 DDL..."));
@@ -128,7 +129,11 @@ function installIpc(): void {
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
-  ipcMain.handle("chroni:llm-test", (_event, settings: ChroniLlmSettings) => testLlmConnection(resolveLlmSettings(validateLlmSettings(settings))));
+  ipcMain.handle("chroni:llm-test", (_event, settings: ChroniLlmSettings) => {
+    const validated = validateLlmSettings(settings);
+    const current = store.llmSettings();
+    return testLlmConnection(resolveLlmSettings({ ...validated, apiKey: validated.apiKey || current.apiKey }));
+  });
   ipcMain.handle("chroni:agent-run", async () => {
     await runDeadlineAgentAndPublish();
     return store.snapshot();
@@ -248,7 +253,7 @@ function installDeadlineAgent(): void {
     saveRun: (result) => { store.saveAgentRun(result); },
     planner: {
       propose: (context) => {
-        const settings = resolveLlmSettings(store.snapshot().preferences.llm);
+        const settings = resolveLlmSettings(store.llmSettings());
         if (!settings.enabled || !settings.apiKey || !settings.model) return Promise.resolve({ fallbackReason: "unavailable" });
         return createLlmAgentPlanner(settings).propose(context);
       },

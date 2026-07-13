@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { AgentBehaviorMemory, ExplicitPreferenceInput, PlanningFeedbackEvent, PlanningPreference, PlanningPreferenceKey } from "../shared/types.js";
 
 export function createBehaviorMemory(value?: Partial<AgentBehaviorMemory>): AgentBehaviorMemory {

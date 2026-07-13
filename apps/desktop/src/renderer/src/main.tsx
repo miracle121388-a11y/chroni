@@ -818,7 +818,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
   const [llmDraft, setLlmDraft] = useState<Pick<ChroniLlmSettings, "baseUrl" | "model" | "apiKey">>({
     baseUrl: preferences.llm.baseUrl,
     model: preferences.llm.model,
-    apiKey: preferences.llm.apiKey,
+    apiKey: "",
   });
   const [llmDirty, setLlmDirty] = useState(false);
   const [llmBusy, setLlmBusy] = useState(false);
@@ -829,9 +829,9 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
     setLlmDraft({
       baseUrl: preferences.llm.baseUrl,
       model: preferences.llm.model,
-      apiKey: preferences.llm.apiKey,
+      apiKey: "",
     });
-  }, [llmDirty, preferences.llm.apiKey, preferences.llm.baseUrl, preferences.llm.model]);
+  }, [llmDirty, preferences.llm.baseUrl, preferences.llm.model]);
 
   async function patch(next: ChroniPreferencesPatch) {
     setSnapshot(await api.updatePreferences(next));
@@ -848,7 +848,12 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
     setLlmBusy(true);
     setLlmFeedback(null);
     try {
-      const snapshot = await api.updatePreferences({ llm: llmDraft });
+      const llmPatch = {
+        baseUrl: llmDraft.baseUrl,
+        model: llmDraft.model,
+        ...(llmDraft.apiKey.trim() ? { apiKey: llmDraft.apiKey } : {}),
+      };
+      const snapshot = await api.updatePreferences({ llm: llmPatch });
       setSnapshot(snapshot);
       setLlmDirty(false);
       const result = await api.testLlmConnection(snapshot.preferences.llm);
@@ -926,7 +931,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
           <summary>大模型 API</summary>
           <label className="text-field">Base URL<input value={llmDraft.baseUrl} placeholder="https://api.deepseek.com" onChange={(event) => updateLlmDraft("baseUrl", event.target.value)} /></label>
           <label className="text-field">模型<input value={llmDraft.model} placeholder="deepseek-v4-flash" onChange={(event) => updateLlmDraft("model", event.target.value)} /></label>
-          <label className="text-field">API Key<input type="password" value={llmDraft.apiKey} placeholder="sk-..." autoComplete="off" onChange={(event) => updateLlmDraft("apiKey", event.target.value)} /></label>
+          <label className="text-field">API Key<input type="password" value={llmDraft.apiKey} placeholder={services.model === "ready" ? "已配置，输入新值可替换" : "sk-..."} autoComplete="off" onChange={(event) => updateLlmDraft("apiKey", event.target.value)} /></label>
           <div className="llm-settings-actions">
             <button className="secondary" type="button" disabled={llmBusy} onClick={() => void saveAndTestLlm()}>
               {llmBusy ? "正在连接..." : llmDirty ? "保存并测试" : "测试连接"}

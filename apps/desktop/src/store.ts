@@ -61,7 +61,7 @@ export class ChroniStore {
       clarifications: structuredClone(this.#state.clarifications),
       taskPlans: structuredClone(this.#state.taskPlans),
       taskPlanRevisions: structuredClone(this.#state.taskPlanRevisions),
-      preferences: { ...this.#state.preferences, llm: { ...this.#state.preferences.llm } },
+      preferences: { ...this.#state.preferences, llm: { ...this.#state.preferences.llm, apiKey: "" } },
       companion: { ...this.#state.companion },
       services: this.serviceStatus(),
       agent: {
@@ -83,6 +83,10 @@ export class ChroniStore {
 
   petPlacement(): PetPlacement | undefined {
     return this.#state.petPlacement ? { ...this.#state.petPlacement } : undefined;
+  }
+
+  llmSettings(): ChroniPreferences["llm"] {
+    return { ...this.#state.preferences.llm };
   }
 
   updatePetPlacement(placement: PetPlacement): void {
@@ -257,7 +261,7 @@ export class ChroniStore {
     const changes = diffTaskPlans(current, next);
     const revision: TaskPlanRevision = { id: `plan-revision-${randomUUID()}`, taskId, planId: current.id, fromVersion: current.version, toVersion: next.version, source: "user", changes, createdAt: updatedAt };
     this.#state.taskPlans = this.#state.taskPlans.map((plan) => plan.id === current.id ? next : plan);
-    this.#state.taskPlanRevisions = [revision, ...this.#state.taskPlanRevisions].filter((item, index, all) => all.filter((candidate) => candidate.taskId === item.taskId).indexOf(item) < 20);
+    this.#state.taskPlanRevisions = [revision, ...this.#state.taskPlanRevisions].filter((item, _index, all) => all.filter((candidate) => candidate.taskId === item.taskId).indexOf(item) < 20);
     if (next.status === "active") this.#state.items = this.#state.items.map((item) => item.id === taskId ? { ...item, estimatedMinutes: next.estimatedTotalMinutes, updatedAt } : item);
     if (changes.length) {
       const event = feedbackEvent(current, next, task, changes, updatedAt);

@@ -260,7 +260,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   if (request.method === "POST" && pathname === "/api/extract") {
     const payload = validateIntakePayload(await readJson(request));
-    sendJson(response, 200, await extractPayload(payload, { llm: store.snapshot().preferences.llm }));
+    sendJson(response, 200, await extractPayload(payload, { llm: store.llmSettings() }));
     return;
   }
   if (request.method === "POST" && pathname === "/api/intake") {

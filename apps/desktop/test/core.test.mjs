@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, isReliableOcrResult, processIntake, reprocessSource } from "../dist/intake.js";
+import { ensureOcrCachePath, extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, isReliableOcrResult, mergeModelAndRuleItems, processIntake, recognizeImageWithTesseract, reprocessSource, workbookText } from "../dist/intake.js";
 import { lightweightScheduleItems, scheduleBucket, shouldRemindItem, snoozeUntil, visibleScheduleSummary } from "../dist/shared/schedule.js";
 import { companionStateForItems, ChroniStore } from "../dist/store.js";
 
@@ -30,6 +30,107 @@ function testSecretCodec() {
     },
   };
 }
+
+test("workbook text includes every sheet from read-excel-file v9", () => {
+  const text = workbookText([
+    { sheet: "Tasks", data: [["Report", new Date("2026-07-20T10:00:00.000Z")]] },
+    { sheet: "Notes", data: [["Bring charts", true, 3]] },
+  ]);
+
+  assert.match(text, /\[工作表: Tasks\]/);
+  assert.match(text, /2026-07-20T10:00:00.000Z/);
+  assert.match(text, /\[工作表: Notes\]/);
+  assert.match(text, /Bring charts, true, 3/);
+});
+
+test("empty workbook sheets cannot create task text from sheet names", () => {
+  const text = workbookText([
+    { sheet: "7月20日提交报告", data: [] },
+    { sheet: "23:59 截止", data: [[null, "  "]] },
+  ]);
+
+  assert.equal(text, "");
+});
+
+test("OCR cache selection skips invalid paths and falls back to a writable directory", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-ocr-cache-test-"));
+  try {
+    const blockingFile = join(dir, "not-a-directory");
+    writeFileSync(blockingFile, "blocked", "utf8");
+    const fallback = join(dir, "fallback");
+
+    assert.equal(ensureOcrCachePath(["relative-cache", join(blockingFile, "ocr"), fallback]), fallback);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("Tesseract adapter supports the package default export", async () => {
+  let receivedLanguages;
+  let receivedOptions;
+  const result = await recognizeImageWithTesseract(Buffer.from("image"), {
+    default: {
+      recognize: async (_image, languages, options) => {
+        receivedLanguages = languages;
+        receivedOptions = options;
+        return { data: { text: "Report due 2026-07-20", confidence: 88 } };
+      },
+    },
+  }, "D:\\Chroni\\ocr-cache");
+
+  assert.equal(receivedLanguages, "chi_sim+eng");
+  assert.deepEqual(receivedOptions, { cachePath: "D:\\Chroni\\ocr-cache" });
+  assert.deepEqual(result, { text: "Report due 2026-07-20", confidence: 88 });
+});
+
+test("model and local deadlines reconcile timezone-only differences", () => {
+  const base = {
+    id: "model",
+    title: "机器学习报告截止",
+    importance: "medium",
+    sourceSummary: "deadline.txt: Machine learning report due 2026-07-20 18:00.",
+    createdAt: "2026-07-13T00:00:00.000Z",
+    updatedAt: "2026-07-13T00:00:00.000Z",
+    completed: false,
+  };
+  const result = mergeModelAndRuleItems(
+    [{ ...base, dueAt: "2026-07-20T18:00:00.000Z" }],
+    [{ ...base, id: "rule", title: "Machine learning", dueAt: "2026-07-20T10:00:00.000Z" }],
+  );
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].title, "机器学习报告截止");
+  assert.equal(result[0].dueAt, "2026-07-20T10:00:00.000Z");
+});
+
+test("English at-time syntax keeps the explicit clock time", () => {
+  const [item] = extractDdlItemsFromText(
+    "Prepare the quarterly anomaly analysis. The final submission deadline is 2026-07-25 at 17:45.",
+    "直接文本",
+  );
+
+  assert.ok(item);
+  assert.equal(item.dueAt, new Date(2026, 6, 25, 17, 45).toISOString());
+});
+
+test("model and local items merge when their source evidence overlaps", () => {
+  const dueAt = new Date(2026, 6, 25, 17, 45).toISOString();
+  const base = {
+    id: "model-overlap",
+    importance: "medium",
+    dueAt,
+    createdAt: "2026-07-13T00:00:00.000Z",
+    updatedAt: "2026-07-13T00:00:00.000Z",
+    completed: false,
+  };
+  const result = mergeModelAndRuleItems(
+    [{ ...base, title: "季度异常分析报告提交", sourceSummary: "直接文本: The final submission deadline is 2026-07-25 at 17:45." }],
+    [{ ...base, id: "rule-overlap", title: "Prepare the quar", sourceSummary: "直接文本: Prepare the quarterly anomaly analysis. The final submission deadline is 2026-07-25 at 17:45." }],
+  );
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].title, "季度异常分析报告提交");
+});
 
 test("records failed task-like intake as a local source", async () => {
   await withStore(async (store) => {
@@ -423,14 +524,15 @@ test("LLM keys are encrypted at rest and reload through the secret codec", () =>
   const dir = mkdtempSync(join(tmpdir(), "chroni-secret-test-"));
   try {
     const store = new ChroniStore(dir, testSecretCodec());
-    store.updatePreferences({ llm: { apiKey: "sk-deepseek-private" } });
+    store.updatePreferences({ llm: { apiKey: "test-private-key-value" } });
 
     const raw = readFileSync(store.filePath, "utf8");
-    assert.equal(raw.includes("sk-deepseek-private"), false);
+    assert.equal(raw.includes("test-private-key-value"), false);
     assert.match(raw, /apiKeyProtected/);
 
     const reloaded = new ChroniStore(dir, testSecretCodec());
-    assert.equal(reloaded.snapshot().preferences.llm.apiKey, "sk-deepseek-private");
+    assert.equal(reloaded.snapshot().preferences.llm.apiKey, "");
+    assert.equal(reloaded.llmSettings().apiKey, "test-private-key-value");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -506,6 +608,8 @@ test("DeepSeek extraction processes every source independently", async () => {
     assert.equal(requests.length, 2);
     assert.equal(requests[0].messages.at(-1).content.includes("lab-b.txt"), false);
     assert.equal(requests[1].messages.at(-1).content.includes("course-a.txt"), false);
+    assert.match(requests[0].messages.at(-1).content, /用户时区：\S+/);
+    assert.match(requests[0].messages[0].content, /未写明时区.*用户时区/);
     assert.deepEqual(result.items.map((item) => item.title).sort(), ["实验报告", "课程报告"]);
     assert.match(result.items.find((item) => item.title === "课程报告").sourceSummary, /^course-a\.txt:/);
   } finally {
@@ -647,7 +751,8 @@ test("legacy plaintext LLM keys migrate to protected storage", () => {
     const store = new ChroniStore(dir, testSecretCodec());
     const migrated = readFileSync(store.filePath, "utf8");
 
-    assert.equal(store.snapshot().preferences.llm.apiKey, "sk-legacy-private");
+    assert.equal(store.snapshot().preferences.llm.apiKey, "");
+    assert.equal(store.llmSettings().apiKey, "sk-legacy-private");
     assert.equal(migrated.includes("sk-legacy-private"), false);
     assert.match(migrated, /apiKeyProtected/);
   } finally {

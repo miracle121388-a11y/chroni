@@ -26,6 +26,24 @@ test("requestChatCompletion sends an OpenAI-compatible request", async () => {
   assert.equal(content, "pong");
   assert.equal(received.url, "https://api.deepseek.com/chat/completions");
   assert.equal(received.init.headers.authorization, "Bearer sk-test");
+  assert.deepEqual(JSON.parse(received.init.body).thinking, { type: "disabled" });
+});
+
+test("requestChatCompletion keeps provider defaults scoped and overridable", async () => {
+  const bodies = [];
+  const fetchImpl = async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 });
+  };
+
+  await requestChatCompletion({ ...settings, baseUrl: "https://example.test/v1" }, [{ role: "user", content: "ping" }], { fetchImpl });
+  await requestChatCompletion(settings, [{ role: "user", content: "ping" }], {
+    fetchImpl,
+    body: { thinking: { type: "enabled" } },
+  });
+
+  assert.equal("thinking" in bodies[0], false);
+  assert.deepEqual(bodies[1].thinking, { type: "enabled" });
 });
 
 test("requestChatCompletion aborts requests after the configured timeout", async () => {
@@ -56,6 +74,20 @@ test("testLlmConnection categorizes common provider failures", async () => {
     assert.equal(result.kind, kind);
     assert.match(result.message, /provider detail/);
   }
+});
+
+test("testLlmConnection leaves room for a DeepSeek final answer", async () => {
+  let body;
+  const result = await testLlmConnection(settings, {
+    fetchImpl: async (_url, init) => {
+      body = JSON.parse(init.body);
+      return new Response(JSON.stringify({ choices: [{ message: { content: "OK" } }] }), { status: 200 });
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.ok(body.max_tokens >= 32);
+  assert.deepEqual(body.thinking, { type: "disabled" });
 });
 
 test("testLlmConnection rejects incomplete settings without making a request", async () => {

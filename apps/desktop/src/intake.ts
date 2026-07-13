@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { basename, extname } from "node:path";
+import { accessSync, constants, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, extname, isAbsolute, join } from "node:path";
 import mammoth from "mammoth";
 import readXlsxFile from "read-excel-file/node";
 import type { DdlItem, ChroniInputFile, ChroniLlmSettings, ExtractResult, ExtractedFailure, ExtractedInput, Importance, IntakePayload, IntakeResult } from "./shared/types.js";
@@ -11,7 +12,6 @@ import { selectPlanningPreferences } from "./agent/preference-selector.js";
 import { generateTaskPlan } from "./agent/task-plan-agent.js";
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
-const documentExtensions = new Set([".docx", ".pdf"]);
 const spreadsheetExtensions = new Set([".xlsx"]);
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"]);
 const unsupportedExtensions = new Set([".exe", ".dll", ".zip", ".rar", ".7z", ".mp4", ".mov", ".mp3", ".wav", ".app", ".dmg"]);
@@ -40,15 +40,31 @@ type LlmExtraction = {
   errors: string[];
 };
 
+type WorkbookSheet = {
+  sheet: string;
+  data: unknown[][];
+};
+
+type TesseractResult = {
+  data: { text: string; confidence?: number };
+};
+
+type TesseractModule = {
+  recognize?: (input: Buffer | string, languages?: string, options?: { cachePath?: string }) => Promise<TesseractResult>;
+  default?: {
+    recognize?: (input: Buffer | string, languages?: string, options?: { cachePath?: string }) => Promise<TesseractResult>;
+  };
+};
+
 export async function processIntake(payload: IntakePayload, store: ChroniStore): Promise<IntakeResult> {
   store.setCompanion("processing", "正在识别 DDL...");
-  const result = await extractPayload(payload, { llm: store.snapshot().preferences.llm });
+  const result = await extractPayload(payload, { llm: store.llmSettings() });
   if (!result.ok) {
     let clarificationSnapshot;
     let firstQuestion = "";
     for (const input of result.extracted) {
       if (!hasPossibleTaskWithoutDeadline(input.text)) continue;
-      const analysis = await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.snapshot().preferences.llm));
+      const analysis = await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.llmSettings()));
       if (analysis.status !== "needs-clarification") continue;
       clarificationSnapshot = store.saveIntakeDraft(analysis.draft, analysis.clarifications, input);
       firstQuestion ||= analysis.clarifications[0]?.question ?? "还需要确认任务信息。";
@@ -66,7 +82,7 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
 
   const blocking: Array<{ input: ExtractedInput; analysis: Awaited<ReturnType<typeof analyzeCompletenessWithLlm>> }> = [];
   for (const input of result.extracted.filter((candidate) => /下周(?![一二三四五六日天])/.test(candidate.text))) {
-    const analysis = await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.snapshot().preferences.llm));
+    const analysis = await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.llmSettings()));
     if (analysis.clarifications.some((item) => item.required && item.field === "dueAt")) blocking.push({ input, analysis });
   }
   const blockedSourceNames = new Set(blocking.map((entry) => entry.input.sourceName));
@@ -93,7 +109,7 @@ export async function ensureTaskPlan(taskId: string, store: ChroniStore, regener
   const taskType = /(作业|课程|实验|论文|考试|答辩)/.test(`${task.title} ${task.sourceSummary}`) ? "coursework" : "general";
   const preferences = selectPlanningPreferences(snapshot.agent.behaviorMemory, { taskType, importance: task.importance, dueAt: task.dueAt });
   const applied = snapshot.agent.behaviorMemory.autoApplyEnabled ? preferences : preferences.filter((item) => item.source === "explicit");
-  const settings = resolveLlmSettings(snapshot.preferences.llm);
+  const settings = resolveLlmSettings(store.llmSettings());
   const plan = await generateTaskPlan(task, applied, settings);
   return store.saveGeneratedTaskPlan(plan).plan;
 }
@@ -105,7 +121,7 @@ export async function reprocessSource(sourceId: string, store: ChroniStore): Pro
     return { ok: false, reason: "找不到原始输入。", snapshot };
   }
   store.setCompanion("processing", "正在重新识别来源...");
-  const result = await extractPayload({ kind: "text", text: source.text }, { llm: store.snapshot().preferences.llm });
+  const result = await extractPayload({ kind: "text", text: source.text }, { llm: store.llmSettings() });
   if (!result.ok) {
     const snapshot = store.markSourceFailed(sourceId, result.reason);
     return { ok: false, reason: result.reason, snapshot };
@@ -217,8 +233,8 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
   const result: LlmExtraction = { items: [], attempted: 0, rejected: 0, errors: [] };
   if (!resolvedSettings.enabled || !resolvedSettings.apiKey || !resolvedSettings.model) return result;
 
-  const { baseUrl } = resolvedSettings;
   const today = new Date().toISOString();
+  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   for (const [sourceIndex, input] of extracted.entries()) {
     const sourceId = `source-${sourceIndex + 1}`;
     const chunks = splitTextForLlm(input.text);
@@ -235,6 +251,7 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
           "字段结构固定：{\"items\":[{\"title\":\"短标题\",\"dueAt\":\"ISO-8601时间\",\"importance\":\"high|medium|low\",\"sourceSummary\":\"一句来源摘要\"}]}。",
           "title 控制在 16 个中文字符以内。",
           "dueAt 必须是包含时区的 ISO-8601 字符串。",
+          "原文未写明时区时，必须按用户时区解释日期和时间。",
           "sourceSummary 必须直接截取自原文中的短片段，不要改写或总结。",
           "没有明确截止时间的内容不要输出。",
           "即使没有日程，也必须输出 JSON：{\"items\":[]}。",
@@ -244,6 +261,7 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
         role: "user",
         content: [
           `当前时间：${today}`,
+          `用户时区：${userTimeZone}`,
           `来源 ID：${sourceId}`,
           `来源文件：${input.sourceName}`,
           `分块：${chunkIndex + 1}/${chunks.length}`,
@@ -256,7 +274,6 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
         temperature: 0.1,
         max_tokens: 4_096,
         response_format: { type: "json_object" },
-        ...(baseUrl.includes("deepseek.com") ? { thinking: { type: "disabled" } } : {}),
       },
         });
         const parsed = parseLlmJson(content);
@@ -419,8 +436,8 @@ async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput>
     return { sourceName: name, sourceType, text };
   }
   if (spreadsheetExtensions.has(extension)) {
-    const rows = await readXlsxFile(buffer) as unknown as unknown[][];
-    const text = rows.map((row) => row.map((cell: unknown) => cell instanceof Date ? cell.toISOString() : String(cell ?? "")).join(", ")).join("\n");
+    const sheets = await readXlsxFile(buffer) as unknown as WorkbookSheet[];
+    const text = workbookText(sheets);
     assertReliableExtractedText(text, name);
     return { sourceName: name, sourceType, text };
   }
@@ -465,11 +482,53 @@ async function extractPdfText(buffer: Buffer, name: string): Promise<string> {
 }
 
 async function recognizeImage(image: Buffer): Promise<{ text: string; confidence?: number }> {
-  const mod = await import("tesseract.js") as unknown as {
-    recognize: (input: Buffer | string, langs?: string) => Promise<{ data: { text: string; confidence?: number } }>;
-  };
-  const result = await mod.recognize(image, "chi_sim+eng");
+  const mod = await import("tesseract.js") as unknown as TesseractModule;
+  const cachePath = ocrCachePath();
+  return recognizeImageWithTesseract(image, mod, cachePath);
+}
+
+export async function recognizeImageWithTesseract(image: Buffer, mod: TesseractModule, cachePath: string): Promise<{ text: string; confidence?: number }> {
+  const recognize = mod.recognize ?? mod.default?.recognize;
+  if (typeof recognize !== "function") throw new Error("图片 OCR 组件不可用。");
+  const result = await recognize(image, "chi_sim+eng", { cachePath });
   return result.data;
+}
+
+function ocrCachePath(): string {
+  const homeCache = process.env.HOME
+    ? join(process.env.HOME, process.platform === "darwin" ? "Library/Caches" : ".cache")
+    : undefined;
+  return ensureOcrCachePath([
+    process.env.CHRONI_OCR_CACHE_PATH,
+    process.env.APPDATA ? join(process.env.APPDATA, "Chroni", "ocr") : undefined,
+    process.env.XDG_CACHE_HOME ? join(process.env.XDG_CACHE_HOME, "Chroni", "ocr") : undefined,
+    homeCache ? join(homeCache, "Chroni", "ocr") : undefined,
+    join(tmpdir(), "Chroni", "ocr"),
+  ]);
+}
+
+export function ensureOcrCachePath(candidates: Array<string | undefined>): string {
+  for (const candidate of candidates) {
+    if (!candidate || !isAbsolute(candidate)) continue;
+    try {
+      mkdirSync(candidate, { recursive: true });
+      accessSync(candidate, constants.W_OK);
+      return candidate;
+    } catch {
+      // Try the next platform cache location before giving up on OCR.
+    }
+  }
+  throw new Error("无法创建可写的图片 OCR 缓存目录。");
+}
+
+export function workbookText(sheets: WorkbookSheet[]): string {
+  return sheets.flatMap((sheet) => {
+    const rows = sheet.data
+      .map((row) => row.map((cell) => cell instanceof Date ? cell.toISOString() : String(cell ?? "")))
+      .filter((row) => row.some((cell) => cell.trim()))
+      .map((row) => row.join(", "));
+    return rows.length ? [`[工作表: ${sheet.sheet}]\n${rows.join("\n")}`] : [];
+  }).join("\n\n");
 }
 
 function readFileBuffer(file: ChroniInputFile): Buffer {
@@ -599,29 +658,60 @@ function mergeDuplicateItems(items: DdlItem[]): DdlItem[] {
   return [...map.values()];
 }
 
-function mergeModelAndRuleItems(modelItems: DdlItem[], ruleItems: DdlItem[]): DdlItem[] {
-  const ruleFallbacks = ruleItems.filter((ruleItem) => !modelItems.some((modelItem) => sameExtractedDeadline(modelItem, ruleItem)));
-  return mergeDuplicateItems([...modelItems, ...ruleFallbacks]);
+export function mergeModelAndRuleItems(modelItems: DdlItem[], ruleItems: DdlItem[]): DdlItem[] {
+  const reconciledModelItems = modelItems.map((modelItem) => {
+    const localMatch = ruleItems.find((ruleItem) => timezoneVariantOfSameEvidence(modelItem, ruleItem));
+    return localMatch ? { ...modelItem, dueAt: localMatch.dueAt } : modelItem;
+  });
+  const ruleFallbacks = ruleItems.filter((ruleItem) => !reconciledModelItems.some((modelItem) => sameExtractedDeadline(modelItem, ruleItem)));
+  return mergeDuplicateItems([...reconciledModelItems, ...ruleFallbacks]);
 }
 
 function sameExtractedDeadline(modelItem: DdlItem, ruleItem: DdlItem): boolean {
-  const modelSource = modelItem.sourceSummary.split(":", 1)[0]?.trim().toLowerCase() ?? "";
-  const ruleSource = ruleItem.sourceSummary.split(":", 1)[0]?.trim().toLowerCase() ?? "";
+  const modelSource = sourceName(modelItem.sourceSummary);
+  const ruleSource = sourceName(ruleItem.sourceSummary);
   if (modelSource !== ruleSource || modelItem.dueAt.slice(0, 16) !== ruleItem.dueAt.slice(0, 16)) return false;
   const modelText = normalizeEvidenceText(`${modelItem.title} ${modelItem.sourceSummary}`);
   const ruleText = normalizeEvidenceText(`${ruleItem.title} ${ruleItem.sourceSummary}`);
   const modelTitle = normalizeEvidenceText(modelItem.title);
   const ruleTitle = normalizeEvidenceText(ruleItem.title);
-  return modelTitle === ruleTitle || modelText.includes(ruleTitle) || ruleText.includes(modelTitle);
+  return modelTitle === ruleTitle
+    || modelText.includes(ruleTitle)
+    || ruleText.includes(modelTitle)
+    || hasOverlappingSourceEvidence(modelItem, ruleItem);
+}
+
+function timezoneVariantOfSameEvidence(modelItem: DdlItem, ruleItem: DdlItem): boolean {
+  if (sourceName(modelItem.sourceSummary) !== sourceName(ruleItem.sourceSummary)) return false;
+  if (!hasOverlappingSourceEvidence(modelItem, ruleItem)) return false;
+  const difference = Math.abs(new Date(modelItem.dueAt).getTime() - new Date(ruleItem.dueAt).getTime());
+  return difference > 0 && difference <= 14 * 60 * 60 * 1_000;
+}
+
+function hasOverlappingSourceEvidence(modelItem: DdlItem, ruleItem: DdlItem): boolean {
+  const modelEvidence = normalizeEvidenceText(sourceEvidence(modelItem.sourceSummary));
+  const ruleEvidence = normalizeEvidenceText(sourceEvidence(ruleItem.sourceSummary));
+  if (Math.min(modelEvidence.length, ruleEvidence.length) < 6
+    || (!modelEvidence.includes(ruleEvidence) && !ruleEvidence.includes(modelEvidence))) return false;
+  return true;
+}
+
+function sourceName(summary: string): string {
+  return summary.slice(0, Math.max(0, summary.indexOf(":"))).trim().toLowerCase();
+}
+
+function sourceEvidence(summary: string): string {
+  const separator = summary.indexOf(":");
+  return separator >= 0 ? summary.slice(separator + 1) : summary;
 }
 
 function dateFromText(text: string): string | null {
   const now = new Date();
   const normalized = text.replace(/\s+/g, " ");
-  const full = normalized.match(/(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?(?:\s*(上午|下午|晚上|中午)?\s*(\d{1,2})(?:[:：点](\d{2})?)?)?/);
+  const full = normalized.match(/(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?(?:\s*(?:at\s+)?(上午|下午|晚上|中午)?\s*(\d{1,2})(?:[:：点](\d{2})?)?)?/i);
   if (full) return toIso(Number(full[1]), Number(full[2]), Number(full[3]), full[5], full[6], full[4]);
 
-  const partial = normalized.match(/(\d{1,2})[月/.-](\d{1,2})日?(?:\s*(上午|下午|晚上|中午)?\s*(\d{1,2})(?:[:：点](\d{2})?)?)?/);
+  const partial = normalized.match(/(\d{1,2})[月/.-](\d{1,2})日?(?:\s*(?:at\s+)?(上午|下午|晚上|中午)?\s*(\d{1,2})(?:[:：点](\d{2})?)?)?/i);
   if (partial) {
     const month = Number(partial[1]);
     const day = Number(partial[2]);
