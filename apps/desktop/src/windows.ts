@@ -39,7 +39,8 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
     height: 210,
     transparent: true,
     frame: false,
-    ...(process.platform === "darwin" ? { hasShadow: false } : {}),
+    hasShadow: false,
+    ...(process.platform === "win32" ? { focusable: false } : {}),
     resizable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
@@ -68,19 +69,21 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
     scheduleHideTimer = undefined;
   });
 
-  ipcMain.on("chroni:start-window-drag", (event, screenX: number, screenY: number) => {
+  ipcMain.on("chroni:start-window-drag", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const kind = win === windows.pet ? "pet" : win === windows.schedule && process.platform === "win32" ? "schedule" : undefined;
-    if (!win || !kind || !Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+    if (!win || !kind) {
       event.returnValue = false;
       return;
     }
     const [x, y] = win.getPosition();
+    const cursor = screen.getCursorScreenPoint();
     windowDragSessions.set(event.sender.id, {
       kind,
       startWindow: { x, y },
-      startCursor: { x: screenX, y: screenY },
+      startCursor: cursor,
     });
+    if (kind === "pet" && windows.schedule?.isVisible()) hideSchedule();
     event.returnValue = true;
   });
   ipcMain.on("chroni:move-window-drag", (event) => {
@@ -115,6 +118,8 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
     if (win && session.kind === "pet") {
       snapWindowToEdge(win);
       persistPetPlacement(win);
+      lastSchedulePlacement = undefined;
+      positionScheduleWindow();
     } else if (win && session.kind === "schedule") {
       persistSchedulePlacement(win);
     }

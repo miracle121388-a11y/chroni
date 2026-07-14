@@ -45,7 +45,7 @@ declare global {
       reprocessSource(sourceId: string): Promise<IntakeResult>;
       updateSourceText(sourceId: string, text: string): Promise<ChroniSnapshot>;
       openStorage(): Promise<void>;
-      startWindowDrag(screenX: number, screenY: number): boolean;
+      startWindowDrag(): boolean;
       moveWindowDrag(): void;
       endWindowDrag(): void;
       filePath(file: File): string;

@@ -42,7 +42,7 @@ contextBridge.exposeInMainWorld("chroni", {
   reprocessSource: (sourceId) => ipcRenderer.invoke("chroni:source-reprocess", sourceId),
   updateSourceText: (sourceId, text) => ipcRenderer.invoke("chroni:source-update-text", sourceId, text),
   openStorage: () => ipcRenderer.invoke("chroni:open-storage"),
-  startWindowDrag: (screenX, screenY) => ipcRenderer.sendSync("chroni:start-window-drag", screenX, screenY),
+  startWindowDrag: () => ipcRenderer.sendSync("chroni:start-window-drag"),
   moveWindowDrag: () => ipcRenderer.send("chroni:move-window-drag"),
   endWindowDrag: () => ipcRenderer.send("chroni:end-window-drag"),
   filePath: (file) => webUtils.getPathForFile(file),

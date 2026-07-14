@@ -4,11 +4,20 @@ import test from "node:test";
 import {
   draggedWindowPosition,
   draggedWindowPositionWithinArea,
+  hasCrossedDragThreshold,
   normalizedWindowPlacement,
   restoredWindowPosition,
   schedulePopoverPosition,
   snappedWindowPosition,
 } from "../dist/window-geometry.js";
+
+test("drag intent uses the same stable threshold on every platform", () => {
+  const start = { x: 500, y: 300 };
+  assert.equal(hasCrossedDragThreshold(start, { x: 503, y: 304 }), false);
+  assert.equal(hasCrossedDragThreshold(start, { x: 506, y: 300 }), true);
+  assert.equal(hasCrossedDragThreshold(start, { x: 496, y: 296 }), false);
+  assert.equal(hasCrossedDragThreshold(start, { x: 495, y: 296 }), true);
+});
 
 test("draggedWindowPosition measures every move from the immutable drag origin", () => {
   const startWindow = { x: 120, y: 240 };

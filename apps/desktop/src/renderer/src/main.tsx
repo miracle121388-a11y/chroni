@@ -4,6 +4,7 @@ import { buildAgentDashboard } from "../../shared/agent-dashboard";
 import { formatOperationError, formatUserFacingMessage } from "../../shared/errors";
 import { attentionPetAction, basePetAction, isOneShotPetAction, petClickIntent, petMotionReducer, resolvedPetAction } from "../../shared/pet-actions";
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
+import { hasCrossedDragThreshold } from "../../window-geometry";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
 import type { AgentMemory, CompanionState, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
@@ -98,6 +99,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
   const dragPointerId = useRef<number | null>(null);
   const dragStartPoint = useRef<{ x: number; y: number } | null>(null);
   const dragCaptureTarget = useRef<HTMLElement | null>(null);
+  const dragSessionStarted = useRef(false);
   const suppressClick = useRef(false);
   const previousCompanionState = useRef(snapshot.companion.state);
   const previousCompletion = useRef(new Map(snapshot.items.map((item) => [item.id, item.completed])));
@@ -211,7 +213,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
 
   return (
     <main
-      className={`pet-shell state-${snapshot.companion.state}`}
+      className={`pet-shell state-${snapshot.companion.state} ${movingPet ? "moving" : ""}`}
       onDragOver={(event) => {
         event.preventDefault();
         if (dropBusyRef.current) {
@@ -236,61 +238,61 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
         if (!event.isPrimary || event.button !== 0) return;
         dragPointerId.current = event.pointerId;
         dragStartPoint.current = { x: event.screenX, y: event.screenY };
-        const captureTarget = api.platform === "darwin" && event.target instanceof HTMLElement
-          ? event.target
-          : event.currentTarget;
+        const captureTarget = event.target instanceof HTMLElement ? event.target : event.currentTarget;
         dragCaptureTarget.current = captureTarget;
         captureTarget.setPointerCapture(event.pointerId);
+        dragSessionStarted.current = false;
         suppressClick.current = false;
-        if (api.platform === "win32") api.startWindowDrag(event.screenX, event.screenY);
       }}
       onPointerMove={(event) => {
         if (dragPointerId.current !== event.pointerId || (event.buttons & 1) === 0) return;
         const start = dragStartPoint.current;
-        const crossedDragThreshold = start && (api.platform === "win32"
-          ? Math.abs(event.screenX - start.x) + Math.abs(event.screenY - start.y) > 2
-          : Math.hypot(event.screenX - start.x, event.screenY - start.y) >= 6);
-        if (start && crossedDragThreshold) {
-          if (!suppressClick.current) {
-            if (api.platform !== "win32" && !api.startWindowDrag(start.x, start.y)) return;
-            suppressClick.current = true;
-            setMovingPet(true);
-            dispatchMotion({ type: "command", command: petCommand("idle", "replace") });
-          }
+        if (start && !dragSessionStarted.current && hasCrossedDragThreshold(start, { x: event.screenX, y: event.screenY })) {
+          if (!api.startWindowDrag()) return;
+          dragSessionStarted.current = true;
+          suppressClick.current = true;
+          setMovingPet(true);
+          dispatchMotion({ type: "command", command: petCommand("idle", "replace") });
         }
-        if (api.platform === "win32" || suppressClick.current) api.moveWindowDrag();
+        if (dragSessionStarted.current) api.moveWindowDrag();
       }}
       onPointerUp={(event) => {
         if (dragPointerId.current !== event.pointerId) return;
-        const wasMoved = suppressClick.current;
+        const wasMoved = dragSessionStarted.current;
         dragPointerId.current = null;
         dragStartPoint.current = null;
+        dragSessionStarted.current = false;
         const captureTarget = dragCaptureTarget.current;
         dragCaptureTarget.current = null;
         if (captureTarget?.hasPointerCapture(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
         setMovingPet(false);
-        api.endWindowDrag();
+        if (wasMoved) api.endWindowDrag();
         if (wasMoved && baseAction !== "sleep") dispatchMotion({ type: "command", command: petCommand("cling", "replace") });
+        if (wasMoved) window.setTimeout(() => { suppressClick.current = false; }, 0);
       }}
       onPointerCancel={(event) => {
         if (dragPointerId.current !== event.pointerId) return;
         dragPointerId.current = null;
         dragStartPoint.current = null;
+        const wasDragging = dragSessionStarted.current;
+        dragSessionStarted.current = false;
         const captureTarget = dragCaptureTarget.current;
         dragCaptureTarget.current = null;
         if (captureTarget?.hasPointerCapture(event.pointerId)) captureTarget.releasePointerCapture(event.pointerId);
         suppressClick.current = false;
         setMovingPet(false);
-        api.endWindowDrag();
+        if (wasDragging) api.endWindowDrag();
       }}
       onLostPointerCapture={(event) => {
         if (dragPointerId.current !== event.pointerId) return;
         dragPointerId.current = null;
         dragStartPoint.current = null;
+        const wasDragging = dragSessionStarted.current;
+        dragSessionStarted.current = false;
         dragCaptureTarget.current = null;
         suppressClick.current = false;
         setMovingPet(false);
-        api.endWindowDrag();
+        if (wasDragging) api.endWindowDrag();
       }}
     >
       <button
@@ -319,6 +321,8 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   const undoButtonRef = useRef<HTMLButtonElement>(null);
   const quickAddInputRef = useRef<HTMLInputElement>(null);
   const scheduleDragPointerId = useRef<number | null>(null);
+  const scheduleDragStart = useRef<{ x: number; y: number } | null>(null);
+  const scheduleDragActive = useRef(false);
   const [movingSchedule, setMovingSchedule] = useState(false);
   const isBusy = !!busyMessage;
   const feedbackPaused = feedbackHovered || feedbackFocused;
@@ -331,24 +335,33 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   function startScheduleDrag(event: React.PointerEvent<HTMLElement>): void {
     if (api.platform !== "win32" || !event.isPrimary || event.button !== 0) return;
     if (event.target instanceof Element && event.target.closest("button, input, select, textarea, a")) return;
-    if (!api.startWindowDrag(event.screenX, event.screenY)) return;
     scheduleDragPointerId.current = event.pointerId;
+    scheduleDragStart.current = { x: event.screenX, y: event.screenY };
+    scheduleDragActive.current = false;
     event.currentTarget.setPointerCapture(event.pointerId);
-    setMovingSchedule(true);
     event.preventDefault();
   }
 
   function moveScheduleDrag(event: React.PointerEvent<HTMLElement>): void {
     if (scheduleDragPointerId.current !== event.pointerId || (event.buttons & 1) === 0) return;
-    api.moveWindowDrag();
+    const start = scheduleDragStart.current;
+    if (start && !scheduleDragActive.current && hasCrossedDragThreshold(start, { x: event.screenX, y: event.screenY })) {
+      if (!api.startWindowDrag()) return;
+      scheduleDragActive.current = true;
+      setMovingSchedule(true);
+    }
+    if (scheduleDragActive.current) api.moveWindowDrag();
   }
 
   function finishScheduleDrag(event: React.PointerEvent<HTMLElement>): void {
     if (scheduleDragPointerId.current !== event.pointerId) return;
+    const wasDragging = scheduleDragActive.current;
     scheduleDragPointerId.current = null;
+    scheduleDragStart.current = null;
+    scheduleDragActive.current = false;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     setMovingSchedule(false);
-    api.endWindowDrag();
+    if (wasDragging) api.endWindowDrag();
   }
 
   useEffect(() => {

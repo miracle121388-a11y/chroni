@@ -16,6 +16,10 @@ export type NormalizedWindowPlacement = {
   yRatio: number;
 };
 
+export function hasCrossedDragThreshold(start: WindowPosition, cursor: WindowPosition, threshold = 6): boolean {
+  return Math.hypot(cursor.x - start.x, cursor.y - start.y) >= threshold;
+}
+
 export function draggedWindowPosition(startWindow: WindowPosition, startCursor: WindowPosition, cursor: WindowPosition): WindowPosition {
   return {
     x: startWindow.x + cursor.x - startCursor.x,

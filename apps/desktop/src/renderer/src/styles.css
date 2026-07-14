@@ -99,6 +99,7 @@ summary:focus-visible {
   width: 100vw;
   height: 100vh;
   user-select: none;
+  touch-action: none;
   background: transparent;
 }
 
@@ -122,6 +123,7 @@ summary:focus-visible {
   overflow: visible;
   transform: translateX(-50%);
   transition: transform 160ms ease, filter 160ms ease;
+  cursor: grab;
 }
 
 .pet-body:hover {
@@ -130,6 +132,11 @@ summary:focus-visible {
 
 .pet-body:active {
   transform: translateX(-50%);
+}
+
+.pet-shell.moving,
+.pet-shell.moving .pet-body {
+  cursor: grabbing;
 }
 
 .pet-body:focus,
