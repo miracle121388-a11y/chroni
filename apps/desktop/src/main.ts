@@ -12,10 +12,10 @@ import { testLlmConnection } from "./llm-client.js";
 import { resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
-import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface, type ControlCenterRoute } from "./windows.js";
-import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
+import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
 
 let store: ChroniStore;
 let apiServer: ReturnType<typeof startChroniApiServer> | undefined;
@@ -145,6 +145,9 @@ function installIpc(): void {
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
+  ipcMain.handle("chroni:daily-task-create", (_event, input: DailyTaskCreateInput) => publishStoreSnapshot(store.createDailyTask(validateDailyTaskCreate(input))));
+  ipcMain.handle("chroni:daily-task-update", (_event, id: string, patch: DailyTaskPatch) => publishStoreSnapshot(store.updateDailyTask(validateIdentifier(id, "daily task id"), validateDailyTaskPatch(patch))));
+  ipcMain.handle("chroni:daily-task-delete", (_event, id: string) => publishStoreSnapshot(store.deleteDailyTask(validateIdentifier(id, "daily task id"))));
   ipcMain.handle("chroni:preferences-update", (_event, patch: ChroniPreferencesPatch) => {
     const previousHotkey = store.snapshot().preferences.hotkey;
     let snapshot = store.updatePreferences(validatePreferencesPatch(patch));
@@ -499,7 +502,7 @@ function controlCenterRoute(value: unknown): ControlCenterRoute | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const candidate = value as Record<string, unknown>;
   const route: ControlCenterRoute = {};
-  if (candidate.tab === "schedule" || candidate.tab === "agent" || candidate.tab === "preferences" || candidate.tab === "services") route.tab = candidate.tab;
+  if (candidate.tab === "schedule" || candidate.tab === "daily" || candidate.tab === "agent" || candidate.tab === "preferences" || candidate.tab === "services") route.tab = candidate.tab;
   if (typeof candidate.taskId === "string" && candidate.taskId.trim()) route.taskId = candidate.taskId.trim().slice(0, 200);
   if (candidate.focus === "clarifications") route.focus = candidate.focus;
   return Object.keys(route).length ? route : undefined;

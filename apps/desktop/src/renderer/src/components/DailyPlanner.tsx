@@ -1,0 +1,370 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import type { ChroniSnapshot, DailyTask, DailyTaskColor, DailyTaskPatch, DailyTaskRecurrence, DailyTaskSubtask } from "../../../shared/types";
+
+type DailyPlannerProps = {
+  snapshot: ChroniSnapshot;
+  setSnapshot: React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>;
+};
+
+type PlannerMode = "day" | "multi" | "week" | "month";
+type TaskDraft = {
+  title: string;
+  notes: string;
+  color: DailyTaskColor;
+  date: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  recurrence: DailyTaskRecurrence;
+  subtasks: DailyTaskSubtask[];
+};
+
+const api = window.chroni;
+const dayStartMinutes = 6 * 60;
+const dayEndMinutes = 24 * 60;
+const timelineHeight = 756;
+const colors: Array<{ value: DailyTaskColor; label: string }> = [
+  { value: "teal", label: "青绿" },
+  { value: "coral", label: "珊瑚" },
+  { value: "gold", label: "金色" },
+  { value: "blue", label: "蓝色" },
+  { value: "plum", label: "梅紫" },
+];
+
+export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
+  const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+  const [mode, setMode] = useState<PlannerMode>("day");
+  const [inboxText, setInboxText] = useState("");
+  const [selectedTaskId, setSelectedTaskId] = useState<string>();
+  const [busy, setBusy] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const visibleTasks = useMemo(() => snapshot.dailyTasks.filter((task) => !task.dismissed), [snapshot.dailyTasks]);
+  const inbox = visibleTasks.filter((task) => !task.scheduledStartAt);
+  const selectedTask = visibleTasks.find((task) => task.id === selectedTaskId);
+  const selectedKey = dateKey(selectedDate);
+  const weekDays = useMemo(() => daysFrom(startOfWeek(selectedDate), 7), [selectedDate]);
+  const selectedDayTasks = tasksForDate(visibleTasks, selectedDate);
+  const completedCount = selectedDayTasks.filter((task) => task.completedDates.includes(selectedKey)).length;
+  const plannedMinutes = selectedDayTasks.reduce((sum, task) => sum + taskDuration(task), 0);
+
+  useEffect(() => {
+    if (selectedTaskId && !selectedTask) setSelectedTaskId(undefined);
+  }, [selectedTask, selectedTaskId]);
+
+  async function createInbox(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    const title = inboxText.trim();
+    if (!title || busy) return;
+    setBusy("inbox");
+    try {
+      setSnapshot(await api.createDailyTask({ title }));
+      setInboxText("");
+      setFeedback("已放入 Inbox，拖到时间轴即可排期。");
+    } catch (error) {
+      setFeedback(operationMessage(error, "未能添加任务。"));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function createScheduled(): Promise<void> {
+    if (busy) return;
+    const base = dateKey(selectedDate) === dateKey(new Date()) ? ceilToHalfHour(new Date()) : atLocalTime(selectedDate, "09:00");
+    const start = clampToDay(base);
+    const end = new Date(start.getTime() + 45 * 60_000);
+    setBusy("create");
+    try {
+      const next = await api.createDailyTask({
+        title: "新任务",
+        color: "teal",
+        scheduledStartAt: start.toISOString(),
+        scheduledEndAt: end.toISOString(),
+      });
+      setSnapshot(next);
+      const created = next.dailyTasks.find((task) => task.origin === "manual" && task.title === "新任务" && task.scheduledStartAt === start.toISOString());
+      setSelectedTaskId(created?.id);
+    } catch (error) {
+      setFeedback(operationMessage(error, "未能新建任务。"));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function toggleComplete(task: DailyTask, occurrenceDate: Date): Promise<void> {
+    const key = dateKey(occurrenceDate);
+    const completedDates = task.completedDates.includes(key)
+      ? task.completedDates.filter((date) => date !== key)
+      : [...task.completedDates, key];
+    try {
+      setSnapshot(await api.updateDailyTask(task.id, { completedDates }));
+    } catch (error) {
+      setFeedback(operationMessage(error, "未能更新完成状态。"));
+    }
+  }
+
+  async function scheduleTask(taskId: string, targetDate: Date, startMinutes: number): Promise<void> {
+    const task = visibleTasks.find((candidate) => candidate.id === taskId);
+    if (!task) return;
+    const start = atMinutes(targetDate, Math.max(dayStartMinutes, Math.min(dayEndMinutes - 15, startMinutes)));
+    const end = new Date(start.getTime() + Math.max(15, taskDuration(task)) * 60_000);
+    try {
+      setSnapshot(await api.updateDailyTask(task.id, { scheduledStartAt: start.toISOString(), scheduledEndAt: end.toISOString(), allDay: false }));
+      setFeedback(`已安排到 ${formatClock(start)}。`);
+    } catch (error) {
+      setFeedback(operationMessage(error, "未能调整任务时间。"));
+    }
+  }
+
+  async function runAgent(): Promise<void> {
+    if (busy) return;
+    setBusy("agent");
+    setFeedback("Agent 正在结合任务规划安排今天...");
+    try {
+      setSnapshot(await api.runDeadlineAgent());
+      setFeedback("今日规划已刷新，用户手动调整过的任务保持不变。");
+    } catch (error) {
+      setFeedback(operationMessage(error, "Agent 今日规划未完成。"));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function dropOnTimeline(event: React.DragEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    const taskId = event.dataTransfer.getData("application/x-chroni-daily-task");
+    const rect = timelineRef.current?.getBoundingClientRect();
+    if (!taskId || !rect) return;
+    const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    const minutes = Math.round((dayStartMinutes + ratio * (dayEndMinutes - dayStartMinutes)) / 15) * 15;
+    void scheduleTask(taskId, selectedDate, minutes);
+  }
+
+  return (
+    <div className="daily-planner" aria-busy={!!busy}>
+      <header className="daily-toolbar">
+        <div className="daily-date-nav">
+          <button className="daily-today-button" type="button" onClick={() => setSelectedDate(startOfDay(new Date()))}>今天</button>
+          <button className="daily-icon-button" type="button" title="上一段日期" aria-label="上一段日期" onClick={() => setSelectedDate(addDays(selectedDate, mode === "month" ? -30 : mode === "week" ? -7 : -1))}>‹</button>
+          <button className="daily-icon-button" type="button" title="下一段日期" aria-label="下一段日期" onClick={() => setSelectedDate(addDays(selectedDate, mode === "month" ? 30 : mode === "week" ? 7 : 1))}>›</button>
+          <div><h2>{formatMonth(selectedDate)}</h2><p>{formatLongDate(selectedDate)}</p></div>
+        </div>
+        <div className="daily-toolbar-actions">
+          <div className="daily-mode-switch" role="tablist" aria-label="每日任务视图">
+            {(["day", "multi", "week", "month"] as PlannerMode[]).map((value) => (
+              <button key={value} type="button" role="tab" aria-selected={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>{modeLabel(value)}</button>
+            ))}
+          </div>
+          <button className="daily-agent-button" type="button" disabled={!!busy} onClick={() => void runAgent()}><span aria-hidden="true">✦</span>{busy === "agent" ? "规划中" : "Agent 排今日"}</button>
+        </div>
+      </header>
+
+      <div className="daily-week-strip" aria-label="选择日期">
+        {weekDays.map((date) => {
+          const key = dateKey(date);
+          const count = tasksForDate(visibleTasks, date).length;
+          const active = key === selectedKey;
+          return <button key={key} type="button" className={active ? "active" : ""} onClick={() => setSelectedDate(date)}><span>{weekday(date)}</span><b>{date.getDate()}</b><i>{count ? `${count} 项` : "空闲"}</i></button>;
+        })}
+      </div>
+
+      <div className="daily-summary-band">
+        <p><b>{selectedDayTasks.length}</b> 项安排</p>
+        <p><b>{completedCount}</b> 项完成</p>
+        <p><b>{formatDuration(plannedMinutes)}</b> 已规划</p>
+        {feedback && <span role="status">{feedback}</span>}
+      </div>
+
+      <div className={`daily-workspace mode-${mode}`}>
+        {mode === "day" && (
+          <>
+            <InboxPanel tasks={inbox} text={inboxText} busy={busy === "inbox"} onText={setInboxText} onCreate={createInbox} onOpen={setSelectedTaskId} />
+            <DayTimeline
+              date={selectedDate}
+              tasks={selectedDayTasks}
+              timelineRef={timelineRef}
+              onDrop={dropOnTimeline}
+              onOpen={setSelectedTaskId}
+              onToggle={toggleComplete}
+            />
+          </>
+        )}
+        {(mode === "multi" || mode === "week") && (
+          <CompactDays
+            days={daysFrom(mode === "week" ? startOfWeek(selectedDate) : selectedDate, mode === "week" ? 7 : 3)}
+            tasks={visibleTasks}
+            onSelectDate={(date) => { setSelectedDate(date); setMode("day"); }}
+            onOpen={setSelectedTaskId}
+            onToggle={toggleComplete}
+          />
+        )}
+        {mode === "month" && <MonthView date={selectedDate} tasks={visibleTasks} onSelectDate={(date) => { setSelectedDate(date); setMode("day"); }} />}
+        <button className="daily-floating-add" type="button" title="新建已排期任务" aria-label="新建已排期任务" disabled={!!busy} onClick={() => void createScheduled()}>＋</button>
+      </div>
+
+      {selectedTask && (
+        <TaskEditor
+          key={`${selectedTask.id}-${selectedTask.updatedAt}`}
+          task={selectedTask}
+          occurrenceDate={selectedDate}
+          linkedTitle={snapshot.items.find((item) => item.id === selectedTask.linkedTaskId)?.title}
+          onClose={() => setSelectedTaskId(undefined)}
+          onSave={async (patch) => { setSnapshot(await api.updateDailyTask(selectedTask.id, patch)); setSelectedTaskId(undefined); }}
+          onDelete={async () => { setSnapshot(await api.deleteDailyTask(selectedTask.id)); setSelectedTaskId(undefined); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function InboxPanel({ tasks, text, busy, onText, onCreate, onOpen }: { tasks: DailyTask[]; text: string; busy: boolean; onText(value: string): void; onCreate(event: React.FormEvent): void; onOpen(id: string): void }) {
+  return (
+    <aside className="daily-inbox">
+      <header><div><span className="daily-inbox-icon" aria-hidden="true">□</span><h3>Inbox</h3></div><b>{tasks.length}</b></header>
+      <form onSubmit={onCreate}><input value={text} disabled={busy} onChange={(event) => onText(event.target.value)} placeholder="记录一个未排期任务..." aria-label="添加 Inbox 任务" /><button type="submit" disabled={busy || !text.trim()} title="添加到 Inbox" aria-label="添加到 Inbox">＋</button></form>
+      <div className="daily-inbox-list">
+        {tasks.map((task) => <button className={`daily-inbox-task color-${task.color}`} draggable key={task.id} type="button" onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)} onClick={() => onOpen(task.id)}><i aria-hidden="true" /><span><b>{task.title}</b><small>{task.origin === "agent" ? "Agent 规划" : "拖到时间轴排期"}</small></span><em>⋮</em></button>)}
+        {!tasks.length && <div className="daily-inbox-empty"><span aria-hidden="true">⌁</span><b>想法已经归位</b><p>新任务可以先留在这里，再拖到右侧安排。</p></div>}
+      </div>
+    </aside>
+  );
+}
+
+function DayTimeline({ date, tasks, timelineRef, onDrop, onOpen, onToggle }: { date: Date; tasks: DailyTask[]; timelineRef: React.RefObject<HTMLDivElement | null>; onDrop(event: React.DragEvent<HTMLDivElement>): void; onOpen(id: string): void; onToggle(task: DailyTask, date: Date): void }) {
+  const timed = tasks.filter((task) => !task.allDay);
+  const allDay = tasks.filter((task) => task.allDay);
+  const now = new Date();
+  const nowPosition = dateKey(now) === dateKey(date) ? timelinePosition(now.getHours() * 60 + now.getMinutes()) : undefined;
+  return (
+    <section className="daily-timeline-panel">
+      <header><div><p>{weekday(date)}</p><h3>{date.getDate()} 日的时间轴</h3></div><span>{tasks.length ? "拖动任务可重新排期" : "今天还没有安排"}</span></header>
+      {allDay.length > 0 && <div className="daily-all-day"><b>全天</b>{allDay.map((task) => <TimelineTask key={task.id} task={task} date={date} compact onOpen={onOpen} onToggle={onToggle} />)}</div>}
+      <div className="daily-timeline" ref={timelineRef} onDragOver={(event) => event.preventDefault()} onDrop={onDrop} style={{ height: timelineHeight }}>
+        {Array.from({ length: 10 }, (_, index) => 6 + index * 2).map((hour) => <div className="daily-hour" key={hour} style={{ top: timelinePosition(hour * 60) }}><time>{String(hour).padStart(2, "0")}:00</time><span /></div>)}
+        <div className="daily-timeline-rail" />
+        {nowPosition !== undefined && nowPosition >= 0 && nowPosition <= timelineHeight && <div className="daily-now" style={{ top: nowPosition }}><i /><span>现在 {formatClock(now)}</span></div>}
+        {timed.map((task, index) => {
+          const start = occurrenceStart(task, date);
+          const top = timelinePosition(start.getHours() * 60 + start.getMinutes());
+          const height = Math.max(42, taskDuration(task) / (dayEndMinutes - dayStartMinutes) * timelineHeight);
+          return <div className="daily-timeline-task-wrap" key={task.id} style={{ top, minHeight: height, left: `${116 + index % 3 * 8}px` }}><TimelineTask task={task} date={date} onOpen={onOpen} onToggle={onToggle} /></div>;
+        })}
+        {!tasks.length && <div className="daily-timeline-empty"><span aria-hidden="true">✦</span><b>留一段专注时间给重要的事</b><p>运行 Agent，或从 Inbox 拖一项到时间轴。</p></div>}
+      </div>
+    </section>
+  );
+}
+
+function TimelineTask({ task, date, compact = false, onOpen, onToggle }: { task: DailyTask; date: Date; compact?: boolean; onOpen(id: string): void; onToggle(task: DailyTask, date: Date): void }) {
+  const complete = task.completedDates.includes(dateKey(date));
+  const start = occurrenceStart(task, date);
+  const end = new Date(start.getTime() + taskDuration(task) * 60_000);
+  return <article className={`daily-task-card color-${task.color} ${complete ? "completed" : ""} ${compact ? "compact" : ""}`} draggable onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)} onClick={() => onOpen(task.id)}><button type="button" className="daily-check" aria-label={complete ? `恢复 ${task.title}` : `完成 ${task.title}`} onClick={(event) => { event.stopPropagation(); onToggle(task, date); }}>{complete ? "✓" : ""}</button><div><time>{task.allDay ? "全天" : `${formatClock(start)} – ${formatClock(end)}`}</time><b>{task.title}</b><span>{task.origin === "agent" ? "✦ Agent 规划" : task.recurrence !== "none" ? recurrenceLabel(task.recurrence) : formatDuration(taskDuration(task))}</span></div><i aria-hidden="true" /></article>;
+}
+
+function CompactDays({ days, tasks, onSelectDate, onOpen, onToggle }: { days: Date[]; tasks: DailyTask[]; onSelectDate(date: Date): void; onOpen(id: string): void; onToggle(task: DailyTask, date: Date): void }) {
+  return <section className="daily-compact-days">{days.map((date) => { const daily = tasksForDate(tasks, date); return <article className={dateKey(date) === dateKey(new Date()) ? "today" : ""} key={dateKey(date)}><button className="daily-column-head" type="button" onClick={() => onSelectDate(date)}><span>{weekday(date)}</span><b>{date.getDate()}</b><small>{daily.length} 项</small></button><div>{daily.sort(compareDailyTasks).map((task) => <TimelineTask key={task.id} task={task} date={date} compact onOpen={onOpen} onToggle={onToggle} />)}{!daily.length && <p className="daily-column-empty">暂无安排</p>}</div></article>; })}</section>;
+}
+
+function MonthView({ date, tasks, onSelectDate }: { date: Date; tasks: DailyTask[]; onSelectDate(date: Date): void }) {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1);
+  const gridStart = startOfWeek(first);
+  const days = daysFrom(gridStart, 42);
+  return <section className="daily-month"><header>{["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((label) => <b key={label}>{label}</b>)}</header><div>{days.map((day) => { const daily = tasksForDate(tasks, day); return <button type="button" key={dateKey(day)} className={`${day.getMonth() === date.getMonth() ? "" : "outside"} ${dateKey(day) === dateKey(new Date()) ? "today" : ""}`} onClick={() => onSelectDate(day)}><span>{day.getDate()}</span><small>{daily.slice(0, 3).map((task) => <i className={`color-${task.color}`} key={task.id}>{task.title}</i>)}</small>{daily.length > 3 && <em>还有 {daily.length - 3} 项</em>}</button>; })}</div></section>;
+}
+
+function TaskEditor({ task, occurrenceDate, linkedTitle, onClose, onSave, onDelete }: { task: DailyTask; occurrenceDate: Date; linkedTitle?: string; onClose(): void; onSave(patch: DailyTaskPatch): Promise<void>; onDelete(): Promise<void> }) {
+  const [draft, setDraft] = useState<TaskDraft>(() => taskDraft(task, occurrenceDate));
+  const [subtaskText, setSubtaskText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    if (!draft.title.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const start = atLocalTime(fromDateKey(draft.date), draft.start || "09:00");
+      const end = atLocalTime(fromDateKey(draft.date), draft.end || "10:00");
+      if (end <= start) end.setDate(end.getDate() + 1);
+      await onSave({ title: draft.title.trim(), notes: draft.notes, color: draft.color, allDay: draft.allDay, recurrence: draft.recurrence, subtasks: draft.subtasks, scheduledStartAt: start.toISOString(), scheduledEndAt: end.toISOString() });
+    } catch (reason) {
+      setError(operationMessage(reason, "任务没有保存，请检查时间。"));
+      setBusy(false);
+    }
+  }
+
+  function addSubtask(): void {
+    const title = subtaskText.trim();
+    if (!title) return;
+    setDraft((current) => ({ ...current, subtasks: [...current.subtasks, { id: `subtask-${Date.now()}`, title, completed: false }] }));
+    setSubtaskText("");
+  }
+
+  return <div className="daily-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className={`daily-editor color-${draft.color}`} role="dialog" aria-modal="true" aria-labelledby="daily-editor-title"><header><div className="daily-editor-mark" aria-hidden="true">{task.origin === "agent" ? "✦" : "○"}</div><div><p>{task.origin === "agent" ? "Agent 规划任务" : "每日任务"}</p><h2 id="daily-editor-title">{draft.title || "未命名任务"}</h2>{linkedTitle && <span>关联：{linkedTitle}</span>}</div><button className="daily-editor-close" type="button" onClick={onClose} aria-label="关闭任务编辑" title="关闭">×</button></header><form onSubmit={(event) => void save(event)}><label className="daily-editor-title-field">任务名称<input autoFocus value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label><div className="daily-editor-row"><label>日期<input type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label><label className="daily-all-day-toggle"><span>全天</span><input type="checkbox" checked={draft.allDay} onChange={(event) => setDraft({ ...draft, allDay: event.target.checked })} /></label></div>{!draft.allDay && <div className="daily-editor-row"><label>开始<input type="time" value={draft.start} onChange={(event) => setDraft({ ...draft, start: event.target.value })} /></label><label>结束<input type="time" value={draft.end} onChange={(event) => setDraft({ ...draft, end: event.target.value })} /></label></div>}<div className="daily-editor-row"><label>重复<select value={draft.recurrence} onChange={(event) => setDraft({ ...draft, recurrence: event.target.value as DailyTaskRecurrence })}><option value="none">不重复</option><option value="daily">每天</option><option value="weekdays">工作日</option><option value="weekly">每周</option></select></label><fieldset><legend>颜色</legend><div className="daily-color-picker">{colors.map((color) => <button key={color.value} className={`color-${color.value} ${draft.color === color.value ? "active" : ""}`} type="button" onClick={() => setDraft({ ...draft, color: color.value })} title={color.label} aria-label={color.label} aria-pressed={draft.color === color.value} />)}</div></fieldset></div><section className="daily-editor-subtasks"><h3>子任务 <span>{draft.subtasks.filter((item) => item.completed).length}/{draft.subtasks.length}</span></h3>{draft.subtasks.map((subtask) => <div key={subtask.id}><input type="checkbox" checked={subtask.completed} aria-label={`完成 ${subtask.title}`} onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks.map((item) => item.id === subtask.id ? { ...item, completed: event.target.checked } : item) })} /><input value={subtask.title} aria-label="子任务名称" onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks.map((item) => item.id === subtask.id ? { ...item, title: event.target.value } : item) })} /><button type="button" aria-label={`删除 ${subtask.title}`} title="删除子任务" onClick={() => setDraft({ ...draft, subtasks: draft.subtasks.filter((item) => item.id !== subtask.id) })}>×</button></div>)}<div className="daily-subtask-add"><input value={subtaskText} placeholder="添加子任务" onChange={(event) => setSubtaskText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addSubtask(); } }} /><button type="button" onClick={addSubtask} disabled={!subtaskText.trim()} aria-label="添加子任务">＋</button></div></section><label className="daily-editor-notes">备注<textarea rows={4} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="补充上下文、链接或执行提示..." /></label>{error && <p className="daily-editor-error" role="alert">{error}</p>}<footer><button className="daily-delete-button" type="button" disabled={busy} onClick={() => { if (window.confirm("确定删除这条每日任务吗？")) void onDelete(); }} aria-label="删除任务" title="删除任务">⌫</button><button className="daily-save-button" type="submit" disabled={busy || !draft.title.trim()}>{busy ? "保存中..." : "保存任务"}</button></footer></form></aside></div>;
+}
+
+function tasksForDate(tasks: DailyTask[], date: Date): DailyTask[] {
+  return tasks.filter((task) => occursOn(task, date)).sort(compareDailyTasks);
+}
+
+function occursOn(task: DailyTask, date: Date): boolean {
+  if (!task.scheduledStartAt) return false;
+  const base = startOfDay(new Date(task.scheduledStartAt));
+  const target = startOfDay(date);
+  if (target < base) return false;
+  if (task.recurrenceEndsAt && target > startOfDay(new Date(task.recurrenceEndsAt))) return false;
+  if (task.recurrence === "daily") return true;
+  if (task.recurrence === "weekdays") return target.getDay() !== 0 && target.getDay() !== 6;
+  if (task.recurrence === "weekly") return target.getDay() === base.getDay();
+  return dateKey(base) === dateKey(target);
+}
+
+function compareDailyTasks(left: DailyTask, right: DailyTask): number {
+  if (left.allDay !== right.allDay) return left.allDay ? -1 : 1;
+  return taskClockMinutes(left) - taskClockMinutes(right) || left.title.localeCompare(right.title, "zh-CN");
+}
+
+function taskClockMinutes(task: DailyTask): number {
+  if (!task.scheduledStartAt) return Number.MAX_SAFE_INTEGER;
+  const date = new Date(task.scheduledStartAt);
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function occurrenceStart(task: DailyTask, date: Date): Date {
+  const source = task.scheduledStartAt ? new Date(task.scheduledStartAt) : date;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), source.getHours(), source.getMinutes());
+}
+
+function taskDuration(task: DailyTask): number {
+  if (!task.scheduledStartAt || !task.scheduledEndAt) return 30;
+  return Math.max(15, Math.round((new Date(task.scheduledEndAt).getTime() - new Date(task.scheduledStartAt).getTime()) / 60_000));
+}
+
+function taskDraft(task: DailyTask, occurrenceDate: Date): TaskDraft {
+  const start = occurrenceStart(task, occurrenceDate);
+  const end = new Date(start.getTime() + taskDuration(task) * 60_000);
+  return { title: task.title, notes: task.notes, color: task.color, date: dateKey(occurrenceDate), start: inputClock(start), end: inputClock(end), allDay: task.allDay, recurrence: task.recurrence, subtasks: structuredClone(task.subtasks) };
+}
+
+function timelinePosition(minutes: number): number { return (minutes - dayStartMinutes) / (dayEndMinutes - dayStartMinutes) * timelineHeight; }
+function startOfDay(value: Date): Date { return new Date(value.getFullYear(), value.getMonth(), value.getDate()); }
+function startOfWeek(value: Date): Date { const result = startOfDay(value); result.setDate(result.getDate() - ((result.getDay() + 6) % 7)); return result; }
+function addDays(value: Date, amount: number): Date { const result = startOfDay(value); result.setDate(result.getDate() + amount); return result; }
+function daysFrom(value: Date, count: number): Date[] { return Array.from({ length: count }, (_, index) => addDays(value, index)); }
+function dateKey(value: Date): string { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`; }
+function fromDateKey(value: string): Date { const [year, month, day] = value.split("-").map(Number); return new Date(year, month - 1, day); }
+function atMinutes(date: Date, minutes: number): Date { return new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(minutes / 60), minutes % 60); }
+function atLocalTime(date: Date, clock: string): Date { const [hour, minute] = clock.split(":").map(Number); return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute); }
+function ceilToHalfHour(value: Date): Date { const result = new Date(value); result.setSeconds(0, 0); result.setMinutes(Math.ceil(result.getMinutes() / 30) * 30); return result; }
+function clampToDay(value: Date): Date { const minutes = value.getHours() * 60 + value.getMinutes(); return atMinutes(value, Math.max(dayStartMinutes, Math.min(dayEndMinutes - 60, minutes))); }
+function inputClock(value: Date): string { return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`; }
+function formatClock(value: Date): string { return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(value); }
+function formatMonth(value: Date): string { return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(value); }
+function formatLongDate(value: Date): string { return new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(value); }
+function weekday(value: Date): string { return new Intl.DateTimeFormat("zh-CN", { weekday: "short" }).format(value); }
+function formatDuration(minutes: number): string { if (minutes < 60) return `${minutes} 分钟`; const hours = Math.floor(minutes / 60); const rest = minutes % 60; return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`; }
+function modeLabel(mode: PlannerMode): string { return mode === "day" ? "日" : mode === "multi" ? "多日" : mode === "week" ? "周" : "月"; }
+function recurrenceLabel(value: DailyTaskRecurrence): string { return value === "daily" ? "每天重复" : value === "weekdays" ? "工作日重复" : value === "weekly" ? "每周重复" : "不重复"; }
+function operationMessage(error: unknown, fallback: string): string { return error instanceof Error && error.message ? error.message : fallback; }

@@ -6,7 +6,7 @@ import type { AgentIcsExportResult, AgentMemoryPatch, AgentRunResult, BehaviorMe
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniStore } from "./store.js";
 import { formatOperationError } from "./shared/errors.js";
-import { InputValidationError, validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validatePlanActivation, validatePreferenceStatusPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "./validation.js";
+import { InputValidationError, validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validatePlanActivation, validatePreferenceStatusPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "./validation.js";
 
 type SnapshotUpdateReason = "data" | "preferences";
 type SnapshotCallback = (snapshot: ChroniSnapshot, reason: SnapshotUpdateReason) => void;
@@ -144,6 +144,29 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   if (request.method === "GET" && pathname === "/api/snapshot") {
     sendJson(response, 200, { ok: true, snapshot: store.snapshot() });
+    return;
+  }
+  if (request.method === "GET" && pathname === "/api/daily-tasks") {
+    sendJson(response, 200, { ok: true, dailyTasks: store.snapshot().dailyTasks.filter((task) => !task.dismissed) });
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/daily-tasks") {
+    const snapshot = store.createDailyTask(validateDailyTaskCreate(await readJson(request)));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 201, { ok: true, snapshot });
+    return;
+  }
+  const dailyTaskRoute = pathname.match(/^\/api\/daily-tasks\/([^/]+)$/);
+  if (request.method === "PATCH" && dailyTaskRoute) {
+    const snapshot = store.updateDailyTask(validateIdentifier(decodeURIComponent(dailyTaskRoute[1]), "daily task id"), validateDailyTaskPatch(await readJson(request)));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
+    return;
+  }
+  if (request.method === "DELETE" && dailyTaskRoute) {
+    const snapshot = store.deleteDailyTask(validateIdentifier(decodeURIComponent(dailyTaskRoute[1]), "daily task id"));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "POST" && pathname === "/api/agent/run") {
@@ -330,6 +353,8 @@ function apiEndpoints(): string[] {
   return [
     "GET /api/health",
     "GET /api/snapshot",
+    "GET|POST /api/daily-tasks",
+    "PATCH|DELETE /api/daily-tasks/:id",
     "POST /api/agent/run",
     "GET /api/agent/latest",
     "PATCH /api/agent/memory",

@@ -1,10 +1,10 @@
 /// <reference types="vite/client" />
 
-import type { AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult, PetActionCommand, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
+import type { AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult, PetActionCommand, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
 
 declare global {
   type ChroniControlRoute = {
-    tab?: "schedule" | "agent" | "preferences" | "services";
+    tab?: "schedule" | "daily" | "agent" | "preferences" | "services";
     taskId?: string;
     focus?: "clarifications";
   };
@@ -19,6 +19,9 @@ declare global {
       companionHover(hovering: boolean): Promise<ChroniSnapshot>;
       updateItem(id: string, patch: ItemPatch): Promise<ChroniSnapshot>;
       deleteItem(id: string): Promise<ChroniSnapshot>;
+      createDailyTask(input: DailyTaskCreateInput): Promise<ChroniSnapshot>;
+      updateDailyTask(id: string, patch: DailyTaskPatch): Promise<ChroniSnapshot>;
+      deleteDailyTask(id: string): Promise<ChroniSnapshot>;
       updatePreferences(patch: ChroniPreferencesPatch): Promise<ChroniSnapshot>;
       testLlmConnection(settings: ChroniLlmSettings): Promise<LlmConnectionResult>;
       runDeadlineAgent(): Promise<ChroniSnapshot>;

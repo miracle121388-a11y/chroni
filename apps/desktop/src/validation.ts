@@ -1,4 +1,4 @@
-import type { AgentMemory, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniInputFile, ChroniLlmSettings, ExplicitPreferenceInput, ChroniPreferencesPatch, IntakePayload, ItemPatch, PlanningPreferenceKey, TaskPlanStep, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentMemory, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniInputFile, ChroniLlmSettings, DailyTaskCreateInput, DailyTaskPatch, DailyTaskSubtask, ExplicitPreferenceInput, ChroniPreferencesPatch, IntakePayload, ItemPatch, PlanningPreferenceKey, TaskPlanStep, TaskPlanUpdatePayload } from "./shared/types.js";
 
 const MAX_TEXT_LENGTH = 2 * 1024 * 1024;
 const MAX_FILES = 32;
@@ -63,6 +63,47 @@ export function validateItemPatch(value: unknown): ItemPatch {
       result.progressPercent = patch.progressPercent as number;
     }
   }
+  return result;
+}
+
+export function validateDailyTaskCreate(value: unknown): DailyTaskCreateInput {
+  const input = record(value, "daily task");
+  knownKeys(input, ["title", "notes", "color", "allDay", "scheduledStartAt", "scheduledEndAt", "recurrence", "recurrenceEndsAt", "subtasks"], "daily task");
+  const result: DailyTaskCreateInput = { title: nonEmptyString(input.title, "daily task.title", 120) };
+  if (input.notes !== undefined) result.notes = boundedString(input.notes, "daily task.notes", 4_000);
+  if (input.color !== undefined) result.color = dailyTaskColor(input.color, "daily task.color");
+  if (input.allDay !== undefined) result.allDay = booleanValue(input.allDay, "daily task.allDay");
+  if (input.scheduledStartAt !== undefined) result.scheduledStartAt = dateString(input.scheduledStartAt, "daily task.scheduledStartAt");
+  if (input.scheduledEndAt !== undefined) result.scheduledEndAt = dateString(input.scheduledEndAt, "daily task.scheduledEndAt");
+  if (input.recurrence !== undefined) result.recurrence = dailyTaskRecurrence(input.recurrence, "daily task.recurrence");
+  if (input.recurrenceEndsAt !== undefined) result.recurrenceEndsAt = dateString(input.recurrenceEndsAt, "daily task.recurrenceEndsAt");
+  if (input.subtasks !== undefined) result.subtasks = dailyTaskSubtasks(input.subtasks, "daily task.subtasks");
+  validateDailyTaskRange(result.scheduledStartAt, result.scheduledEndAt);
+  if (result.scheduledEndAt && !result.scheduledStartAt) fail("daily task.scheduledStartAt is required when scheduledEndAt is set.");
+  return result;
+}
+
+export function validateDailyTaskPatch(value: unknown): DailyTaskPatch {
+  const input = record(value, "daily task patch");
+  knownKeys(input, ["title", "notes", "color", "allDay", "scheduledStartAt", "scheduledEndAt", "recurrence", "recurrenceEndsAt", "subtasks", "completedDates"], "daily task patch");
+  if (!Object.keys(input).length) fail("daily task patch must contain at least one field.");
+  const result: DailyTaskPatch = {};
+  if (input.title !== undefined) result.title = nonEmptyString(input.title, "daily task patch.title", 120);
+  if (input.notes !== undefined) result.notes = boundedString(input.notes, "daily task patch.notes", 4_000);
+  if (input.color !== undefined) result.color = dailyTaskColor(input.color, "daily task patch.color");
+  if (input.allDay !== undefined) result.allDay = booleanValue(input.allDay, "daily task patch.allDay");
+  if (Object.hasOwn(input, "scheduledStartAt")) result.scheduledStartAt = input.scheduledStartAt === null ? null : dateString(input.scheduledStartAt, "daily task patch.scheduledStartAt");
+  if (Object.hasOwn(input, "scheduledEndAt")) result.scheduledEndAt = input.scheduledEndAt === null ? null : dateString(input.scheduledEndAt, "daily task patch.scheduledEndAt");
+  if (input.recurrence !== undefined) result.recurrence = dailyTaskRecurrence(input.recurrence, "daily task patch.recurrence");
+  if (Object.hasOwn(input, "recurrenceEndsAt")) result.recurrenceEndsAt = input.recurrenceEndsAt === null ? null : dateString(input.recurrenceEndsAt, "daily task patch.recurrenceEndsAt");
+  if (input.subtasks !== undefined) result.subtasks = dailyTaskSubtasks(input.subtasks, "daily task patch.subtasks");
+  if (input.completedDates !== undefined) {
+    if (!Array.isArray(input.completedDates) || input.completedDates.length > 1_000 || input.completedDates.some((date) => typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date))) {
+      fail("daily task patch.completedDates must contain valid YYYY-MM-DD dates.");
+    }
+    result.completedDates = [...new Set(input.completedDates as string[])];
+  }
+  validateDailyTaskRange(result.scheduledStartAt ?? undefined, result.scheduledEndAt ?? undefined);
   return result;
 }
 
@@ -260,6 +301,38 @@ function validateTaskPlanStep(value: unknown, index: number): TaskPlanStep {
   if (step.suggestedStartAt !== undefined) result.suggestedStartAt = dateString(step.suggestedStartAt, `task plan step[${index}].suggestedStartAt`);
   if (step.suggestedEndAt !== undefined) result.suggestedEndAt = dateString(step.suggestedEndAt, `task plan step[${index}].suggestedEndAt`);
   return result;
+}
+
+function dailyTaskColor(value: unknown, field: string): DailyTaskCreateInput["color"] {
+  if (value !== "teal" && value !== "coral" && value !== "gold" && value !== "blue" && value !== "plum") fail(`${field} is invalid.`);
+  return value;
+}
+
+function dailyTaskRecurrence(value: unknown, field: string): DailyTaskCreateInput["recurrence"] {
+  if (value !== "none" && value !== "daily" && value !== "weekdays" && value !== "weekly") fail(`${field} is invalid.`);
+  return value;
+}
+
+function dailyTaskSubtasks(value: unknown, field: string): DailyTaskSubtask[] {
+  if (!Array.isArray(value) || value.length > 30) fail(`${field} must contain at most 30 entries.`);
+  const ids = new Set<string>();
+  return value.map((entry, index) => {
+    const subtask = record(entry, `${field}[${index}]`);
+    knownKeys(subtask, ["id", "title", "completed"], `${field}[${index}]`);
+    const id = nonEmptyString(subtask.id, `${field}[${index}].id`, 200);
+    if (ids.has(id)) fail(`${field} ids must be unique.`);
+    ids.add(id);
+    return {
+      id,
+      title: nonEmptyString(subtask.title, `${field}[${index}].title`, 120),
+      completed: booleanValue(subtask.completed, `${field}[${index}].completed`),
+    };
+  });
+}
+
+function validateDailyTaskRange(startAt?: string, endAt?: string): void {
+  if (!startAt || !endAt) return;
+  if (new Date(endAt).getTime() <= new Date(startAt).getTime()) fail("daily task end must be after start.");
 }
 
 function stringArray(value: unknown, field: string, maxItems: number, maxLength: number): string[] {

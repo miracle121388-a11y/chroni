@@ -175,6 +175,54 @@ export type AgentIcsExportResult = {
   itemCount: number;
 };
 
+export type DailyTaskColor = "teal" | "coral" | "gold" | "blue" | "plum";
+export type DailyTaskRecurrence = "none" | "daily" | "weekdays" | "weekly";
+
+export type DailyTaskSubtask = {
+  id: string;
+  title: string;
+  completed: boolean;
+};
+
+export type DailyTask = {
+  id: string;
+  title: string;
+  notes: string;
+  color: DailyTaskColor;
+  allDay: boolean;
+  scheduledStartAt?: string;
+  scheduledEndAt?: string;
+  recurrence: DailyTaskRecurrence;
+  recurrenceEndsAt?: string;
+  subtasks: DailyTaskSubtask[];
+  completedDates: string[];
+  origin: "manual" | "agent";
+  linkedTaskId?: string;
+  linkedStepId?: string;
+  userAdjusted: boolean;
+  dismissed: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DailyTaskCreateInput = {
+  title: string;
+  notes?: string;
+  color?: DailyTaskColor;
+  allDay?: boolean;
+  scheduledStartAt?: string;
+  scheduledEndAt?: string;
+  recurrence?: DailyTaskRecurrence;
+  recurrenceEndsAt?: string;
+  subtasks?: DailyTaskSubtask[];
+};
+
+export type DailyTaskPatch = Partial<Pick<DailyTask, "title" | "notes" | "color" | "allDay" | "recurrence" | "subtasks" | "completedDates">> & {
+  scheduledStartAt?: string | null;
+  scheduledEndAt?: string | null;
+  recurrenceEndsAt?: string | null;
+};
+
 export type DdlExtractionContext = {
   contextExcerpt: string;
   deliverables: string[];
@@ -452,6 +500,7 @@ export type ServiceStatus = {
 
 export type ChroniSnapshot = {
   items: DdlItem[];
+  dailyTasks: DailyTask[];
   sources: SourceRecord[];
   intakeDrafts: IntakeDraft[];
   clarifications: PendingClarification[];

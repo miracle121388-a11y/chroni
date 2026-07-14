@@ -7,6 +7,7 @@ import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, s
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
 import type { AgentMemory, CompanionState, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
+import { DailyPlanner } from "./components/DailyPlanner";
 import "./styles.css";
 
 const api = window.chroni;
@@ -506,7 +507,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
 }
 
 function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
-  const [tab, setTab] = useState<ControlTab>("schedule");
+  const [tab, setTab] = useState<ControlTab>("daily");
   const [navigation, setNavigation] = useState<{ route: ChroniControlRoute; sequence: number }>({ route: {}, sequence: 0 });
   const pendingCount = snapshot.items.filter((item) => !item.completed).length;
   useEffect(() => api.onControlNavigate((route) => {
@@ -535,6 +536,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
           </div>
         </div>
         <nav aria-label="控制中心">
+          <button className={tab === "daily" ? "active" : ""} aria-current={tab === "daily" ? "page" : undefined} onClick={() => selectTab("daily")}>每日任务</button>
           <button className={tab === "schedule" ? "active" : ""} aria-current={tab === "schedule" ? "page" : undefined} onClick={() => selectTab("schedule")}>日程</button>
           <button className={tab === "agent" ? "active" : ""} aria-current={tab === "agent" ? "page" : undefined} onClick={() => selectTab("agent")}>Agent</button>
           <button className={tab === "preferences" ? "active" : ""} aria-current={tab === "preferences" ? "page" : undefined} onClick={() => selectTab("preferences")}>偏好</button>
@@ -545,6 +547,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
         </div>
       </aside>
       <section className="content">
+        {tab === "daily" && <DailyPlanner snapshot={snapshot} setSnapshot={setSnapshot} />}
         {tab === "schedule" && <CorrectionPane snapshot={snapshot} setSnapshot={setSnapshot} navigation={navigation} />}
         {tab === "agent" && <AgentPane snapshot={snapshot} setSnapshot={setSnapshot} />}
         {tab === "preferences" && <PreferencesPane preferences={snapshot.preferences} services={snapshot.services} setSnapshot={setSnapshot} />}
@@ -1736,7 +1739,7 @@ type ControlScheduleGroup = {
   items: DdlItem[];
 };
 
-type ControlTab = "schedule" | "agent" | "preferences" | "services";
+type ControlTab = "daily" | "schedule" | "agent" | "preferences" | "services";
 
 function agentStatusLabel(status: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["verification"]["status"]): string {
   return status === "healthy" ? "安排正常" : status === "critical" ? "需要立即处理" : "需要关注";

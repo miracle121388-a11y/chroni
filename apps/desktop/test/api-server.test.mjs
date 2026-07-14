@@ -317,6 +317,34 @@ test("Agent API validates memory and reports unavailable operations", async () =
   });
 });
 
+test("daily task API supports create, list, update, and delete", async () => {
+  await withStore(async (store) => {
+    const reasons = [];
+    const server = await listenWithRandomPort(store, (_snapshot, reason) => reasons.push(reason));
+    try {
+      const token = await getApiToken(server);
+      const headers = { authorization: `Bearer ${token}` };
+      const startAt = new Date(2026, 6, 15, 9, 0).toISOString();
+      const created = await apiRequest(server, "POST", "/api/daily-tasks", { title: "API 每日任务", scheduledStartAt: startAt }, headers);
+      assert.equal(created.status, 201);
+      const task = created.body.snapshot.dailyTasks[0];
+      assert.equal(task.title, "API 每日任务");
+
+      const listed = await apiRequest(server, "GET", "/api/daily-tasks", undefined, headers);
+      assert.equal(listed.body.dailyTasks.length, 1);
+
+      const updated = await apiRequest(server, "PATCH", `/api/daily-tasks/${task.id}`, { notes: "由外部工具填写", recurrence: "weekly" }, headers);
+      assert.equal(updated.body.snapshot.dailyTasks[0].recurrence, "weekly");
+
+      const deleted = await apiRequest(server, "DELETE", `/api/daily-tasks/${task.id}`, undefined, headers);
+      assert.equal(deleted.body.snapshot.dailyTasks.length, 0);
+      assert.deepEqual(reasons, ["data", "data", "data"]);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
 test("clarification and task plan APIs are authenticated, validated, and resumable", async () => {
   await withStore(async (store) => {
     const analysis = analyzeCompleteness({ sourceName: "直接文本", sourceType: "text", text: "下周完成机器学习作业。" }, new Date("2026-07-12T10:00:00+08:00"));

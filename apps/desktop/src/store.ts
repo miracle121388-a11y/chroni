@@ -9,7 +9,7 @@ import { validateTaskPlan } from "./agent/task-plan-validator.js";
 import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveLlmSettings } from "./llm-settings.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
 import { localFilePathFromText } from "./shared/local-file-input.js";
-import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyTask, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
 
 export type SecretCodec = {
   encrypt(value: string): string;
@@ -22,6 +22,7 @@ type PersistedLlmSettings = Partial<ChroniPreferences["llm"]> & {
 
 type StoredState = {
   items: DdlItem[];
+  dailyTasks: DailyTask[];
   sources: SourceRecord[];
   intakeDrafts: IntakeDraft[];
   clarifications: PendingClarification[];
@@ -62,6 +63,7 @@ export class ChroniStore {
   snapshot(): ChroniSnapshot {
     return {
       items: [...this.#state.items].sort(compareDdlItems),
+      dailyTasks: structuredClone(this.#state.dailyTasks),
       sources: [...this.#state.sources].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
       intakeDrafts: structuredClone(this.#state.intakeDrafts),
       clarifications: structuredClone(this.#state.clarifications),
@@ -458,9 +460,163 @@ export class ChroniStore {
     return this.snapshot();
   }
 
+  createDailyTask(input: DailyTaskCreateInput): ChroniSnapshot {
+    const now = new Date().toISOString();
+    const scheduledStartAt = input.scheduledStartAt;
+    const scheduledEndAt = input.scheduledEndAt ?? (scheduledStartAt
+      ? new Date(new Date(scheduledStartAt).getTime() + 30 * 60_000).toISOString()
+      : undefined);
+    assertDailyTaskRange(scheduledStartAt, scheduledEndAt);
+    const task: DailyTask = {
+      id: `daily-${randomUUID()}`,
+      title: input.title.trim(),
+      notes: input.notes?.trim() ?? "",
+      color: input.color ?? "teal",
+      allDay: input.allDay ?? false,
+      ...(scheduledStartAt ? { scheduledStartAt } : {}),
+      ...(scheduledEndAt ? { scheduledEndAt } : {}),
+      recurrence: input.recurrence ?? "none",
+      ...(input.recurrenceEndsAt ? { recurrenceEndsAt: input.recurrenceEndsAt } : {}),
+      subtasks: structuredClone(input.subtasks ?? []),
+      completedDates: [],
+      origin: "manual",
+      userAdjusted: true,
+      dismissed: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.#state.dailyTasks = [task, ...this.#state.dailyTasks].slice(0, 2_000);
+    this.#save();
+    return this.snapshot();
+  }
+
+  updateDailyTask(id: string, patch: DailyTaskPatch): ChroniSnapshot {
+    const existing = this.#state.dailyTasks.find((task) => task.id === id);
+    if (!existing) throw new Error("找不到这条每日任务。");
+    const next: DailyTask = structuredClone(existing);
+    if (patch.title !== undefined) next.title = patch.title;
+    if (patch.notes !== undefined) next.notes = patch.notes;
+    if (patch.color !== undefined) next.color = patch.color;
+    if (patch.allDay !== undefined) next.allDay = patch.allDay;
+    if (patch.recurrence !== undefined) next.recurrence = patch.recurrence;
+    if (patch.subtasks !== undefined) next.subtasks = structuredClone(patch.subtasks);
+    if (patch.completedDates !== undefined) next.completedDates = [...patch.completedDates];
+    if (typeof patch.scheduledStartAt === "string") next.scheduledStartAt = patch.scheduledStartAt;
+    if (typeof patch.scheduledEndAt === "string") next.scheduledEndAt = patch.scheduledEndAt;
+    if (typeof patch.recurrenceEndsAt === "string") next.recurrenceEndsAt = patch.recurrenceEndsAt;
+    next.userAdjusted = existing.userAdjusted || Object.keys(patch).some((field) => field !== "completedDates");
+    next.dismissed = false;
+    next.updatedAt = new Date().toISOString();
+    if (patch.scheduledStartAt === null) delete next.scheduledStartAt;
+    if (patch.scheduledEndAt === null) delete next.scheduledEndAt;
+    if (patch.recurrenceEndsAt === null) delete next.recurrenceEndsAt;
+    if (!next.scheduledStartAt) {
+      delete next.scheduledEndAt;
+      next.allDay = false;
+    } else if (!next.scheduledEndAt) {
+      next.scheduledEndAt = new Date(new Date(next.scheduledStartAt).getTime() + 30 * 60_000).toISOString();
+    }
+    assertDailyTaskRange(next.scheduledStartAt, next.scheduledEndAt);
+    this.#state.dailyTasks = this.#state.dailyTasks.map((task) => task.id === id ? next : task);
+    this.#syncLinkedStepCompletion(next);
+    this.#save();
+    return this.snapshot();
+  }
+
+  deleteDailyTask(id: string): ChroniSnapshot {
+    const task = this.#state.dailyTasks.find((candidate) => candidate.id === id);
+    if (!task) return this.snapshot();
+    this.#state.dailyTasks = task.origin === "agent"
+      ? this.#state.dailyTasks.map((candidate) => candidate.id === id
+        ? { ...candidate, dismissed: true, userAdjusted: true, updatedAt: new Date().toISOString() }
+        : candidate)
+      : this.#state.dailyTasks.filter((candidate) => candidate.id !== id);
+    this.#save();
+    return this.snapshot();
+  }
+
+  #syncLinkedStepCompletion(task: DailyTask): void {
+    if (!task.linkedTaskId || !task.linkedStepId || !task.scheduledStartAt) return;
+    const dateKey = localDateKey(new Date(task.scheduledStartAt));
+    const completed = task.completedDates.includes(dateKey);
+    const now = new Date().toISOString();
+    let changed = false;
+    this.#state.taskPlans = this.#state.taskPlans.map((plan) => {
+      if (plan.taskId !== task.linkedTaskId || plan.status !== "active") return plan;
+      const steps = plan.steps.map((step) => {
+        if (step.id !== task.linkedStepId) return step;
+        const status = completed ? "completed" as const : step.status === "completed" ? "pending" as const : step.status;
+        if (status === step.status) return step;
+        changed = true;
+        return { ...step, status, updatedAt: now };
+      });
+      return changed ? { ...plan, steps, updatedAt: now } : plan;
+    });
+    if (!changed) return;
+    const plan = this.#state.taskPlans.find((candidate) => candidate.taskId === task.linkedTaskId && candidate.status === "active");
+    if (!plan) return;
+    const finished = plan.steps.filter((step) => step.status === "completed" || step.status === "skipped").length;
+    const progressPercent = Math.round(finished / Math.max(1, plan.steps.length) * 100);
+    this.#state.items = this.#state.items.map((item) => item.id === task.linkedTaskId
+      ? { ...item, progressPercent, updatedAt: now }
+      : item);
+  }
+
+  #syncDailyTasksFromAgentPlan(plan: AgentPlan): void {
+    const blocks = [...plan.blocks, ...(plan.forecastBlocks ?? [])];
+    const now = new Date();
+    const today = localDateKey(now);
+    const matched = new Set<string>();
+    for (const block of blocks) {
+      const dateKey = localDateKey(new Date(block.startAt));
+      const existing = this.#state.dailyTasks.find((task) => task.origin === "agent"
+        && task.linkedTaskId === block.taskId
+        && (task.linkedStepId ?? "") === (block.stepId ?? "")
+        && task.scheduledStartAt
+        && localDateKey(new Date(task.scheduledStartAt)) === dateKey);
+      if (existing) {
+        matched.add(existing.id);
+        if (!existing.userAdjusted) {
+          existing.title = block.title;
+          existing.scheduledStartAt = block.startAt;
+          existing.scheduledEndAt = block.endAt;
+          existing.updatedAt = now.toISOString();
+        }
+        continue;
+      }
+      const source = this.#state.items.find((item) => item.id === block.taskId);
+      const created: DailyTask = {
+        id: `daily-agent-${randomUUID()}`,
+        title: block.title,
+        notes: source ? `来自「${source.title}」的 Agent 规划，可在任务规划中查看完整拆解。` : "由 Chroni Agent 自动安排。",
+        color: source?.importance === "high" ? "coral" : source?.importance === "low" ? "blue" : "teal",
+        allDay: false,
+        scheduledStartAt: block.startAt,
+        scheduledEndAt: block.endAt,
+        recurrence: "none",
+        subtasks: [],
+        completedDates: [],
+        origin: "agent",
+        linkedTaskId: block.taskId,
+        ...(block.stepId ? { linkedStepId: block.stepId } : {}),
+        userAdjusted: false,
+        dismissed: false,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      this.#state.dailyTasks.push(created);
+      matched.add(created.id);
+    }
+    this.#state.dailyTasks = this.#state.dailyTasks.filter((task) => {
+      if (task.origin !== "agent" || matched.has(task.id) || task.userAdjusted || task.completedDates.length || !task.scheduledStartAt) return true;
+      return localDateKey(new Date(task.scheduledStartAt)) < today;
+    }).slice(0, 2_000);
+  }
+
   saveAgentRun(result: AgentRunResult): ChroniSnapshot {
     const stored = cloneAgentRun(result);
     this.#state.agent.latestRun = stored;
+    this.#syncDailyTasksFromAgentPlan(stored.plan);
     if (stored.trigger && stored.trigger !== "manual") this.#state.agent.lastAutomaticRunAt = stored.completedAt;
     this.#state.agent.traceHistory = [stored.trace.map((entry) => ({ ...entry, data: { ...entry.data } })), ...this.#state.agent.traceHistory].slice(0, 10);
     this.#save();
@@ -469,6 +625,7 @@ export class ChroniStore {
 
   saveAppliedAgentPlan(plan: AgentPlan): ChroniSnapshot {
     this.#state.agent.appliedPlan = structuredClone(plan);
+    this.#syncDailyTasksFromAgentPlan(plan);
     this.#save();
     return this.snapshot();
   }
@@ -603,6 +760,7 @@ export class ChroniStore {
 
   deleteItem(id: string): ChroniSnapshot {
     this.#state.items = this.#state.items.filter((item) => item.id !== id);
+    this.#state.dailyTasks = this.#state.dailyTasks.filter((task) => task.linkedTaskId !== id);
     this.#state.sources = this.#state.sources.map((source) => ({ ...source, itemIds: source.itemIds.filter((itemId) => itemId !== id) }));
     this.#state.taskPlans = this.#state.taskPlans.filter((plan) => plan.taskId !== id);
     this.#state.taskPlanRevisions = this.#state.taskPlanRevisions.filter((revision) => revision.taskId !== id);
@@ -850,6 +1008,7 @@ export class ChroniStore {
     const normalizedDrafts = normalizeIntakeDrafts(parsed.intakeDrafts, validSourceIds);
     const draftIds = new Set(normalizedDrafts.values.map((draft) => draft.id));
     const itemIds = new Set(items.map((item) => item.id));
+    const normalizedDailyTasks = normalizeDailyTasks(parsed.dailyTasks, itemIds);
     const normalizedClarifications = normalizePendingClarifications(parsed.clarifications, draftIds, validSourceIds, itemIds);
     const clarificationIdsByDraft = new Map<string, string[]>();
     for (const clarification of normalizedClarifications.values) {
@@ -888,6 +1047,7 @@ export class ChroniStore {
     const normalizedAgent = normalizeAgentState(parsed.agent, itemIds);
     const recoveryDetails = [
       normalizationDetail("待确认草稿", normalizedDrafts, repairedDraftLinks),
+      normalizationDetail("每日任务", normalizedDailyTasks),
       normalizationDetail("追问信息", normalizedClarifications),
       normalizationDetail("任务计划", normalizedPlans),
       normalizationDetail("计划版本", normalizedRevisions),
@@ -898,6 +1058,7 @@ export class ChroniStore {
     if (normalizedCompanion.repaired) this.#appendStorageDiagnostic("已恢复无效的桌宠状态显示。");
     return synchronizeStateSourceItemIds({
       items,
+      dailyTasks: normalizedDailyTasks.values,
       sources,
       intakeDrafts,
       clarifications: normalizedClarifications.values,
@@ -989,6 +1150,7 @@ function createDefaultPreferences(): ChroniPreferences {
 function createDefaultState(): StoredState {
   return {
     items: [],
+    dailyTasks: [],
     sources: [],
     intakeDrafts: [],
     clarifications: [],
@@ -1968,6 +2130,78 @@ function normalizeDdlItem(value: unknown): DdlItem | undefined {
   return result;
 }
 
+function normalizeDailyTasks(value: unknown, validTaskIds: Set<string>): NormalizedCollection<DailyTask> {
+  if (!Array.isArray(value)) return { values: [], dropped: value === undefined ? 0 : 1, repaired: 0 };
+  const values: DailyTask[] = [];
+  const ids = new Set<string>();
+  let dropped = 0;
+  let repaired = 0;
+  for (const entry of value.slice(0, 2_000)) {
+    const input = plainRecord(entry);
+    const id = safeNonEmptyString(input?.id, 200);
+    const title = safeNonEmptyString(input?.title, 120);
+    if (!input || !id || !title || ids.has(id)) {
+      dropped += 1;
+      continue;
+    }
+    ids.add(id);
+    const createdAt = normalizedDate(input.createdAt) ?? new Date().toISOString();
+    const updatedAt = normalizedDate(input.updatedAt) ?? createdAt;
+    const scheduledStartAt = normalizedDate(input.scheduledStartAt);
+    let scheduledEndAt = normalizedDate(input.scheduledEndAt);
+    if (scheduledStartAt && (!scheduledEndAt || new Date(scheduledEndAt).getTime() <= new Date(scheduledStartAt).getTime())) {
+      scheduledEndAt = new Date(new Date(scheduledStartAt).getTime() + 30 * 60_000).toISOString();
+      repaired += 1;
+    }
+    if (!scheduledStartAt && scheduledEndAt) {
+      scheduledEndAt = undefined;
+      repaired += 1;
+    }
+    const linkedTaskId = safeNonEmptyString(input.linkedTaskId, 200);
+    const validLinkedTaskId = linkedTaskId && validTaskIds.has(linkedTaskId) ? linkedTaskId : undefined;
+    if (linkedTaskId && !validLinkedTaskId) repaired += 1;
+    const colors: DailyTask["color"][] = ["teal", "coral", "gold", "blue", "plum"];
+    const recurrences: DailyTask["recurrence"][] = ["none", "daily", "weekdays", "weekly"];
+    const recurrence = recurrences.includes(input.recurrence as DailyTask["recurrence"])
+      ? input.recurrence as DailyTask["recurrence"]
+      : "none";
+    const subtasks = Array.isArray(input.subtasks) ? input.subtasks.slice(0, 30).flatMap((entry, index) => {
+      const subtask = plainRecord(entry);
+      const subtaskTitle = safeNonEmptyString(subtask?.title, 120);
+      if (!subtask || !subtaskTitle) {
+        repaired += 1;
+        return [];
+      }
+      return [{ id: safeNonEmptyString(subtask.id, 200) ?? `subtask-${index + 1}`, title: subtaskTitle, completed: subtask.completed === true }];
+    }) : [];
+    const recurrenceEndsAt = normalizedDate(input.recurrenceEndsAt);
+    values.push({
+      id,
+      title,
+      notes: typeof input.notes === "string" ? input.notes.slice(0, 4_000) : "",
+      color: colors.includes(input.color as DailyTask["color"]) ? input.color as DailyTask["color"] : "teal",
+      allDay: input.allDay === true && !!scheduledStartAt,
+      ...(scheduledStartAt ? { scheduledStartAt } : {}),
+      ...(scheduledEndAt ? { scheduledEndAt } : {}),
+      recurrence,
+      ...(recurrenceEndsAt ? { recurrenceEndsAt } : {}),
+      subtasks,
+      completedDates: Array.isArray(input.completedDates)
+        ? [...new Set(input.completedDates.filter((date): date is string => typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)))].slice(0, 1_000)
+        : [],
+      origin: input.origin === "agent" && validLinkedTaskId ? "agent" : "manual",
+      ...(validLinkedTaskId ? { linkedTaskId: validLinkedTaskId } : {}),
+      ...(validLinkedTaskId && safeNonEmptyString(input.linkedStepId, 200) ? { linkedStepId: safeNonEmptyString(input.linkedStepId, 200) } : {}),
+      userAdjusted: input.userAdjusted === true,
+      dismissed: input.dismissed === true,
+      createdAt,
+      updatedAt,
+    });
+  }
+  dropped += Math.max(0, value.length - 2_000);
+  return { values, dropped, repaired };
+}
+
 function normalizeExtractionContext(value: unknown): DdlItem["extraction"] | undefined {
   if (!value || typeof value !== "object") return undefined;
   const input = value as Record<string, unknown>;
@@ -1989,6 +2223,20 @@ function normalizedDate(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function assertDailyTaskRange(startAt?: string, endAt?: string): void {
+  if (!startAt && !endAt) return;
+  if (!startAt || !endAt || Number.isNaN(new Date(startAt).getTime()) || Number.isNaN(new Date(endAt).getTime()) || new Date(endAt).getTime() <= new Date(startAt).getTime()) {
+    throw new Error("每日任务的结束时间必须晚于开始时间。");
+  }
+}
+
+function localDateKey(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function isPetPlacement(value: unknown): value is PetPlacement {
