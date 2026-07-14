@@ -971,7 +971,6 @@ export class ChroniStore {
 function createDefaultPreferences(): ChroniPreferences {
   return {
     companionEnabled: true,
-    companionStyle: "classic",
     remindersEnabled: true,
     quietHoursEnabled: false,
     quietHoursStart: "22:30",
@@ -1032,8 +1031,6 @@ function normalizeChroniPreferences(value: unknown, llmValue: PersistedLlmSettin
     repaired += 1;
     return defaults[field];
   };
-  const companionStyle = input?.companionStyle;
-  if (companionStyle !== undefined && companionStyle !== "classic" && companionStyle !== "mint" && companionStyle !== "sunrise") repaired += 1;
   const llmInputWasInvalid = input?.llm !== undefined && !llm;
   if (llmInputWasInvalid) repaired += 1;
   const llmBoolean = llm?.enabled;
@@ -1055,7 +1052,6 @@ function normalizeChroniPreferences(value: unknown, llmValue: PersistedLlmSettin
   return {
     value: {
       companionEnabled: booleanField("companionEnabled"),
-      companionStyle: companionStyle === "classic" || companionStyle === "mint" || companionStyle === "sunrise" ? companionStyle : defaults.companionStyle,
       remindersEnabled: booleanField("remindersEnabled"),
       quietHoursEnabled: booleanField("quietHoursEnabled"),
       quietHoursStart: clockField("quietHoursStart"),

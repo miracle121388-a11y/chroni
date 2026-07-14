@@ -68,15 +68,11 @@ export function validateItemPatch(value: unknown): ItemPatch {
 
 export function validatePreferencesPatch(value: unknown): ChroniPreferencesPatch {
   const patch = record(value, "preferences patch");
-  const allowed = ["companionEnabled", "companionStyle", "remindersEnabled", "quietHoursEnabled", "quietHoursStart", "quietHoursEnd", "hotkey", "llm"];
+  const allowed = ["companionEnabled", "remindersEnabled", "quietHoursEnabled", "quietHoursStart", "quietHoursEnd", "hotkey", "llm"];
   knownKeys(patch, allowed, "preferences patch");
   const result: ChroniPreferencesPatch = {};
   for (const field of ["companionEnabled", "remindersEnabled", "quietHoursEnabled"] as const) {
     if (patch[field] !== undefined) result[field] = booleanValue(patch[field], field);
-  }
-  if (patch.companionStyle !== undefined) {
-    if (patch.companionStyle !== "classic" && patch.companionStyle !== "mint" && patch.companionStyle !== "sunrise") fail("companionStyle is not supported.");
-    result.companionStyle = patch.companionStyle;
   }
   if (patch.quietHoursStart !== undefined) result.quietHoursStart = clockTime(patch.quietHoursStart, "quietHoursStart");
   if (patch.quietHoursEnd !== undefined) result.quietHoursEnd = clockTime(patch.quietHoursEnd, "quietHoursEnd");

@@ -400,7 +400,7 @@ test("every public snapshot section is render-safe after partial state corruptio
 
     const snapshot = new ChroniStore(dir).snapshot();
     assert.equal(snapshot.preferences.companionEnabled, true);
-    assert.equal(snapshot.preferences.companionStyle, "classic");
+    assert.equal("companionStyle" in snapshot.preferences, false);
     assert.equal(snapshot.preferences.llm.enabled, false);
     assert.equal(snapshot.companion.state, "idle");
     assert.equal(snapshot.intakeDrafts.length, 1);

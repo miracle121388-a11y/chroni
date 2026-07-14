@@ -71,7 +71,6 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
           {variant === "agent" && <span className="clarification-mark" aria-hidden="true">?</span>}
           <div><p>{requiredCount ? "需要你的确认" : "计划后的完善项"}</p><h3 id={`clarification-heading-${variant}`}>{requiredCount ? `有 ${requiredCount} 条必要信息需要补充` : `有 ${optionalCount} 条信息可继续完善`}</h3></div>
         </div>
-        <span className="clarification-count">{pending.length}</span>
       </header>
       {variant === "agent" && <p className="clarification-intro">{requiredCount ? "必要信息确认后会继续创建对应日程；其他完善项不会阻止已生成的任务与规划。" : "主任务和基础规划已经完成；这些信息可按需补充，也可以暂不处理。"}</p>}
       {pending.map((item) => {
@@ -240,7 +239,7 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
         </section>
       )}
       {!draft ? (
-        <section className="plan-empty"><h3>尚未生成任务规划</h3><p>生成后可先检查草案，再由你确认是否启用。</p><button type="button" disabled={!!busy} onClick={() => void generate()}>{busy ? "生成中..." : "生成规划草案"}</button></section>
+        <section className="plan-empty"><h3>还没有行动计划</h3><p>先生成一份可编辑的步骤草案，确认后才会启用。</p><button type="button" disabled={!!busy} onClick={() => void generate()}>{busy ? "生成中..." : "生成规划草案"}</button></section>
       ) : (
         <>
           <section className="plan-overview">
@@ -296,10 +295,10 @@ export function BehaviorMemoryPane({ snapshot, setSnapshot, embedded = false }: 
   }
   return (
     <section className="behavior-memory" aria-busy={busy} aria-labelledby={embedded ? undefined : "behavior-memory-heading"} aria-label={embedded ? "个性化规划偏好" : undefined}>
-      {!embedded && <header><div><p>个性化规划</p><h3 id="behavior-memory-heading">规划偏好记忆</h3></div><span>{memory.preferences.filter((item) => item.status === "active").length} 条生效</span></header>}
+      {!embedded && <header><div><p>个性化规划</p><h3 id="behavior-memory-heading">Chroni 记住的规划习惯</h3></div><span>{memory.preferences.filter((item) => item.status === "active").length} 条生效</span></header>}
       <div className="memory-controls"><label><input type="checkbox" disabled={busy} checked={memory.learningEnabled} onChange={(event) => void run(() => api.updateBehaviorMemory({ learningEnabled: event.target.checked }), "学习设置已更新。" )} /> 从保存的规划修改中学习</label><label><input type="checkbox" disabled={busy} checked={memory.autoApplyEnabled} onChange={(event) => void run(() => api.updateBehaviorMemory({ autoApplyEnabled: event.target.checked }), "自动应用设置已更新。" )} /> 自动应用高置信度偏好</label></div>
       <div className="explicit-preference"><label>默认步骤时长 <input type="number" min="15" max="180" step="5" value={stepMinutes} disabled={busy} onChange={(event) => setStepMinutes(event.target.value)} /> 分钟</label><button type="button" disabled={busy} onClick={() => void run(() => api.upsertPlanningPreference({ key: "preferredStepMinutes", value: Number(stepMinutes) }), "明确偏好已保存。")}>设为明确偏好</button></div>
-      <div className="preference-list">{memory.preferences.length ? memory.preferences.map((preference) => <PreferenceRow key={preference.id} preference={preference} disabled={busy} onStatus={(status) => run(() => api.setPlanningPreferenceStatus(preference.id, status), "偏好状态已更新。") } onDelete={() => run(() => api.deletePlanningPreference(preference.id), "偏好已删除。") } />) : <p className="empty">尚未形成规划偏好。保存任务规划修改后会在这里显示。</p>}</div>
+      <div className="preference-list">{memory.preferences.length ? memory.preferences.map((preference) => <PreferenceRow key={preference.id} preference={preference} disabled={busy} onStatus={(status) => run(() => api.setPlanningPreferenceStatus(preference.id, status), "偏好状态已更新。") } onDelete={() => run(() => api.deletePlanningPreference(preference.id), "偏好已删除。") } />) : <p className="empty">Chroni 还在了解你的习惯。保存的规划修改会慢慢沉淀在这里。</p>}</div>
       {!!snapshot.agent.recentPlanningFeedback.length && <details className="recent-learning"><summary>最近学习 · {snapshot.agent.recentPlanningFeedback.length}</summary>{snapshot.agent.recentPlanningFeedback.slice(0, 5).map((event) => <p key={event.id}>{taskTypeLabel(event.taskType)} · 规划 v{event.planVersion} · {event.changes.length} 项结构化修改</p>)}</details>}
       <div className="memory-danger">{confirmClear ? <><span>确认清除全部行为偏好和学习记录？</span><button type="button" disabled={busy} onClick={() => void run(() => api.clearBehaviorMemory(), "规划偏好记忆已清除。").finally(() => setConfirmClear(false))}>确认清除</button><button type="button" className="secondary" disabled={busy} onClick={() => setConfirmClear(false)}>取消</button></> : <button type="button" className="text-action" disabled={busy} onClick={() => setConfirmClear(true)}>清除规划偏好记忆</button>}</div>
       {feedback && <p className="inline-feedback" role="status" aria-live="polite">{feedback}</p>}

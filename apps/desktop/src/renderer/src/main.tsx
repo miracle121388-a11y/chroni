@@ -5,7 +5,7 @@ import { formatOperationError, formatUserFacingMessage } from "../../shared/erro
 import { attentionPetAction, basePetAction, isOneShotPetAction, petClickIntent, petMotionReducer, resolvedPetAction } from "../../shared/pet-actions";
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
-import type { AgentMemory, CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
+import type { AgentMemory, CompanionState, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
 import "./styles.css";
 
@@ -210,7 +210,7 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
 
   return (
     <main
-      className={`pet-shell state-${snapshot.companion.state} style-${snapshot.preferences.companionStyle}`}
+      className={`pet-shell state-${snapshot.companion.state}`}
       onDragOver={(event) => {
         event.preventDefault();
         if (dropBusyRef.current) {
@@ -522,10 +522,16 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
     <main className="control-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-icon">C</div>
+          <span className="brand-symbol" aria-hidden="true">
+            <svg viewBox="0 0 36 36">
+              <path className="brand-symbol-rails" d="M7 5.5h22M7 30.5h22" />
+              <path className="brand-symbol-flow" d="M10 6c0 6.3 8 6.6 8 12s-8 5.7-8 12M26 6c0 6.3-8 6.6-8 12s8 5.7 8 12" />
+              <circle className="brand-symbol-point" cx="18" cy="18" r="2.15" />
+            </svg>
+          </span>
           <div>
             <h1>Chroni</h1>
-            <p>本地 DDL 日程助手</p>
+            <p>陪你把重要的事按时做完</p>
           </div>
         </div>
         <nav aria-label="控制中心">
@@ -535,8 +541,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
           <button className={tab === "services" ? "active" : ""} aria-current={tab === "services" ? "page" : undefined} onClick={() => selectTab("services")}>运行状态</button>
         </nav>
         <div className="sidebar-foot">
-          <span>待处理 {pendingCount}{snapshot.clarifications.some((item) => item.status === "pending" && item.required) ? ` · 待确认 ${snapshot.clarifications.filter((item) => item.status === "pending" && item.required).length}` : ""}</span>
-          <b>{petLabel(snapshot.companion.state)}</b>
+          <span>{pendingCount ? `还有 ${pendingCount} 件事` : "今天清清爽爽"}{snapshot.clarifications.some((item) => item.status === "pending" && item.required) ? ` · ${snapshot.clarifications.filter((item) => item.status === "pending" && item.required).length} 项待确认` : ""}</span>
         </div>
       </aside>
       <section className="content">
@@ -590,9 +595,9 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
       const next = await api.updateAgentMemory(memoryDraft);
       setSnapshot(next);
       setMemoryDirty(false);
-      setFeedback("Agent Memory 已保存。");
+      setFeedback("规划偏好已保存。");
     } catch (error) {
-      setFeedback(formatOperationError(error, "Memory 保存失败"));
+      setFeedback(formatOperationError(error, "规划偏好未能保存"));
     } finally {
       setBusyAction("");
     }
@@ -617,12 +622,12 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
       <header className="pane-head agent-head">
         <div>
           <p>Deadline Agent</p>
-          <h2>今天怎么安排</h2>
-          <span className="agent-head-copy">自动检查截止风险，并给出今天可以直接执行的安排。</span>
+          <h2>今天先做什么</h2>
+          <span className="agent-head-copy">结合截止时间、风险和可用时间，整理一份今天就能开始的计划。</span>
         </div>
-        <button className="agent-run" type="button" disabled={!!busyAction} onClick={() => void runInspection()}>
-          {busyAction === "run" ? "正在检查..." : latest ? "重新检查" : "开始检查"}
-        </button>
+        {latest && <button className="agent-run" type="button" disabled={!!busyAction} onClick={() => void runInspection()}>
+          {busyAction === "run" ? "正在检查..." : "更新今日安排"}
+        </button>}
       </header>
 
       {feedback && <p className={`inline-feedback ${isPositiveFeedback(feedback) ? "ok" : "warn"}`} role="status" aria-live="polite">{feedback}</p>}
@@ -632,28 +637,28 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
         <section className="agent-welcome">
           <span className="agent-welcome-mark">A</span>
           <div>
-            <h3>让 Agent 帮你排好今天</h3>
-            <p>它会检查现有 DDL，找出可能来不及的任务，并在你的可用时间内生成今日行动安排。</p>
+            <h3>先看看今天最值得推进的事</h3>
+            <p>Chroni 会检查现有 DDL，找出可能来不及的任务，再把行动安排进你的可用时间。</p>
           </div>
-          <button type="button" disabled={!!busyAction} onClick={() => void runInspection()}>{busyAction === "run" ? "正在检查..." : "开始第一次检查"}</button>
+          <button type="button" disabled={!!busyAction} onClick={() => void runInspection()}>{busyAction === "run" ? "正在检查..." : "帮我安排今天"}</button>
         </section>
       ) : (
         <>
           <section className={`agent-overview status-${latest.verification.status}`}>
             <div className="agent-overview-copy">
-              <span className="agent-overview-kicker"><i aria-hidden="true" /> Agent 已完成检查</span>
+              <span className="agent-overview-kicker"><i aria-hidden="true" /> 已经替你看过一遍</span>
               <h3>{agentStatusLabel(latest.verification.status)}</h3>
               <p>{safeUserMessage(latest.verification.summary, "巡检已完成，请查看下面的任务安排。")}</p>
               <small>{agentTriggerLabel(latest.trigger)} · {formatAgentTime(latest.completedAt)}</small>
-              {dashboard.suggestions[0] && <div className="agent-primary-advice"><b>现在建议</b><span>{safeUserMessage(dashboard.suggestions[0], "请优先推进风险最高且临近截止的任务。")}</span></div>}
+              {dashboard.suggestions[0] && <div className="agent-primary-advice"><b>下一步</b><span>{safeUserMessage(dashboard.suggestions[0], "请优先推进风险最高且临近截止的任务。")}</span></div>}
             </div>
             <div className="agent-overview-side">
               <div className="agent-overview-metrics">
                 <div><span>高风险</span><b>{dashboard.highRiskCount}</b></div>
                 <div><span>今日安排</span><b>{formatAgentMinutes(latest.plan.plannedMinutes)}</b></div>
-                <div><span>计划覆盖</span><b>{dashboard.coveragePercent}%</b></div>
+                <div><span>已排入计划</span><b>{dashboard.coveragePercent}%</b></div>
               </div>
-              <div className="agent-coverage" aria-label={`计划覆盖 ${dashboard.coveragePercent}%`}>
+              <div className="agent-coverage" aria-label={`已排入计划 ${dashboard.coveragePercent}%`}>
                 <span style={{ width: `${dashboard.coveragePercent}%` }} />
               </div>
             </div>
@@ -661,7 +666,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
 
           <div className="agent-focus-grid">
             <section className="agent-focus-card">
-              <header><div><span>01</span><h3>今天先做这些</h3></div><p>{latest.plan.blocks.length} 个时间段</p></header>
+              <header><div><h3>今天先做这些</h3></div><p>{latest.plan.blocks.length} 个时间段</p></header>
               <div className="agent-block-list">
                 {dashboard.todayBlocks.map((block) => (
                   <article className="agent-block-row" key={`${block.taskId}-${block.startAt}`}>
@@ -681,7 +686,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
             </section>
 
             <section className="agent-focus-card attention-card">
-              <header><div><span>02</span><h3>需要留意</h3></div><p>{dashboard.highRiskCount} 个高风险</p></header>
+              <header><div><h3>需要留意</h3></div><p>{dashboard.highRiskCount} 个高风险</p></header>
               <div className="agent-risk-list">
                 {dashboard.attentionTasks.map((item) => (
                   <article className={`agent-risk-row risk-${item.riskLevel}`} key={item.taskId}>
@@ -696,7 +701,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
           </div>
 
           <details className="agent-details">
-            <summary><span>查看巡检详情</span><small>{latest.trace.length} 个审计步骤 · {dashboard.failedActionCount ? `${dashboard.failedActionCount} 项执行失败` : latest.verification.status === "healthy" ? "执行无异常" : "风险仍待处理"}</small></summary>
+            <summary><span>为什么这样安排</span><small>{latest.trace.length} 个审计步骤 · {dashboard.failedActionCount ? `${dashboard.failedActionCount} 项执行失败` : latest.verification.status === "healthy" ? "执行无异常" : "风险仍待处理"}</small></summary>
             <div className="agent-details-content">
               {dashboard.suggestions.length > 1 && (
                 <section className="agent-section">
@@ -750,7 +755,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
       )}
 
       <details className="agent-details agent-settings advanced-settings">
-        <summary><span>Agent 设置与导出</span><small>工作时间、容量、提醒和规划方式</small></summary>
+        <summary><span>工作方式与导出</span><small>工作时间、容量、提醒和规划方式</small></summary>
         <div className="agent-details-content">
         <div className="agent-memory-grid">
           <label>每天可安排（分钟）<input type="number" min="30" max="720" step="30" value={memoryDraft.maxDailyMinutes} onChange={(event) => patchMemory({ maxDailyMinutes: Number(event.target.value) })} /></label>
@@ -912,7 +917,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
     <div className="pane">
       <header className="pane-head">
         <div>
-          <p>录入、抽取、核对</p>
+          <p>{formatCalendarHeading(scheduleClock)}</p>
           <h2>日程</h2>
         </div>
       </header>
@@ -925,8 +930,8 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
       {isFirstRun && (
         <section className="start-panel">
           <div>
-            <h3>先放进一个 DDL</h3>
-            <p>粘贴一句截止时间，或选择课程通知、截图、PDF 等文件。</p>
+            <h3>从一件要紧的事开始</h3>
+            <p>写下一句截止时间，或把课程通知、截图和 PDF 交给 Chroni。</p>
           </div>
           <div className="start-actions">
             <button type="button" disabled={isBusy} onClick={() => manualInputRef.current?.focus()}>写一句</button>
@@ -974,7 +979,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
           accept={acceptedFileTypes()}
         />
         <div className="upload-copy">
-          <b>{draggingFiles ? "松开后开始预览" : "拖入文件或选择上传"}</b>
+          <b>{draggingFiles ? "松开后开始预览" : "把文件交给 Chroni"}</b>
           <p>支持 TXT、MD、CSV、JSON、ICS、HTML、DOCX、PDF、XLSX、PNG/JPG/WEBP/TIFF；可先预览，也可直接填入日程。</p>
         </div>
         <div className="upload-actions">
@@ -1050,7 +1055,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
           ))}
         </div>
       ) : (
-        <div className="empty">{itemFilter === "completed" ? "还没有完成记录。" : "暂时没有需要处理的 DDL。"}</div>
+        <div className="empty">{itemFilter === "completed" ? "完成一件事情后，记录会留在这里。" : "眼下没有待处理的 DDL，可以安心做手头的事。"}</div>
       )}
       <SourceHistory sources={snapshot.sources} setSnapshot={setSnapshot} />
     </div>
@@ -1143,7 +1148,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
     <div className="pane narrow settings-pane">
       <header className="pane-head">
         <div>
-          <p>少而清晰</p>
+          <p>让 Chroni 按你的方式陪伴</p>
           <h2>偏好</h2>
         </div>
       </header>
@@ -1153,19 +1158,6 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
           <p>桌宠负责接收拖拽、短反馈和唤起日程。</p>
         </div>
         <Toggle label="显示桌宠" checked={preferences.companionEnabled} onChange={(value) => void patch({ companionEnabled: value }, value ? "桌宠已显示。" : "桌宠已隐藏。") } />
-        <div className="style-picker" role="group" aria-label="桌宠色调">
-          {companionStyleOptions.map((option) => (
-            <button
-              key={option.value}
-              className={preferences.companionStyle === option.value ? "active" : ""}
-              type="button"
-              onClick={() => void patch({ companionStyle: option.value }, `桌宠色调已切换为${option.label}。`)}
-            >
-              <span className={`style-swatch swatch-${option.value}`} />
-              {option.label}
-            </button>
-          ))}
-        </div>
       </section>
       <section className="settings-group">
         <div>
@@ -1257,7 +1249,7 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
     <div className="pane narrow service-pane">
       <header className="pane-head">
         <div>
-          <p>基础排错</p>
+          <p>在本机安静运行</p>
           <h2>运行状态</h2>
         </div>
         <button className="secondary slim" type="button" disabled={refreshing} onClick={() => void refreshServices()}>{refreshing ? "检查中" : "重新检查"}</button>
@@ -1805,6 +1797,12 @@ function formatAgentTime(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
 }
 
+function formatCalendarHeading(value: number | string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "今天";
+  return new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(date);
+}
+
 function formatAgentMinutes(minutes: number): string {
   if (!Number.isFinite(minutes) || minutes < 0) return "暂未安排";
   if (minutes < 60) return `${minutes} 分钟`;
@@ -1812,12 +1810,6 @@ function formatAgentMinutes(minutes: number): string {
   const remainder = minutes % 60;
   return remainder ? `${hours}小时${remainder}分` : `${hours}小时`;
 }
-
-const companionStyleOptions: { value: CompanionStyle; label: string }[] = [
-  { value: "classic", label: "经典" },
-  { value: "mint", label: "清新" },
-  { value: "sunrise", label: "晨光" },
-];
 
 function buildScheduleSurface(items: DdlItem[], now = new Date()): ScheduleSurface {
   const active = visibleActiveScheduleItems(items, now);
@@ -2087,23 +2079,6 @@ function isPersistentPetFeedback(state: CompanionState): boolean {
 
 function isTransientPetFeedback(state: CompanionState): boolean {
   return state === "clicked" || state === "success" || state === "confused" || state === "celebrating";
-}
-
-function petLabel(state: CompanionState): string {
-  const map: Record<CompanionState, string> = {
-    idle: "DDL",
-    clicked: "Hi",
-    hover_accept: "Drop",
-    processing: "...",
-    needs_clarification: "?",
-    success: "OK",
-    confused: "?",
-    deadline_near: "!",
-    overdue: "!!",
-    celebrating: "✓",
-    sleeping: "Z",
-  };
-  return map[state];
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

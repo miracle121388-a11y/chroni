@@ -19,6 +19,7 @@ npmRebuild: false
 publish: null
 
 mac:
+  icon: build/icon.icns
   category: public.app-category.productivity
   target:
     - dmg

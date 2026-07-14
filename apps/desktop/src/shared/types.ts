@@ -38,8 +38,6 @@ export type ServiceState = "ready" | "limited" | "unavailable";
 
 export type SourceExtractionStatus = "success" | "pending" | "failed" | "duplicate";
 
-export type CompanionStyle = "classic" | "mint" | "sunrise";
-
 export type PetPlacement = {
   displayId: number;
   xRatio: number;
@@ -413,7 +411,6 @@ export type SourceRecord = {
 
 export type ChroniPreferences = {
   companionEnabled: boolean;
-  companionStyle: CompanionStyle;
   remindersEnabled: boolean;
   quietHoursEnabled: boolean;
   quietHoursStart: string;

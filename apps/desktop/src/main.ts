@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Notification, safeStorage, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, Notification, safeStorage, shell } from "electron";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DeadlineAgent } from "./agent/deadline-agent.js";
@@ -34,6 +34,7 @@ if (!gotLock) {
     if (app.isReady()) showControlCenter();
   });
   app.whenReady().then(() => {
+    applyMacDevelopmentIcon();
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");
     process.env.CHRONI_OCR_CACHE_PATH ||= join(app.getPath("userData"), "cache", "ocr");
     store = new ChroniStore(app.getPath("userData"), createSecretCodec());
@@ -551,4 +552,10 @@ function createSecretCodec(): SecretCodec | undefined {
     encrypt: (value) => safeStorage.encryptString(value).toString("base64"),
     decrypt: (value) => safeStorage.decryptString(Buffer.from(value, "base64")),
   };
+}
+
+function applyMacDevelopmentIcon(): void {
+  if (process.platform !== "darwin" || app.isPackaged) return;
+  const icon = nativeImage.createFromPath(join(app.getAppPath(), "build", "icon.png"));
+  if (!icon.isEmpty()) app.dock?.setIcon(icon);
 }
