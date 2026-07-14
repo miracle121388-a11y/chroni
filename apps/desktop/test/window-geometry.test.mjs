@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   draggedWindowPosition,
+  draggedWindowPositionWithinArea,
   normalizedWindowPlacement,
   restoredWindowPosition,
   schedulePopoverPosition,
@@ -30,6 +31,22 @@ test("schedule popover stays beside the pet and inside an offset display", () =>
   assert.deepEqual(
     schedulePopoverPosition(area, { x: -1900, y: 90, width: 180, height: 210 }, size),
     { x: -1706, y: 92 },
+  );
+});
+
+test("schedule drag remains recoverable inside the active display", () => {
+  const area = { x: -1920, y: 80, width: 1920, height: 1040 };
+  const size = { width: 348, height: 418 };
+  const start = { x: -572, y: 690 };
+  const cursorStart = { x: 100, y: 100 };
+
+  assert.deepEqual(
+    draggedWindowPositionWithinArea(start, cursorStart, { x: 500, y: 1_400 }, size, area),
+    { x: -360, y: 690 },
+  );
+  assert.deepEqual(
+    draggedWindowPositionWithinArea(start, cursorStart, { x: -2_000, y: -100 }, size, area),
+    { x: -1908, y: 490 },
   );
 });
 

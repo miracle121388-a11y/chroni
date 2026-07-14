@@ -2,7 +2,7 @@ import React, { useEffect, useId, useMemo, useReducer, useRef, useState } from "
 import { createRoot } from "react-dom/client";
 import { buildAgentDashboard } from "../../shared/agent-dashboard";
 import { formatOperationError } from "../../shared/errors";
-import { attentionPetAction, basePetAction, isOneShotPetAction, petMotionReducer, resolvedPetAction } from "../../shared/pet-actions";
+import { attentionPetAction, basePetAction, isOneShotPetAction, petClickIntent, petMotionReducer, resolvedPetAction } from "../../shared/pet-actions";
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
 import type { AgentMemory, CompanionState, CompanionStyle, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
@@ -98,7 +98,6 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
   const dragStartPoint = useRef<{ x: number; y: number } | null>(null);
   const dragCaptureTarget = useRef<HTMLElement | null>(null);
   const suppressClick = useRef(false);
-  const clickTimer = useRef<number | undefined>(undefined);
   const previousCompanionState = useRef(snapshot.companion.state);
   const previousCompletion = useRef(new Map(snapshot.items.map((item) => [item.id, item.completed])));
   const [hovering, setHovering] = useState(false);
@@ -136,10 +135,6 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
     }, 20_000 + Math.round(Math.random() * 15_000));
     return () => window.clearTimeout(timeout);
   }, [hovering, motion.active, movingPet, snapshot.companion.state]);
-
-  useEffect(() => () => {
-    if (clickTimer.current !== undefined) window.clearTimeout(clickTimer.current);
-  }, []);
 
   useEffect(() => {
     if (localBubble) {
@@ -194,21 +189,11 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
       suppressClick.current = false;
       return;
     }
-    if (event.detail >= 2) {
-      if (clickTimer.current !== undefined) window.clearTimeout(clickTimer.current);
-      clickTimer.current = undefined;
+    if (petClickIntent(event.detail) === "cat") {
       dispatchMotion({ type: "command", command: petCommand("cat", "replace") });
       return;
     }
-    if (event.detail === 0) {
-      runSingleClick();
-      return;
-    }
-    if (clickTimer.current !== undefined) window.clearTimeout(clickTimer.current);
-    clickTimer.current = window.setTimeout(() => {
-      clickTimer.current = undefined;
-      runSingleClick();
-    }, 220);
+    runSingleClick();
   }
 
   return (
@@ -312,12 +297,37 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   const [undoing, setUndoing] = useState(false);
   const undoButtonRef = useRef<HTMLButtonElement>(null);
   const quickAddInputRef = useRef<HTMLInputElement>(null);
+  const scheduleDragPointerId = useRef<number | null>(null);
+  const [movingSchedule, setMovingSchedule] = useState(false);
   const isBusy = !!busyMessage;
   const feedbackPaused = feedbackHovered || feedbackFocused;
 
   function closeQuickAdd(): void {
     setQuickAddOpen(false);
     setQuickText("");
+  }
+
+  function startScheduleDrag(event: React.PointerEvent<HTMLElement>): void {
+    if (api.platform !== "win32" || !event.isPrimary || event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest("button, input, select, textarea, a")) return;
+    if (!api.startWindowDrag(event.screenX, event.screenY)) return;
+    scheduleDragPointerId.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setMovingSchedule(true);
+    event.preventDefault();
+  }
+
+  function moveScheduleDrag(event: React.PointerEvent<HTMLElement>): void {
+    if (scheduleDragPointerId.current !== event.pointerId || (event.buttons & 1) === 0) return;
+    api.moveWindowDrag();
+  }
+
+  function finishScheduleDrag(event: React.PointerEvent<HTMLElement>): void {
+    if (scheduleDragPointerId.current !== event.pointerId) return;
+    scheduleDragPointerId.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    setMovingSchedule(false);
+    api.endWindowDrag();
   }
 
   useEffect(() => {
@@ -398,7 +408,14 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
   return (
     <main className="schedule-shell popover-shell">
       <section className="schedule-panel" aria-busy={isBusy || undoing}>
-        <header className="panel-head">
+        <header
+          className={`panel-head ${api.platform === "win32" ? "schedule-drag-handle" : ""} ${movingSchedule ? "dragging" : ""}`}
+          onPointerDown={startScheduleDrag}
+          onPointerMove={moveScheduleDrag}
+          onPointerUp={finishScheduleDrag}
+          onPointerCancel={finishScheduleDrag}
+          onLostPointerCapture={finishScheduleDrag}
+        >
           <div>
             <p>Chroni</p>
             <h1>日程</h1>

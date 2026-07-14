@@ -6,6 +6,7 @@ import {
   basePetAction,
   inputPetAction,
   isOneShotPetAction,
+  petClickIntent,
   petMotionReducer,
   resolvedPetAction,
 } from "../dist/shared/pet-actions.js";
@@ -16,6 +17,12 @@ test("pet base actions represent actual work and sleep instead of semantic feedb
   assert.equal(basePetAction("overdue"), "idle");
   assert.equal(basePetAction("confused"), "idle");
   assert.equal(basePetAction("celebrating"), "idle");
+});
+
+test("the first left click opens the schedule without waiting for double-click detection", () => {
+  assert.equal(petClickIntent(0), "toggle-schedule");
+  assert.equal(petClickIntent(1), "toggle-schedule");
+  assert.equal(petClickIntent(2), "cat");
 });
 
 test("text is eaten while files are read", () => {

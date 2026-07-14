@@ -23,6 +23,21 @@ export function draggedWindowPosition(startWindow: WindowPosition, startCursor: 
   };
 }
 
+export function draggedWindowPositionWithinArea(
+  startWindow: WindowPosition,
+  startCursor: WindowPosition,
+  cursor: WindowPosition,
+  size: WindowSize,
+  area: WindowBounds,
+  margin = 12,
+): WindowPosition {
+  const position = draggedWindowPosition(startWindow, startCursor, cursor);
+  return {
+    x: Math.round(clamp(position.x, area.x + margin, Math.max(area.x + margin, area.x + area.width - size.width - margin))),
+    y: Math.round(clamp(position.y, area.y + margin, Math.max(area.y + margin, area.y + area.height - size.height - margin))),
+  };
+}
+
 export function schedulePopoverPosition(area: WindowBounds, anchor: WindowBounds | undefined, size: WindowSize, gap = 14, margin = 12): WindowPosition {
   const minX = area.x + margin;
   const maxX = Math.max(minX, area.x + area.width - size.width - margin);

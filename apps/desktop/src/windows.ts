@@ -1,7 +1,7 @@
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type NativeImage } from "electron";
 import { join } from "node:path";
 import type { ChroniPreferences, ChroniView, PetAction, PetActionCommand, PetPlacement } from "./shared/types.js";
-import { draggedWindowPosition, normalizedWindowPlacement, restoredWindowPosition, schedulePopoverPosition, snappedWindowPosition, type WindowPosition } from "./window-geometry.js";
+import { draggedWindowPosition, draggedWindowPositionWithinArea, normalizedWindowPlacement, restoredWindowPosition, schedulePopoverPosition, snappedWindowPosition, type WindowPosition } from "./window-geometry.js";
 
 type WindowSet = {
   pet?: BrowserWindow;
@@ -12,12 +12,13 @@ type WindowSet = {
 
 const windows: WindowSet = {};
 let scheduleHideTimer: NodeJS.Timeout | undefined;
-const windowDragSessions = new Map<number, { startWindow: WindowPosition; startCursor: WindowPosition }>();
+const windowDragSessions = new Map<number, { kind: "pet" | "schedule"; startWindow: WindowPosition; startCursor: WindowPosition }>();
 let petVisibilityGeneration = 0;
 let lastAppliedCompanionEnabled: boolean | undefined;
 let quitAfterSleep = false;
 let onCompanionVisibilityRequested: ((visible: boolean) => void) | undefined;
 let lastPetPlacement: PetPlacement | undefined;
+let lastSchedulePlacement: PetPlacement | undefined;
 let onPetPlacementChanged: ((placement: PetPlacement) => void) | undefined;
 
 const schedulePopoverWidth = 348;
@@ -46,6 +47,8 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
 
   windows.schedule = createViewWindow("schedule", scheduleWindowOptions());
   positionScheduleWindow();
+  const scheduleWebContentsId = windows.schedule.webContents.id;
+  windows.schedule.webContents.once("destroyed", () => windowDragSessions.delete(scheduleWebContentsId));
   windows.schedule.on("blur", () => {
     scheduleHideTimer = setTimeout(() => hideSchedule(), 160);
   });
@@ -56,12 +59,14 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
 
   ipcMain.on("chroni:start-window-drag", (event, screenX: number, screenY: number) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win || win !== windows.pet || !Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+    const kind = win === windows.pet ? "pet" : win === windows.schedule && process.platform === "win32" ? "schedule" : undefined;
+    if (!win || !kind || !Number.isFinite(screenX) || !Number.isFinite(screenY)) {
       event.returnValue = false;
       return;
     }
     const [x, y] = win.getPosition();
     windowDragSessions.set(event.sender.id, {
+      kind,
       startWindow: { x, y },
       startCursor: { x: screenX, y: screenY },
     });
@@ -71,20 +76,36 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
     const session = windowDragSessions.get(event.sender.id);
     if (!session) return;
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win || win !== windows.pet) {
+    const expectedWindow = session.kind === "pet" ? windows.pet : windows.schedule;
+    if (!win || win !== expectedWindow) {
       windowDragSessions.delete(event.sender.id);
       return;
     }
-    const position = draggedWindowPosition(session.startWindow, session.startCursor, screen.getCursorScreenPoint());
-    win.setPosition(Math.round(position.x), Math.round(position.y));
+    const cursor = screen.getCursorScreenPoint();
+    if (session.kind === "schedule") {
+      const position = draggedWindowPositionWithinArea(
+        session.startWindow,
+        session.startCursor,
+        cursor,
+        { width: schedulePopoverWidth, height: schedulePopoverHeight },
+        screen.getDisplayNearestPoint(cursor).workArea,
+      );
+      win.setBounds({ ...position, width: schedulePopoverWidth, height: schedulePopoverHeight }, false);
+    } else {
+      const position = draggedWindowPosition(session.startWindow, session.startCursor, cursor);
+      win.setPosition(Math.round(position.x), Math.round(position.y));
+    }
   });
   ipcMain.on("chroni:end-window-drag", (event) => {
-    if (!windowDragSessions.has(event.sender.id)) return;
+    const session = windowDragSessions.get(event.sender.id);
+    if (!session) return;
     windowDragSessions.delete(event.sender.id);
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (win) {
+    if (win && session.kind === "pet") {
       snapWindowToEdge(win);
       persistPetPlacement(win);
+    } else if (win && session.kind === "schedule") {
+      persistSchedulePlacement(win);
     }
   });
 }
@@ -243,7 +264,18 @@ async function loadView(win: BrowserWindow, view: ChroniView): Promise<void> {
 function positionScheduleWindow(): void {
   const win = windows.schedule;
   if (!win) return;
+  const currentBounds = win.getBounds();
+  if (currentBounds.width !== schedulePopoverWidth || currentBounds.height !== schedulePopoverHeight) {
+    win.setSize(schedulePopoverWidth, schedulePopoverHeight, false);
+  }
   const petBounds = windows.pet && !windows.pet.isDestroyed() ? windows.pet.getBounds() : undefined;
+  if (lastSchedulePlacement) {
+    const display = screen.getAllDisplays().find((candidate) => candidate.id === lastSchedulePlacement?.displayId)
+      ?? (petBounds ? screen.getDisplayMatching(petBounds) : screen.getPrimaryDisplay());
+    const position = restoredWindowPosition(lastSchedulePlacement, display.workArea, win.getBounds());
+    win.setPosition(position.x, position.y);
+    return;
+  }
   const display = petBounds
     ? screen.getDisplayMatching(petBounds)
     : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
@@ -280,6 +312,14 @@ function repositionPetForDisplays(): void {
   if (!windows.pet || windows.pet.isDestroyed()) return;
   restorePetPosition();
   positionScheduleWindow();
+}
+
+function persistSchedulePlacement(win: BrowserWindow): void {
+  const [x, y] = win.getPosition();
+  win.setBounds({ x, y, width: schedulePopoverWidth, height: schedulePopoverHeight }, false);
+  const bounds = win.getBounds();
+  const display = screen.getDisplayMatching(bounds);
+  lastSchedulePlacement = normalizedWindowPlacement(bounds, display.workArea, display.id);
 }
 
 function persistPetPlacement(win: BrowserWindow): void {

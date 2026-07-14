@@ -355,6 +355,20 @@ summary:focus-visible {
   gap: 7px;
 }
 
+.schedule-drag-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.schedule-drag-handle.dragging {
+  cursor: grabbing;
+}
+
+.schedule-drag-handle button {
+  cursor: pointer;
+}
+
 .panel-head p,
 .pane-head p,
 .brand p {

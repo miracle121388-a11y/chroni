@@ -9,6 +9,10 @@ export type PetMotionEvent =
   | { type: "command"; command: PetActionCommand }
   | { type: "finished"; action: PetAction };
 
+export function petClickIntent(detail: number): "toggle-schedule" | "cat" {
+  return detail >= 2 ? "cat" : "toggle-schedule";
+}
+
 export function basePetAction(state: CompanionState): PetAction {
   if (state === "processing") return "study";
   if (state === "sleeping") return "sleep";
