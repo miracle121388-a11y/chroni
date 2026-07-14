@@ -27,6 +27,13 @@ function runWithBlock(block) {
   };
 }
 
+function runWithBlocks(blocks) {
+  const result = runWithBlock(blocks[0]);
+  result.plan.blocks = blocks;
+  result.plan.plannedMinutes = blocks.reduce((sum, block) => sum + block.allocatedMinutes, 0);
+  return result;
+}
+
 test("daily tasks persist inbox, schedule, recurrence, subtasks, and completion", () => {
   const dir = mkdtempSync(join(tmpdir(), "chroni-daily-task-"));
   try {
@@ -106,6 +113,56 @@ test("Agent work blocks populate daily tasks while preserving user adjustments",
     store.deleteDailyTask(task.id);
     store.saveAgentRun(runWithBlock(block));
     assert.equal(store.snapshot().dailyTasks.find((candidate) => candidate.id === task.id).dismissed, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("same-day Agent work blocks persist with alternating colors", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-agent-colors-"));
+  try {
+    const store = new ChroniStore(dir);
+    const base = new Date(2026, 6, 18, 9, 0);
+    const blocks = [0, 60, 120].map((offset, index) => ({
+      taskId: `task-${index}`,
+      stepId: `step-${index}`,
+      title: `Block ${index + 1}`,
+      startAt: new Date(base.getTime() + offset * 60_000).toISOString(),
+      endAt: new Date(base.getTime() + (offset + 45) * 60_000).toISOString(),
+      allocatedMinutes: 45,
+    }));
+
+    store.saveAgentRun(runWithBlocks(blocks));
+    const colors = store.snapshot().dailyTasks.map((task) => task.color);
+    assert.deepEqual(colors, ["coral", "teal", "blue"]);
+    assert.deepEqual(new ChroniStore(dir).snapshot().dailyTasks.map((task) => task.color), colors);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("deleting a scheduled task archives its record while deleting an inbox task removes it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-daily-history-"));
+  try {
+    const store = new ChroniStore(dir);
+    store.createDailyTask({
+      title: "Past scheduled work",
+      scheduledStartAt: new Date(2026, 6, 14, 9, 0).toISOString(),
+      scheduledEndAt: new Date(2026, 6, 14, 10, 0).toISOString(),
+    });
+    const scheduled = store.snapshot().dailyTasks[0];
+    store.deleteDailyTask(scheduled.id);
+
+    let tasks = new ChroniStore(dir).snapshot().dailyTasks;
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0].dismissed, true);
+
+    store.createDailyTask({ title: "Temporary inbox thought" });
+    const inbox = store.snapshot().dailyTasks.find((task) => !task.scheduledStartAt);
+    store.deleteDailyTask(inbox.id);
+    tasks = store.snapshot().dailyTasks;
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0].id, scheduled.id);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

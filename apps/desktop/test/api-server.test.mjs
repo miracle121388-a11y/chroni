@@ -337,7 +337,10 @@ test("daily task API supports create, list, update, and delete", async () => {
       assert.equal(updated.body.snapshot.dailyTasks[0].recurrence, "weekly");
 
       const deleted = await apiRequest(server, "DELETE", `/api/daily-tasks/${task.id}`, undefined, headers);
-      assert.equal(deleted.body.snapshot.dailyTasks.length, 0);
+      assert.equal(deleted.body.snapshot.dailyTasks.length, 1);
+      assert.equal(deleted.body.snapshot.dailyTasks[0].dismissed, true);
+      const afterDelete = await apiRequest(server, "GET", "/api/daily-tasks", undefined, headers);
+      assert.equal(afterDelete.body.dailyTasks.length, 0);
       assert.deepEqual(reasons, ["data", "data", "data"]);
     } finally {
       await closeServer(server);

@@ -9,7 +9,7 @@ import { validateTaskPlan } from "./agent/task-plan-validator.js";
 import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveLlmSettings } from "./llm-settings.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
 import { localFilePathFromText } from "./shared/local-file-input.js";
-import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyTask, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyTask, DailyTaskColor, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
 
 export type SecretCodec = {
   encrypt(value: string): string;
@@ -526,7 +526,8 @@ export class ChroniStore {
   deleteDailyTask(id: string): ChroniSnapshot {
     const task = this.#state.dailyTasks.find((candidate) => candidate.id === id);
     if (!task) return this.snapshot();
-    this.#state.dailyTasks = task.origin === "agent"
+    const retainHistory = task.origin === "agent" || !!task.scheduledStartAt;
+    this.#state.dailyTasks = retainHistory
       ? this.#state.dailyTasks.map((candidate) => candidate.id === id
         ? { ...candidate, dismissed: true, userAdjusted: true, updatedAt: new Date().toISOString() }
         : candidate)
@@ -563,12 +564,18 @@ export class ChroniStore {
   }
 
   #syncDailyTasksFromAgentPlan(plan: AgentPlan): void {
-    const blocks = [...plan.blocks, ...(plan.forecastBlocks ?? [])];
+    const blocks = [...plan.blocks, ...(plan.forecastBlocks ?? [])]
+      .sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime());
+    const automaticPalette: DailyTaskColor[] = ["coral", "teal", "blue", "gold", "plum"];
+    const colorIndexes = new Map<string, number>();
     const now = new Date();
     const today = localDateKey(now);
     const matched = new Set<string>();
     for (const block of blocks) {
       const dateKey = localDateKey(new Date(block.startAt));
+      const colorIndex = colorIndexes.get(dateKey) ?? 0;
+      const automaticColor = automaticPalette[colorIndex % automaticPalette.length];
+      colorIndexes.set(dateKey, colorIndex + 1);
       const existing = this.#state.dailyTasks.find((task) => task.origin === "agent"
         && task.linkedTaskId === block.taskId
         && (task.linkedStepId ?? "") === (block.stepId ?? "")
@@ -580,6 +587,7 @@ export class ChroniStore {
           existing.title = block.title;
           existing.scheduledStartAt = block.startAt;
           existing.scheduledEndAt = block.endAt;
+          existing.color = automaticColor;
           existing.updatedAt = now.toISOString();
         }
         continue;
@@ -589,7 +597,7 @@ export class ChroniStore {
         id: `daily-agent-${randomUUID()}`,
         title: block.title,
         notes: source ? `来自「${source.title}」的 Agent 规划，可在任务规划中查看完整拆解。` : "由 Chroni Agent 自动安排。",
-        color: source?.importance === "high" ? "coral" : source?.importance === "low" ? "blue" : "teal",
+        color: automaticColor,
         allDay: false,
         scheduledStartAt: block.startAt,
         scheduledEndAt: block.endAt,

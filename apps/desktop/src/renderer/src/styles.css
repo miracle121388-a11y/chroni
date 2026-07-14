@@ -4315,6 +4315,36 @@ kbd,
   white-space: nowrap;
 }
 
+.daily-record-status {
+  min-width: 128px;
+  display: grid;
+  grid-template-columns: auto 54px;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  color: #5f756f;
+  font-size: 10px;
+}
+
+.daily-record-status > i {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #e7e5e0;
+}
+
+.daily-record-status > i > b {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: var(--daily-teal);
+  transition: width 180ms ease;
+}
+
+.daily-record-status + span {
+  margin-left: 0;
+}
+
 .daily-workspace {
   position: relative;
   min-height: 0;
@@ -4490,10 +4520,14 @@ kbd,
 }
 
 .daily-timeline-panel > header {
+  position: sticky;
+  top: 0;
+  z-index: 7;
   min-height: 62px;
   justify-content: space-between;
   padding: 12px 18px;
   border-bottom: 1px solid rgba(36, 35, 33, 0.08);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .daily-timeline-panel > header p {
@@ -4503,9 +4537,58 @@ kbd,
   font-weight: 800;
 }
 
-.daily-timeline-panel > header > span {
+.daily-timeline-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.daily-timeline-header-actions > span {
   color: #9b978f;
   font-size: 10px;
+}
+
+.daily-timeline-zoom {
+  height: 28px;
+  display: grid;
+  grid-template-columns: 28px 46px 28px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(36, 35, 33, 0.12);
+  border-radius: 7px;
+  background: #f7f7f5;
+}
+
+.daily-timeline-zoom button {
+  width: 28px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #426f67;
+  font-size: 16px;
+}
+
+.daily-timeline-zoom button:hover:not(:disabled) {
+  background: #e9f1ee;
+}
+
+.daily-timeline-zoom button:disabled {
+  color: #c8c6c0;
+  cursor: default;
+}
+
+.daily-timeline-zoom output {
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-right: 1px solid rgba(36, 35, 33, 0.1);
+  border-left: 1px solid rgba(36, 35, 33, 0.1);
+  color: #615e58;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
 }
 
 .daily-all-day {
@@ -4588,8 +4671,26 @@ kbd,
 
 .daily-timeline-task-wrap {
   position: absolute;
-  right: 22px;
   z-index: 3;
+  min-width: 0;
+}
+
+.daily-events-layer {
+  position: absolute;
+  inset: 0 22px 0 116px;
+}
+
+.daily-timeline-task-wrap:hover {
+  z-index: 5;
+}
+
+.daily-timeline-task-wrap > .daily-task-card {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  max-width: none;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .daily-task-card {
@@ -4630,6 +4731,86 @@ kbd,
   box-shadow: none;
 }
 
+.daily-timeline-task-wrap .daily-task-card:hover {
+  border-color: color-mix(in srgb, var(--task-color) 48%, transparent);
+  box-shadow: 0 6px 16px rgba(36, 35, 33, 0.11);
+  transform: none;
+}
+
+.daily-timeline-task-wrap .daily-task-card.density-short {
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 7px;
+  padding: 3px 8px;
+  box-shadow: 0 3px 10px rgba(36, 35, 33, 0.07);
+}
+
+.daily-task-card.density-short .daily-check {
+  width: 17px;
+  height: 17px;
+  border-width: 1.5px;
+  font-size: 9px;
+}
+
+.daily-task-card.density-short > div {
+  align-content: center;
+  grid-template-rows: 10px 14px;
+}
+
+.daily-task-card.density-short > div > span,
+.daily-task-card.density-short > i {
+  display: none;
+}
+
+.daily-timeline-task-wrap .daily-task-card.density-micro {
+  grid-template-columns: 11px minmax(0, 1fr);
+  gap: 5px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  box-shadow: none;
+}
+
+.daily-task-card.density-micro .daily-check {
+  width: 10px;
+  height: 10px;
+  border-width: 1px;
+  font-size: 7px;
+}
+
+.daily-task-card.density-micro > div {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.daily-task-card.density-micro time {
+  flex: 0 0 auto;
+  font-size: 7px;
+  line-height: 10px;
+}
+
+.daily-task-card.density-micro b {
+  margin: 0;
+  font-size: 9px;
+  line-height: 10px;
+}
+
+.daily-task-card.density-micro > div > span,
+.daily-task-card.density-micro > i {
+  display: none;
+}
+
+.daily-task-card.archived {
+  border-style: dashed;
+  box-shadow: none;
+  cursor: default;
+  opacity: 0.6;
+}
+
+.daily-task-card.archived:hover {
+  box-shadow: none;
+}
+
 .daily-check {
   width: 22px;
   height: 22px;
@@ -4650,14 +4831,19 @@ kbd,
 
 .daily-task-card time,
 .daily-task-card span {
+  overflow: hidden;
   color: color-mix(in srgb, var(--task-color) 75%, #4b4945);
   font-size: 9px;
+  line-height: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .daily-task-card b {
   margin: 1px 0;
   overflow: hidden;
   font-size: 12px;
+  line-height: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
