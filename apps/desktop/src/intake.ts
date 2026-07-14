@@ -13,6 +13,7 @@ import { selectPlanningPreferences } from "./agent/preference-selector.js";
 import { generateTaskPlan } from "./agent/task-plan-agent.js";
 import { deadlineDateFromText, isConditionalDeadlineText, stripDeadlineTemporalExpressions } from "./shared/deadline-text.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
+import { localFilePathFromText } from "./shared/local-file-input.js";
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
 const spreadsheetExtensions = new Set([".xlsx"]);
@@ -76,6 +77,8 @@ type TesseractModule = {
 };
 
 export async function processIntake(payload: IntakePayload, store: ChroniStore): Promise<IntakeResult> {
+  const pastedFilePath = payload.kind === "text" ? localFilePathFromText(payload.text) : undefined;
+  if (pastedFilePath) store.discardPathOnlyTextIntake(pastedFilePath);
   store.setCompanion("processing", "正在识别 DDL...");
   const result = await extractPayload(payload, { llm: store.llmSettings() });
   if (!result.ok) {
@@ -408,13 +411,17 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
   const extracted: ExtractedInput[] = [];
   const failures: ExtractedFailure[] = [];
   const referenceNow = validReferenceTime(options.referenceNow);
+  const pastedFilePath = payload.kind === "text" ? localFilePathFromText(payload.text) : undefined;
+  const effectivePayload: IntakePayload = pastedFilePath
+    ? { kind: "files", files: [{ name: basename(pastedFilePath), path: pastedFilePath }] }
+    : payload;
   try {
-    if (payload.kind === "text") {
-      const text = payload.text?.trim() ?? "";
+    if (effectivePayload.kind === "text") {
+      const text = effectivePayload.text?.trim() ?? "";
       if (!text) return { ok: false, reason: "输入内容为空。", extracted, failures, items: [], pendingItems: [] };
       extracted.push({ sourceName: "直接文本", sourceType: "text", text });
     } else {
-      const fileResult = await extractFromFilesWithFailures(payload.files ?? []);
+      const fileResult = await extractFromFilesWithFailures(effectivePayload.files ?? []);
       extracted.push(...fileResult.extracted);
       failures.push(...fileResult.failures);
       if (!extracted.length && failures.length) {

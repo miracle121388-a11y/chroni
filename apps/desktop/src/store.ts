@@ -8,6 +8,7 @@ import { diffTaskPlans } from "./agent/task-plan-diff.js";
 import { validateTaskPlan } from "./agent/task-plan-validator.js";
 import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveLlmSettings } from "./llm-settings.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
+import { localFilePathFromText } from "./shared/local-file-input.js";
 import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
 
 export type SecretCodec = {
@@ -54,7 +55,8 @@ export class ChroniStore {
   constructor(userDataPath: string, readonly secretCodec?: SecretCodec) {
     this.filePath = join(userDataPath, "chroni-state.json");
     this.#state = this.#load();
-    if (this.#needsSecretMigration) this.#save();
+    const repairedPathDrafts = this.#discardPathOnlyTextIntakes();
+    if (this.#needsSecretMigration || repairedPathDrafts) this.#save();
   }
 
   snapshot(): ChroniSnapshot {
@@ -144,6 +146,37 @@ export class ChroniStore {
 
   llmSettings(): ChroniPreferences["llm"] {
     return { ...this.#state.preferences.llm };
+  }
+
+  discardPathOnlyTextIntake(path: string): ChroniSnapshot {
+    const repaired = this.#discardPathOnlyTextIntakes(path);
+    if (repaired) {
+      this.#settleCompanion();
+      this.#save();
+    }
+    return this.snapshot();
+  }
+
+  #discardPathOnlyTextIntakes(expectedPath?: string): number {
+    const sourceIds = new Set(this.#state.sources
+      .filter((source) => !source.itemIds.length
+        && source.sourceName === "直接文本"
+        && localFilePathFromText(source.text)
+        && (!expectedPath || localFilePathFromText(source.text) === expectedPath))
+      .map((source) => source.id));
+    if (!sourceIds.size) return 0;
+    const updatedAt = new Date().toISOString();
+    const draftIds = new Set(this.#state.intakeDrafts
+      .filter((draft) => draft.sourceId && sourceIds.has(draft.sourceId) && draft.status === "needs-clarification")
+      .map((draft) => draft.id));
+    this.#state.intakeDrafts = this.#state.intakeDrafts.map((draft) => draftIds.has(draft.id)
+      ? { ...draft, status: "cancelled", updatedAt }
+      : draft);
+    this.#state.clarifications = this.#state.clarifications.map((clarification) => draftIds.has(clarification.draftId) && clarification.status === "pending"
+      ? { ...clarification, status: "expired", answeredAt: updatedAt }
+      : clarification);
+    this.#state.sources = this.#state.sources.filter((source) => !sourceIds.has(source.id));
+    return draftIds.size + sourceIds.size;
   }
 
   updatePetPlacement(placement: PetPlacement): void {

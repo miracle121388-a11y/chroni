@@ -178,6 +178,57 @@ test("an ambiguous task does not block explicit tasks from the same source", asy
   });
 });
 
+test("a pasted absolute file path is loaded as a file instead of task text", async () => {
+  const fileDir = mkdtempSync(join(tmpdir(), "chroni-pasted-path-"));
+  const filePath = join(fileDir, "notice.md");
+  writeFileSync(filePath, "2026年7月20日 23:59 前提交课程报告", "utf8");
+  try {
+    await withStore(async (store) => {
+      const result = await processIntake({ kind: "text", text: filePath }, store);
+
+      assert.equal(result.ok, true);
+      assert.equal(result.snapshot.items.length, 1);
+      assert.equal(result.snapshot.sources[0].sourceName, "notice.md");
+      assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending").length, 0);
+    });
+  } finally {
+    rmSync(fileDir, { recursive: true, force: true });
+  }
+});
+
+test("startup removes historical clarifications created from a pasted file path", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-path-migration-"));
+  const filePath = join(dir, "notice.md");
+  writeFileSync(filePath, "2026年7月20日 23:59 前提交课程报告", "utf8");
+  try {
+    const store = new ChroniStore(dir);
+    const now = new Date().toISOString();
+    const draftId = "draft-pasted-path";
+    store.saveIntakeDraft({
+      id: draftId,
+      sourceName: "直接文本",
+      sourceType: "text",
+      candidate: {},
+      confidence: { title: 0, dueAt: 0 },
+      pendingClarificationIds: ["clarification-path-title", "clarification-path-due"],
+      status: "needs-clarification",
+      createdAt: now,
+      updatedAt: now,
+    }, [
+      { id: "clarification-path-title", draftId, field: "title", question: "这项任务应该叫什么？", reason: "缺少标题", options: [], allowFreeText: true, required: true, status: "pending", createdAt: now, resumeToken: "path-title" },
+      { id: "clarification-path-due", draftId, field: "dueAt", question: "这个任务什么时候截止？", reason: "缺少截止时间", options: [], allowFreeText: true, required: true, status: "pending", createdAt: now, resumeToken: "path-due" },
+    ], { sourceName: "直接文本", sourceType: "text", text: filePath });
+    assert.equal(store.snapshot().clarifications.filter((item) => item.status === "pending").length, 2);
+
+    const reopened = new ChroniStore(dir);
+    assert.equal(reopened.snapshot().clarifications.filter((item) => item.status === "pending").length, 0);
+    assert.equal(reopened.snapshot().intakeDrafts.find((item) => item.id === draftId)?.status, "cancelled");
+    assert.equal(reopened.snapshot().sources.some((source) => source.text === filePath), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("the comprehensive notice creates five plans before exposing optional refinements", async () => {
   await withStore(async (store) => {
     const noticePath = join(process.cwd(), "..", "..", "ddl_agent_test_notice.md");
