@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
-  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
-  --font-display: ui-serif, "New York", "Iowan Old Style", Charter, Georgia, "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", STSong, SimSun, serif;
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --font-display: var(--font-ui);
   --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --text-caption: 12px;
   --text-body: 14px;
@@ -29,6 +29,16 @@
   --radius: 12px;
 }
 
+html[data-platform="win32"] {
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+}
+
+html[data-platform="darwin"] {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", sans-serif;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -39,8 +49,15 @@ body {
   min-height: 100vh;
   overflow: hidden;
   background: transparent;
-  -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+html[data-platform="darwin"] body {
+  -webkit-font-smoothing: antialiased;
+}
+
+html[data-platform="win32"] body {
+  text-rendering: auto;
 }
 
 html,
@@ -399,7 +416,7 @@ summary:focus-visible {
 .brand h1 {
   margin: 2px 0 0;
   font-size: 22px;
-  line-height: 1.1;
+  line-height: 1.25;
 }
 
 .icon-btn,
@@ -3553,7 +3570,7 @@ details.source-history[open] > summary::after {
 .agent-overview-copy h3 {
   margin-top: 7px;
   font-size: 25px;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .agent-overview-copy > p {
@@ -3576,7 +3593,7 @@ details.source-history[open] > summary::after {
   color: #3f6f78;
   font-size: var(--text-caption);
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 .agent-overview-kicker i {
@@ -3894,14 +3911,14 @@ h2 {
   margin-block-start: 0;
   font-family: var(--font-display);
   font-weight: 600;
-  letter-spacing: -0.018em;
+  letter-spacing: 0;
   text-wrap: balance;
 }
 
 h3,
 h4 {
   font-weight: 600;
-  letter-spacing: -0.006em;
+  letter-spacing: 0;
 }
 
 small {
@@ -3987,7 +4004,7 @@ kbd,
 
 .pane-head p {
   font-weight: 500;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
 }
 
 .summary-line {
@@ -4269,7 +4286,7 @@ kbd,
 
 .daily-week-strip span,
 .daily-week-strip i {
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
 }
 
@@ -4330,7 +4347,7 @@ kbd,
   gap: 8px;
   margin-left: auto;
   color: #5f756f;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .daily-record-status > i {
@@ -4482,7 +4499,7 @@ kbd,
 .daily-inbox-task small {
   margin-top: 3px;
   color: #96928b;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .daily-inbox-task em {
@@ -4517,7 +4534,7 @@ kbd,
 
 .daily-inbox-empty p {
   margin: 5px 0;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.55;
 }
 
@@ -4540,7 +4557,7 @@ kbd,
 .daily-timeline-panel > header p {
   margin: 0 0 2px;
   color: var(--daily-coral);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -4552,7 +4569,7 @@ kbd,
 
 .daily-timeline-header-actions > span {
   color: #9b978f;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .daily-timeline-zoom {
@@ -4594,7 +4611,7 @@ kbd,
   border-right: 1px solid rgba(36, 35, 33, 0.1);
   border-left: 1px solid rgba(36, 35, 33, 0.1);
   color: #615e58;
-  font-size: 9px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -4609,7 +4626,7 @@ kbd,
 .daily-all-day > b {
   flex: 0 0 54px;
   color: #8c8982;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .daily-timeline {
@@ -4631,7 +4648,7 @@ kbd,
 .daily-hour time {
   padding-right: 10px;
   color: #aaa69f;
-  font-size: 9px;
+  font-size: 10px;
   text-align: right;
 }
 
@@ -4659,7 +4676,7 @@ kbd,
   gap: 6px;
   border-top: 1px solid var(--daily-coral);
   color: #c9645d;
-  font-size: 9px;
+  font-size: 10px;
   pointer-events: none;
 }
 
@@ -4755,12 +4772,12 @@ kbd,
   width: 17px;
   height: 17px;
   border-width: 1.5px;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .daily-task-card.density-short > div {
   align-content: center;
-  grid-template-rows: 10px 14px;
+  grid-template-rows: 12px 19px;
 }
 
 .daily-task-card.density-short > div > span,
@@ -4780,7 +4797,7 @@ kbd,
   width: 10px;
   height: 10px;
   border-width: 1px;
-  font-size: 7px;
+  font-size: 9px;
 }
 
 .daily-task-card.density-micro > div {
@@ -4791,15 +4808,14 @@ kbd,
 }
 
 .daily-task-card.density-micro time {
-  flex: 0 0 auto;
-  font-size: 7px;
-  line-height: 10px;
+  display: none;
 }
 
 .daily-task-card.density-micro b {
   margin: 0;
-  font-size: 9px;
-  line-height: 10px;
+  min-height: 0;
+  font-size: 10px;
+  line-height: 12px;
 }
 
 .daily-task-card.density-micro > div > span,
@@ -4840,17 +4856,18 @@ kbd,
 .daily-task-card span {
   overflow: hidden;
   color: color-mix(in srgb, var(--task-color) 75%, #4b4945);
-  font-size: 9px;
-  line-height: 10px;
+  font-size: 10px;
+  line-height: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .daily-task-card b {
   margin: 1px 0;
+  min-height: 17px;
   overflow: hidden;
-  font-size: 12px;
-  line-height: 14px;
+  font-size: 13px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4897,7 +4914,7 @@ kbd,
 
 .daily-timeline-empty p {
   margin: 5px 0;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .daily-floating-add {
@@ -4952,7 +4969,7 @@ kbd,
 .daily-column-head span,
 .daily-column-head small {
   color: #8b877f;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .daily-column-head b {
@@ -4969,7 +4986,7 @@ kbd,
 
 .daily-column-empty {
   color: #aaa69f;
-  font-size: 10px;
+  font-size: 11px;
   text-align: center;
 }
 
@@ -4987,7 +5004,7 @@ kbd,
 .daily-month > header b {
   padding: 10px;
   color: #87837c;
-  font-size: 10px;
+  font-size: 11px;
   text-align: center;
 }
 
@@ -5035,7 +5052,7 @@ kbd,
   padding-left: 6px;
   border-left: 3px solid var(--task-color);
   color: #5d5953;
-  font-size: 9px;
+  font-size: 10px;
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5043,7 +5060,7 @@ kbd,
 
 .daily-month em {
   color: #96928b;
-  font-size: 9px;
+  font-size: 10px;
   font-style: normal;
 }
 
@@ -5106,7 +5123,7 @@ kbd,
 .daily-editor > header p,
 .daily-editor > header span {
   color: rgba(255, 255, 255, 0.82);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .daily-editor > header h2 {
@@ -5142,7 +5159,7 @@ kbd,
   margin: 0;
   border: 0;
   color: #77736c;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .daily-editor input,
@@ -5243,7 +5260,7 @@ kbd,
 
 .daily-editor-subtasks h3 span {
   color: #96928b;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
 }
 

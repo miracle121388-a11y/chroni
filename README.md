@@ -243,9 +243,9 @@ npx pnpm@11.7.0 run check
 npx pnpm@11.7.0 run package:desktop
 ```
 
-`check` 依次执行 TypeScript 检查、自动化测试和 renderer/main 构建。Windows 安装包和便携版输出到 `apps/desktop/dist-electron/`。
+`check` 依次执行 TypeScript 检查、自动化测试和 renderer/main 构建。Windows 安装包、便携版以及 macOS DMG/ZIP 均输出到 `apps/desktop/dist-electron/`；打包命令会根据当前运行系统选择对应平台，macOS 产物需要在 macOS 或发布工作流中构建。
 
-仓库的 `Windows Release Build` 工作流可手动运行，也会在推送 `v*` 标签时构建安装包和便携版并上传 Actions artifact。正式签名时，在 GitHub 仓库 Secrets 中配置 `WINDOWS_CSC_LINK`（PFX 的 Base64 或安全下载地址）和 `WINDOWS_CSC_KEY_PASSWORD`；没有证书时仍可生成未签名的测试构建。
+仓库的 `Desktop Release Builds` 工作流可手动运行，也会在推送 `v*` 标签时分别构建 Windows 和 macOS 产物并上传 Actions artifact。正式签名 Windows 版本时，在 GitHub 仓库 Secrets 中配置 `WINDOWS_CSC_LINK`（PFX 的 Base64 或安全下载地址）和 `WINDOWS_CSC_KEY_PASSWORD`；没有证书时仍可生成未签名构建。公开分发 macOS 版本前还应使用 Apple Developer ID 完成签名与公证，仓库默认工作流生成的是便于开源测试的未签名产物。
 
 ## 常见问题
 

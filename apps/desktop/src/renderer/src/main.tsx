@@ -12,6 +12,7 @@ import { DailyPlanner } from "./components/DailyPlanner";
 import "./styles.css";
 
 const api = window.chroni;
+document.documentElement.dataset.platform = api.platform;
 const petFrameModules = import.meta.glob("./assets/tongluv/frames/*/*.png", { eager: true, query: "?url", import: "default" }) as Record<string, string>;
 const petAnimationFrames: Record<PetAction, string[]> = {
   idle: collectPetFrames("idle"),
