@@ -535,7 +535,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
           <button className={tab === "services" ? "active" : ""} aria-current={tab === "services" ? "page" : undefined} onClick={() => selectTab("services")}>运行状态</button>
         </nav>
         <div className="sidebar-foot">
-          <span>待处理 {pendingCount}{snapshot.clarifications.some((item) => item.status === "pending") ? ` · 待确认 ${snapshot.clarifications.filter((item) => item.status === "pending").length}` : ""}</span>
+          <span>待处理 {pendingCount}{snapshot.clarifications.some((item) => item.status === "pending" && item.required) ? ` · 待确认 ${snapshot.clarifications.filter((item) => item.status === "pending" && item.required).length}` : ""}</span>
           <b>{petLabel(snapshot.companion.state)}</b>
         </div>
       </aside>
@@ -1008,8 +1008,8 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
           ))}
           {preview.pendingItems.map((item, index) => (
             <article key={`${item.sourceName}-${item.title}-pending-${index}`} className="preview-failure">
-              <b>{item.title} · 待确认</b>
-              <span>{safeUserMessage(item.question, "请补充任务标题或明确的截止时间。")}</span>
+              <b>{item.title} · {preview.items.length ? "可稍后完善" : "待确认"}</b>
+              <span>{safeUserMessage(preview.items.length ? item.reason : item.question, preview.items.length ? "不会阻止已识别任务和规划。" : "请补充任务标题或明确的截止时间。")}</span>
             </article>
           ))}
           {!!preview.extracted.length && previewPayload && (

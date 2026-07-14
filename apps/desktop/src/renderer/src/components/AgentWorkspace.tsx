@@ -7,7 +7,10 @@ const api = window.chroni;
 type SnapshotSetter = React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>;
 
 export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" }: { snapshot: ChroniSnapshot; setSnapshot: SnapshotSetter; variant?: "default" | "agent" }) {
-  const pending = snapshot.clarifications.filter((item) => item.status === "pending");
+  const allPending = snapshot.clarifications.filter((item) => item.status === "pending");
+  const pending = variant === "agent" ? allPending : allPending.filter((item) => item.required);
+  const requiredCount = pending.filter((item) => item.required).length;
+  const optionalCount = pending.length - requiredCount;
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState("");
   const [feedback, setFeedback] = useState("");
@@ -66,18 +69,18 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
       <header className="clarification-head">
         <div className="clarification-head-main">
           {variant === "agent" && <span className="clarification-mark" aria-hidden="true">?</span>}
-          <div><p>需要你的确认</p><h3 id={`clarification-heading-${variant}`}>有 {pending.length} 条信息需要补充</h3></div>
+          <div><p>{requiredCount ? "需要你的确认" : "计划后的完善项"}</p><h3 id={`clarification-heading-${variant}`}>{requiredCount ? `有 ${requiredCount} 条必要信息需要补充` : `有 ${optionalCount} 条信息可继续完善`}</h3></div>
         </div>
         <span className="clarification-count">{pending.length}</span>
       </header>
-      {variant === "agent" && <p className="clarification-intro">只在标题或截止时间确实无法确定时询问；补充后会继续创建日程和执行规划。</p>}
+      {variant === "agent" && <p className="clarification-intro">{requiredCount ? "必要信息确认后会继续创建对应日程；其他完善项不会阻止已生成的任务与规划。" : "主任务和基础规划已经完成；这些信息可按需补充，也可以暂不处理。"}</p>}
       {pending.map((item) => {
         const draft = snapshot.intakeDrafts.find((candidate) => candidate.id === item.draftId);
         const sourceId = item.sourceId ?? draft?.sourceId;
         return (
           <article className="clarification-row" key={item.id}>
             <div className="clarification-meta">
-              <span>{clarificationFieldLabel(item.field)}</span>
+              <span>{item.required ? clarificationFieldLabel(item.field) : "可选完善"}</span>
               {draft?.candidate.title && <em>草稿 · {draft.candidate.title}</em>}
             </div>
             <div className="clarification-copy">
@@ -100,7 +103,7 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
             )}
             <div className="clarification-actions">
               {sourceId && <button type="button" className="text-action reprocess-action" disabled={!!busyId} onClick={() => void reprocess(item)}>{busyId === item.id ? "处理中..." : "重新识别原内容"}</button>}
-              <button type="button" className="text-action discard-action" disabled={!!busyId} onClick={() => void cancelDraft(item)}>放弃草稿</button>
+              <button type="button" className="text-action discard-action" disabled={!!busyId} onClick={() => void cancelDraft(item)}>{item.required ? "放弃草稿" : "暂不完善"}</button>
             </div>
           </article>
         );

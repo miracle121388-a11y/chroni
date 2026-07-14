@@ -92,7 +92,7 @@ export class ChroniStore {
     const activeDraftIds = new Set(this.#state.intakeDrafts
       .filter((draft) => draft.status === "needs-clarification")
       .map((draft) => draft.id));
-    return this.#state.clarifications.find((item) => item.status === "pending" && activeDraftIds.has(item.draftId));
+    return this.#state.clarifications.find((item) => item.status === "pending" && item.required && activeDraftIds.has(item.draftId));
   }
 
   #settleCompanion(preferred = companionStateForItems(this.#state.items)): void {
@@ -158,20 +158,21 @@ export class ChroniStore {
   }
 
   saveIntakeDraft(draft: IntakeDraft, clarifications: PendingClarification[], extracted?: ExtractedInput): ChroniSnapshot {
+    const hasRequiredClarification = clarifications.some((item) => item.required);
     let sourceId = draft.sourceId;
     if (extracted) {
       const existingSource = this.#state.sources.find((source) => source.sourceName === extracted.sourceName && source.text === extracted.text);
       if (existingSource) {
         sourceId = existingSource.id;
-        if (!existingSource.itemIds.length) {
+        if (hasRequiredClarification && !existingSource.itemIds.length) {
           existingSource.extractionStatus = "pending";
           existingSource.lastError = "等待用户补全截止时间等必要信息";
           existingSource.summary = `${existingSource.sourceName}，等待确认截止信息`;
           existingSource.updatedAt = new Date().toISOString();
         }
       } else {
-        const source = sourceRecordFromInput(extracted, "pending", "等待用户补全截止时间等必要信息");
-        source.summary = `${source.sourceName}，等待确认截止信息`;
+        const source = sourceRecordFromInput(extracted, hasRequiredClarification ? "pending" : "success", hasRequiredClarification ? "等待用户补全截止时间等必要信息" : undefined);
+        source.summary = hasRequiredClarification ? `${source.sourceName}，等待确认截止信息` : `${source.sourceName}，已记录可选完善信息`;
         this.#state.sources = [source, ...this.#state.sources];
         sourceId = source.id;
       }
@@ -190,12 +191,14 @@ export class ChroniStore {
       ...this.#state.clarifications.filter((item) => !clarifications.some((candidate) => candidate.id === item.id)),
     ].slice(0, 200);
     this.#state.sources = this.#pruneSources(this.#state.sources, sourceId ? [sourceId] : []);
-    this.#settleCompanion({ state: "needs_clarification", bubble: clarifications[0]?.question ?? "还需要确认一项信息。" });
+    this.#settleCompanion(hasRequiredClarification
+      ? { state: "needs_clarification", bubble: clarifications.find((item) => item.required)?.question ?? "还需要确认一项信息。" }
+      : companionStateForItems(this.#state.items));
     this.#recordWorkflowTrace([
-      { stage: "observe", summary: `发现「${draft.candidate.title ?? "未命名任务"}」缺少必要信息。`, data: { draftId: draft.id, clarificationCount: clarifications.length } },
-      { stage: "plan", summary: "决定先创建待确认草稿，暂不创建正式任务。", data: { requiredCount: clarifications.filter((item) => item.required).length } },
-      { stage: "act", summary: `已创建 ${clarifications.length} 个待确认问题。`, data: { draftId: draft.id } },
-      { stage: "verify", summary: "草稿和恢复令牌已持久化，未生成重复任务。", data: { persisted: true } },
+      { stage: "observe", summary: hasRequiredClarification ? `发现「${draft.candidate.title ?? "未命名任务"}」缺少必要信息。` : `发现「${draft.candidate.title ?? "未命名任务"}」可在主计划后继续完善。`, data: { draftId: draft.id, clarificationCount: clarifications.length } },
+      { stage: "plan", summary: hasRequiredClarification ? "决定先创建待确认草稿，暂不创建正式任务。" : "主任务继续执行，将补充信息降级为非阻塞完善项。", data: { requiredCount: clarifications.filter((item) => item.required).length } },
+      { stage: "act", summary: hasRequiredClarification ? `已创建 ${clarifications.length} 个待确认问题。` : `已记录 ${clarifications.length} 个可选完善项。`, data: { draftId: draft.id } },
+      { stage: "verify", summary: hasRequiredClarification ? "草稿和恢复令牌已持久化，未生成重复任务。" : "正式任务与计划保持可用，未触发即时追问。", data: { persisted: true } },
     ]);
     this.#save();
     return this.snapshot();

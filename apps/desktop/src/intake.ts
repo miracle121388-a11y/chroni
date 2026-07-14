@@ -103,7 +103,7 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
     return { ok: false, reason: result.reason, snapshot };
   }
 
-  const blocking: Array<{ sourceInput: ExtractedInput; analysis: Awaited<ReturnType<typeof analyzeCompletenessWithLlm>> }> = [];
+  const incomplete: Array<{ sourceInput: ExtractedInput; analysis: Awaited<ReturnType<typeof analyzeCompletenessWithLlm>> }> = [];
   for (const sourceInput of result.extracted) {
     for (const input of ambiguousTaskInputs(sourceInput)) {
       if (result.pendingItems.some((pending) => pendingCoversInput(pending, input))) continue;
@@ -111,42 +111,50 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
         await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.llmSettings())),
         input,
       );
-      if (analysis.clarifications.some((item) => item.required && item.field === "dueAt")) blocking.push({ sourceInput, analysis });
+      if (analysis.clarifications.some((item) => item.required && item.field === "dueAt")) incomplete.push({ sourceInput, analysis });
     }
   }
-  const safeItems = result.items.filter((item) => !containsAmbiguousNextWeek(item.extraction?.contextExcerpt ?? sourceEvidence(item.sourceSummary)));
+  const extractedItems = result.items.filter((item) => !containsAmbiguousNextWeek(item.extraction?.contextExcerpt ?? sourceEvidence(item.sourceSummary)));
+  const { items: safeItems, immediate: immediatePending, deferred: deferredPending } = classifyPendingItems(extractedItems, result.pendingItems);
+  const immediateBlocking = incomplete.filter((entry) => !sourceHasResolvedItem(entry.sourceInput.sourceName, safeItems));
+  const deferredBlocking = incomplete.filter((entry) => sourceHasResolvedItem(entry.sourceInput.sourceName, safeItems));
   const beforeIds = new Set(store.snapshot().items.map((item) => item.id));
   let snapshot = store.addItems(safeItems, result.message, result.extracted);
   const created = snapshot.items.filter((item) => !beforeIds.has(item.id));
-  const planningFailureCount = await ensureTaskPlans(created.map((item) => item.id), store, created.length > 1 ? "rules-only" : "default");
+  const planningFailureCount = await ensureTaskPlans(created.map((item) => item.id), store, "default");
   snapshot = store.snapshot();
-  for (const pending of result.pendingItems) {
+  for (const pending of immediatePending) {
     const input = sourceInputForPending(pending, result.extracted);
     snapshot = savePendingExtractedTask(pending, store, input);
   }
-  for (const entry of blocking) snapshot = store.saveIntakeDraft(entry.analysis.draft, entry.analysis.clarifications, entry.sourceInput);
+  for (const pending of deferredPending) {
+    const input = sourceInputForPending(pending, result.extracted);
+    const relatedTask = matchingResolvedItem(pending, snapshot.items);
+    snapshot = savePendingExtractedTask(pending, store, input, relatedTask?.id, false);
+  }
+  for (const entry of immediateBlocking) snapshot = store.saveIntakeDraft(entry.analysis.draft, entry.analysis.clarifications, entry.sourceInput);
+  for (const entry of deferredBlocking) {
+    snapshot = store.saveIntakeDraft(entry.analysis.draft, entry.analysis.clarifications.map((item) => ({ ...item, required: false })), entry.sourceInput);
+  }
   snapshot = recordExtractionFailures(store, result.failures) ?? snapshot;
-  const hasBlockedModelDeadline = result.pendingItems.some(isBlockedModelDeadline);
-  if (!created.length && ((blocking.length && !result.pendingItems.length) || hasBlockedModelDeadline)) {
-    const question = blocking[0]?.analysis.clarifications[0]?.question
-      ?? result.pendingItems[0]?.question
+  const hasBlockedModelDeadline = immediatePending.some(isBlockedModelDeadline);
+  if (!created.length && ((immediateBlocking.length && !immediatePending.length) || hasBlockedModelDeadline)) {
+    const question = immediateBlocking[0]?.analysis.clarifications[0]?.question
+      ?? immediatePending[0]?.question
       ?? "请补充截止时间。";
     return { ok: false, reason: `需要确认：${question}`, snapshot };
   }
-  const duplicateOnly = !created.length && safeItems.length > 0 && !blocking.length && !result.pendingItems.length;
+  const duplicateOnly = !created.length && safeItems.length > 0 && !immediateBlocking.length && !immediatePending.length;
   const intakeMessage = duplicateOnly ? "识别到的日程已经存在，未重复添加。" : result.message;
-  const clarificationMessage = blocking.length ? `${intakeMessage} 另有 ${blocking.length} 项等待确认。` : intakeMessage;
-  const resolvedPlanningSettings = resolveLlmSettings(store.llmSettings());
-  const bulkPlanningMessage = created.length > 1 && snapshot.agent.memory.useLlmPlanning && resolvedPlanningSettings.enabled && resolvedPlanningSettings.apiKey
-    ? " 批量任务已先生成本地草案；可在任务详情中按需使用大模型优化。"
-    : "";
+  const requiredCount = immediateBlocking.length + immediatePending.length;
+  const clarificationMessage = requiredCount ? `${intakeMessage} 另有 ${requiredCount} 项需要确认。` : intakeMessage;
   const planningFailureMessage = planningFailureCount ? ` ${planningFailureCount} 项执行规划暂未生成，可稍后在任务详情中重试。` : "";
-  const message = `${clarificationMessage}${bulkPlanningMessage}${planningFailureMessage}`;
-  if (created.length && (bulkPlanningMessage || planningFailureMessage)) snapshot = store.setCompanion("success", message);
+  const message = `${clarificationMessage}${planningFailureMessage}`;
+  if (created.length && planningFailureMessage) snapshot = store.setCompanion("success", message);
   return { ok: true, created, message, snapshot };
 }
 
-function savePendingExtractedTask(pending: PendingExtractedTask, store: ChroniStore, input?: ExtractedInput, replacesTaskId?: string) {
+function savePendingExtractedTask(pending: PendingExtractedTask, store: ChroniStore, input?: ExtractedInput, replacesTaskId?: string, required = true) {
   const now = new Date().toISOString();
   const draftId = `draft-${randomUUID()}`;
   const draft: IntakeDraft = {
@@ -176,13 +184,48 @@ function savePendingExtractedTask(pending: PendingExtractedTask, store: ChroniSt
     reason: pending.reason,
     options: [],
     allowFreeText: true,
-    required: true,
+    required,
     status: "pending",
     createdAt: now,
     resumeToken: randomUUID(),
   };
   draft.pendingClarificationIds = [clarification.id];
   return store.saveIntakeDraft(draft, [clarification], input);
+}
+
+function classifyPendingItems(items: DdlItem[], pendingItems: PendingExtractedTask[]): { items: DdlItem[]; immediate: PendingExtractedTask[]; deferred: PendingExtractedTask[] } {
+  const immediate: PendingExtractedTask[] = [];
+  const deferred: PendingExtractedTask[] = [];
+  const enrichedItems = items.map((item) => ({ ...item, extraction: item.extraction ? { ...item.extraction, uncertainties: [...item.extraction.uncertainties] } : undefined }));
+  for (const pending of pendingItems) {
+    if (!sourceHasResolvedItem(pending.sourceName, enrichedItems)) {
+      immediate.push(pending);
+      continue;
+    }
+    deferred.push(pending);
+    const related = matchingResolvedItem(pending, enrichedItems);
+    if (!related?.extraction) continue;
+    const evidence = sourceEvidence(pending.sourceSummary).trim();
+    const uncertainty = evidence || pending.reason;
+    related.extraction.uncertainties = [...new Set([...related.extraction.uncertainties, uncertainty])].slice(0, 12);
+  }
+  return { items: enrichedItems, immediate, deferred };
+}
+
+function sourceHasResolvedItem(source: string, items: DdlItem[]): boolean {
+  const normalized = source.trim().toLowerCase();
+  return items.some((item) => sourceName(item.sourceSummary) === normalized);
+}
+
+function matchingResolvedItem(pending: PendingExtractedTask, items: DdlItem[]): DdlItem | undefined {
+  const sameSource = items.filter((item) => sourceName(item.sourceSummary) === pending.sourceName.trim().toLowerCase());
+  const titleMatch = sameSource.find((item) => sameTaskTitle(item.title, pending.title));
+  if (titleMatch) return titleMatch;
+  const evidence = normalizeEvidenceText(`${pending.title} ${sourceEvidence(pending.sourceSummary)}`);
+  return sameSource
+    .map((item) => ({ item, score: evidenceOverlapScore(evidence, normalizeEvidenceText(`${item.title} ${sourceEvidence(item.sourceSummary)}`)) }))
+    .filter((entry) => entry.score >= 0.35)
+    .sort((left, right) => right.score - left.score)[0]?.item;
 }
 
 export async function ensureTaskPlan(taskId: string, store: ChroniStore, regenerate = false, mode: "default" | "rules-only" = "default") {
@@ -247,26 +290,28 @@ export async function reprocessSource(sourceId: string, store: ChroniStore): Pro
       pending,
     );
     if (replacement) claimedReplacementIds.add(replacement.id);
-    return { pending, replacement };
+    return { pending, replacement, required: !!replacement || !nextItems.length };
   });
-  const preserveTaskIds = pendingReplacements.flatMap(({ replacement }) => replacement ? [replacement.id] : []);
+  const preserveTaskIds = pendingReplacements.flatMap(({ replacement, required }) => replacement && required ? [replacement.id] : []);
   let snapshot = nextItems.length
     ? store.replaceSourceItems(sourceId, nextItems, message, { preserveTaskIds })
     : store.markSourceAwaitingClarification(sourceId, "重新识别后仍需确认截止时间，已保留现有日程。");
   const extracted: ExtractedInput = { sourceName: source.sourceName, sourceType: source.sourceType, text: source.text };
-  for (const { pending, replacement } of pendingReplacements) {
-    snapshot = savePendingExtractedTask({
+  for (const { pending, replacement, required } of pendingReplacements) {
+    const normalizedPending = {
       ...pending,
       sourceName: source.sourceName,
       sourceType: source.sourceType,
       sourceSummary: `${source.sourceName}: ${pending.sourceSummary.replace(/^直接文本:\s*/, "")}`,
-    }, store, extracted, replacement?.id);
+    };
+    const relatedTask = replacement ?? matchingResolvedItem(normalizedPending, snapshot.items);
+    snapshot = savePendingExtractedTask(normalizedPending, store, extracted, relatedTask?.id, required);
   }
   const preservedTaskIdSet = new Set(preserveTaskIds);
   const refreshedTaskIds = nextItems.length
     ? snapshot.items.filter((item) => item.sourceId === sourceId && !preservedTaskIdSet.has(item.id)).map((item) => item.id)
     : [];
-  const planningFailureCount = await ensureTaskPlans(refreshedTaskIds, store, refreshedTaskIds.length > 1 ? "rules-only" : "default", true);
+  const planningFailureCount = await ensureTaskPlans(refreshedTaskIds, store, "default", true);
   snapshot = store.snapshot();
   const refreshedItems = snapshot.items.filter((item) => refreshedTaskIds.includes(item.id));
   const finalMessage = planningFailureCount ? `${message} ${planningFailureCount} 项执行规划暂未生成，可稍后重试。` : message;
@@ -415,7 +460,7 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
 
 function extractionMessage(count: number, llm: LlmExtraction, pendingCount: number): string {
   if (pendingCount && !count) return `模型已识别 ${pendingCount} 项任务，等待补充精确截止时间。`;
-  const pendingSuffix = pendingCount ? `，另有 ${pendingCount} 项等待确认` : "";
+  const pendingSuffix = pendingCount ? `，另记录 ${pendingCount} 项可选完善信息` : "";
   if (!llm.attempted) return count === 1 ? "已加入 1 条日程。" : `已加入 ${count} 条日程。`;
   if (llm.items.length && llm.errors.length) {
     return `模型已提取日程，另有 ${llm.errors.length} 个分块失败；共加入 ${count} 条日程。`;
@@ -487,8 +532,10 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings: 
           "原文未写明时区时，必须按用户时区解释日期和时间。",
           "sourceSummary 和 contextExcerpt 必须直接摘自原文，不得改写；允许去掉 Markdown 标记。contextExcerpt 应尽量覆盖该任务的提交物、提交方式、限制和风险。",
           "deliverables、submissionMethod、constraints、risks、uncertainties、reminderSuggestions 必须能在原文中找到依据，不得补写常识。",
-          "只有日期、课次或时段但无法换算成精确钟点的任务放入 pendingItems，提出一个精确时间问题，禁止擅自使用 23:59。",
-          "条件性候选截止（例如“可能提前”“如果……则……”“以通知为准”）不得作为正式 items，必须放入 pendingItems；原始已确认截止仍保留在 items。",
+          "只有日期、课次或时段但无法换算成精确钟点、因而无法建立可靠日程的独立任务，才放入 pendingItems；禁止擅自使用 23:59。",
+          "如果同一任务已有明确正式截止，又出现“可能提前”“以通知为准”等条件性候选时间：保留正式截止在 items，把候选变更原文写入该 item 的 uncertainties，并把确认通知的建议写入 reminderSuggestions；不得额外创建正式任务。",
+          "缺失提交平台、非关键格式或活动的精确课次钟点，不得阻止同一文档中其他明确任务的抽取与规划；可放入 pendingItems 供主计划完成后再完善。",
+          "先完整输出所有可直接执行的 items，再记录 pendingItems；不得因为存在次要缺失信息而减少或拒绝明确任务。",
           "即使没有日程，也必须输出 JSON：{\"items\":[],\"pendingItems\":[]}。",
         ].join("\n"),
       },

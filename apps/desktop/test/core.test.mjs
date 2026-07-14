@@ -172,7 +172,94 @@ test("an ambiguous task does not block explicit tasks from the same source", asy
     assert.equal(result.ok, true);
     assert.equal(result.snapshot.items.length, 1);
     assert.match(result.snapshot.items[0].title, /课程报告/);
-    assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending").length, 1);
+    assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending" && item.required).length, 0);
+    assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending" && !item.required).length, 1);
+    assert.notEqual(result.snapshot.companion.state, "needs_clarification");
+  });
+});
+
+test("the comprehensive notice creates five plans before exposing optional refinements", async () => {
+  await withStore(async (store) => {
+    const noticePath = join(process.cwd(), "..", "..", "ddl_agent_test_notice.md");
+    const text = readFileSync(noticePath, "utf8");
+    store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-chat" } });
+    store.updateAgentMemory({ useLlmPlanning: false });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        items: [
+          { title: "机器学习期末项目提交", dueAt: localIso(2026, 7, 20, 23, 59), importance: "high", sourceSummary: "机器学习导论课程期末项目需要在 2026 年 7 月 20 日 23:59 前 提交至课程平台", deliverables: ["项目源码压缩包", "README.md", "项目运行截图不少于 3 张", "一份 1500 字左右的实验报告 PDF"] },
+          { title: "数据库作业五提交", dueAt: localIso(2026, 7, 16, 22, 0), importance: "high", sourceSummary: "数据库系统作业五已经发布。请在 2026-07-16 22:00 前提交" },
+          { title: "创新创业路演材料提交", dueAt: localIso(2026, 7, 17, 18, 0), importance: "high", sourceSummary: "材料请在 2026 年 7 月 17 日 18:00 前 发给项目负责人汇总" },
+          { title: "创新创业预路演", dueAt: localIso(2026, 7, 18, 10, 0), importance: "medium", sourceSummary: "创新创业项目组将于 2026 年 7 月 18 日上午 10:00 进行线上预路演" },
+          { title: "实习申请材料提交", dueAt: localIso(2026, 7, 25, 12, 0), importance: "high", sourceSummary: "请在 2026/07/25 12:00 前将以下材料发送给 HR" },
+        ],
+        pendingItems: [
+          { title: "英语展示活动", importance: "medium", sourceSummary: "展示日期：2026 年 7 月 22 日下午第二节课", question: "下午第二节课具体几点？", reason: "课次无法安全换算为精确钟点。" },
+          { title: "数据库作业五可能提前", importance: "high", sourceSummary: "数据库作业五可能改为 2026-07-15 23:59 前 邮件提交。最终以明天上午通知为准", question: "是否已确认提前？", reason: "候选时间仍以通知为准。" },
+          { title: "英语展示PPT提交时间", importance: "medium", sourceSummary: "缺失信息：具体提交平台和最晚提交时间不明确", question: "提交平台和最晚时间是什么？", reason: "提交信息尚未明确。" },
+        ],
+      }) } }],
+    }), { status: 200 });
+    try {
+      const result = await processIntake({ kind: "text", text }, store);
+
+      assert.equal(result.ok, true);
+      assert.equal(result.snapshot.items.length, 5);
+      assert.equal(result.snapshot.taskPlans.length, 5);
+      assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending" && item.required).length, 0);
+      assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending" && !item.required).length, 3);
+      assert.equal(result.snapshot.items.find((item) => item.title.includes("数据库"))?.extraction?.uncertainties.some((item) => item.includes("可能改为")), true);
+      assert.doesNotMatch(result.message, /等待确认|需要确认/);
+      assert.notEqual(result.snapshot.companion.state, "needs_clarification");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+test("bulk intake uses DeepSeek planning for every extracted task when enabled", async () => {
+  await withStore(async (store) => {
+    const text = "2026年7月20日20:00提交课程报告。2026年7月21日21:00提交实验报告。";
+    store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-chat" } });
+    const originalFetch = globalThis.fetch;
+    let extractionCalls = 0;
+    let planningCalls = 0;
+    globalThis.fetch = async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      const systemPrompt = request.messages[0].content;
+      const content = systemPrompt.includes("DDL 信息抽取器")
+        ? JSON.stringify({
+            items: [
+              { title: "课程报告", dueAt: localIso(2026, 7, 20, 20, 0), importance: "medium", sourceSummary: "2026年7月20日20:00提交课程报告" },
+              { title: "实验报告", dueAt: localIso(2026, 7, 21, 21, 0), importance: "medium", sourceSummary: "2026年7月21日21:00提交实验报告" },
+            ],
+            pendingItems: [],
+          })
+        : JSON.stringify({
+            goal: "完成并提交任务",
+            taskType: "coursework",
+            deliverables: [],
+            constraints: [],
+            bufferMinutes: 30,
+            summary: "已生成任务执行计划。",
+            uncertainties: [],
+            steps: [{ clientId: "complete", title: "完成并检查", description: "完成任务并核对提交要求。", estimatedMinutes: 60, dependsOn: [], completionCriteria: ["任务已完成并核对"] }],
+          });
+      if (systemPrompt.includes("DDL 信息抽取器")) extractionCalls += 1;
+      else planningCalls += 1;
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    };
+    try {
+      const result = await processIntake({ kind: "text", text }, store);
+
+      assert.equal(result.ok, true);
+      assert.equal(extractionCalls, 1);
+      assert.equal(planningCalls, 2);
+      assert.deepEqual(result.snapshot.taskPlans.map((plan) => plan.plannerSource), ["llm", "llm"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 
