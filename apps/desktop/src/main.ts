@@ -11,7 +11,7 @@ import { ensureTaskPlan, extractPayload, processIntake, reprocessSource } from "
 import { testLlmConnection } from "./llm-client.js";
 import { resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
-import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniLlmSettings, CompanionState, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
 import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
@@ -171,10 +171,8 @@ function installIpc(): void {
   });
   ipcMain.handle("chroni:clarification-answer", async (_event, id: string, payload: ClarificationAnswerPayload) => {
     const result = store.answerClarification(validateIdentifier(id, "clarification id"), validateClarificationAnswer(payload));
-    if (result.createdTaskId) await ensureTaskPlan(result.createdTaskId, store);
-    const complete = { ...result, snapshot: store.snapshot() };
+    const complete = await completeClarificationPlanning(result);
     broadcast("chroni:snapshot-updated", complete.snapshot);
-    if (result.createdTaskId) scheduleAgentForTaskChange();
     return complete;
   });
   ipcMain.handle("chroni:clarification-dismiss", (_event, id: string) => publishStoreSnapshot(store.dismissClarification(validateIdentifier(id, "clarification id"))));
@@ -388,9 +386,7 @@ function agentApiOperations(): AgentApiOperations {
     },
     answerClarification: async (id, payload) => {
       const result = store.answerClarification(id, payload);
-      if (result.createdTaskId) await ensureTaskPlan(result.createdTaskId, store);
-      if (result.createdTaskId) scheduleAgentForTaskChange();
-      return { ...result, snapshot: store.snapshot() };
+      return completeClarificationPlanning(result);
     },
     dismissClarification: (id) => store.dismissClarification(id),
     cancelIntakeDraft: (id) => store.cancelIntakeDraft(id),
@@ -408,6 +404,19 @@ function agentApiOperations(): AgentApiOperations {
     deletePlanningPreference: (id) => store.deletePlanningPreference(id),
     clearBehaviorMemory: () => store.clearBehaviorMemory(),
   };
+}
+
+async function completeClarificationPlanning(result: ClarificationResult): Promise<ClarificationResult> {
+  if (!result.createdTaskId) return { ...result, snapshot: store.snapshot() };
+  let message = result.message;
+  try {
+    await ensureTaskPlan(result.createdTaskId, store);
+  } catch {
+    message = `${message} 执行规划暂未生成，可稍后在任务详情中重试。`;
+    store.setCompanion("success", message);
+  }
+  scheduleAgentForTaskChange();
+  return { ...result, message, snapshot: store.snapshot() };
 }
 
 function refreshCompanionFromSchedule(): void {

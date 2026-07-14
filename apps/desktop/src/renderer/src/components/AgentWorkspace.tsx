@@ -6,7 +6,7 @@ const api = window.chroni;
 
 type SnapshotSetter = React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>;
 
-export function ClarificationPanel({ snapshot, setSnapshot }: { snapshot: ChroniSnapshot; setSnapshot: SnapshotSetter }) {
+export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" }: { snapshot: ChroniSnapshot; setSnapshot: SnapshotSetter; variant?: "default" | "agent" }) {
   const pending = snapshot.clarifications.filter((item) => item.status === "pending");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState("");
@@ -30,17 +30,59 @@ export function ClarificationPanel({ snapshot, setSnapshot }: { snapshot: Chroni
     }
   }
 
+  async function reprocess(item: PendingClarification) {
+    const draft = snapshot.intakeDrafts.find((candidate) => candidate.id === item.draftId);
+    const sourceId = item.sourceId ?? draft?.sourceId;
+    if (!sourceId || busyId) return;
+    setBusyId(item.id);
+    setFeedback("");
+    try {
+      const result = await api.reprocessSource(sourceId);
+      setSnapshot(result.snapshot);
+      setFeedback(result.ok ? result.message : result.reason);
+    } catch (error) {
+      setFeedback(formatOperationError(error, "重新识别失败"));
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function cancelDraft(item: PendingClarification) {
+    if (busyId) return;
+    setBusyId(item.id);
+    setFeedback("");
+    try {
+      setSnapshot(await api.cancelIntakeDraft(item.draftId));
+      setFeedback("已放弃这条待确认草稿。");
+    } catch (error) {
+      setFeedback(formatOperationError(error, "无法放弃草稿"));
+    } finally {
+      setBusyId("");
+    }
+  }
+
   return (
-    <section className="clarification-panel" aria-labelledby="clarification-heading">
-      <header><div><p>Agent 需要确认</p><h3 id="clarification-heading">待确认 {pending.length}</h3></div></header>
+    <section className={`clarification-panel ${variant === "agent" ? "agent-clarification-panel" : ""}`} aria-labelledby={`clarification-heading-${variant}`}>
+      <header className="clarification-head">
+        <div className="clarification-head-main">
+          {variant === "agent" && <span className="clarification-mark" aria-hidden="true">?</span>}
+          <div><p>需要你的确认</p><h3 id={`clarification-heading-${variant}`}>有 {pending.length} 条信息需要补充</h3></div>
+        </div>
+        <span className="clarification-count">{pending.length}</span>
+      </header>
+      {variant === "agent" && <p className="clarification-intro">只在标题或截止时间确实无法确定时询问；补充后会继续创建日程和执行规划。</p>}
       {pending.map((item) => {
         const draft = snapshot.intakeDrafts.find((candidate) => candidate.id === item.draftId);
+        const sourceId = item.sourceId ?? draft?.sourceId;
         return (
           <article className="clarification-row" key={item.id}>
+            <div className="clarification-meta">
+              <span>{clarificationFieldLabel(item.field)}</span>
+              {draft?.candidate.title && <em>草稿 · {draft.candidate.title}</em>}
+            </div>
             <div className="clarification-copy">
               <b>{item.question}</b>
               <p>{item.reason}</p>
-              {draft?.candidate.title && <span>草稿：{draft.candidate.title}</span>}
             </div>
             {!!item.options.length && <div className="clarification-options">{item.options.map((option) => <button type="button" key={option.id} disabled={!!busyId} onClick={() => void answer(item, option.id)}>{option.label}</button>)}</div>}
             {item.allowFreeText && (
@@ -49,6 +91,7 @@ export function ClarificationPanel({ snapshot, setSnapshot }: { snapshot: Chroni
                   type={item.field === "dueAt" || item.field === "dueTime" ? "datetime-local" : item.field === "estimatedMinutes" || item.field === "progressPercent" ? "number" : "text"}
                   value={answers[item.id] ?? ""}
                   aria-label={item.question}
+                  placeholder={clarificationPlaceholder(item.field)}
                   onChange={(event) => setAnswers((current) => ({ ...current, [item.id]: event.target.value }))}
                   disabled={!!busyId}
                 />
@@ -56,14 +99,34 @@ export function ClarificationPanel({ snapshot, setSnapshot }: { snapshot: Chroni
               </div>
             )}
             <div className="clarification-actions">
-              <button type="button" className="text-action" disabled={!!busyId} onClick={() => void api.cancelIntakeDraft(item.draftId).then(setSnapshot).catch((error) => setFeedback(formatOperationError(error, "无法放弃草稿")))}>放弃草稿</button>
+              {sourceId && <button type="button" className="text-action reprocess-action" disabled={!!busyId} onClick={() => void reprocess(item)}>{busyId === item.id ? "处理中..." : "重新识别原内容"}</button>}
+              <button type="button" className="text-action discard-action" disabled={!!busyId} onClick={() => void cancelDraft(item)}>放弃草稿</button>
             </div>
           </article>
         );
       })}
-      {feedback && <p className="inline-feedback" aria-live="polite">{feedback}</p>}
+      {feedback && <p className={`inline-feedback ${isClarificationPositiveFeedback(feedback) ? "ok" : "warn"}`} aria-live="polite">{feedback}</p>}
     </section>
   );
+}
+
+function clarificationFieldLabel(field: PendingClarification["field"]): string {
+  if (field === "title") return "缺少标题";
+  if (field === "dueAt" || field === "dueTime") return "缺少截止时间";
+  if (field === "estimatedMinutes") return "缺少预计用时";
+  if (field === "progressPercent") return "缺少当前进度";
+  return "需要补充";
+}
+
+function clarificationPlaceholder(field: PendingClarification["field"]): string {
+  if (field === "title") return "输入任务名称";
+  if (field === "estimatedMinutes") return "例如：90";
+  if (field === "progressPercent") return "例如：50";
+  return "选择日期和时间";
+}
+
+function isClarificationPositiveFeedback(message: string): boolean {
+  return /已|成功|完成|加入|生成|识别/.test(message) && !/失败|无法|错误/.test(message);
 }
 
 export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: DdlItem; snapshot: ChroniSnapshot; setSnapshot: SnapshotSetter; onBack(): void }) {

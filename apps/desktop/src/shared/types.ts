@@ -255,6 +255,7 @@ export type IntakeDraftCandidate = {
 export type IntakeDraft = {
   id: string;
   sourceId?: string;
+  replacesTaskId?: string;
   sourceName: string;
   sourceType: string;
   candidate: IntakeDraftCandidate;

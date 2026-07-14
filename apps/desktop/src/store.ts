@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { createAgentMemory, updateAgentMemory } from "./agent/agent-memory.js";
 import { applyFeedbackEvent, createBehaviorMemory, setPreferenceStatus, upsertExplicitPreference } from "./agent/behavior-memory.js";
@@ -172,25 +172,44 @@ export class ChroniStore {
       this.#save();
       return { ok: true, message: "回答已保存，仍有信息需要确认。", snapshot: this.snapshot() };
     }
-    const existing = this.#state.items.find((item) => dedupeKey(item) === dedupeKeyFromCandidate(draft.candidate.title!, draft.candidate.dueAt!));
-    const task = existing ?? itemFromDraft(draft);
-    if (!existing) this.#state.items.push(task);
+    const replacement = draft.replacesTaskId ? this.#state.items.find((item) => item.id === draft.replacesTaskId) : undefined;
+    const existing = this.#state.items.find((item) => item.id !== replacement?.id && dedupeKey(item) === dedupeKeyFromCandidate(draft.candidate.title!, draft.candidate.dueAt!));
+    let task = existing ?? itemFromDraft(draft);
+    if (existing && replacement) {
+      this.#state.items = this.#state.items.filter((item) => item.id !== replacement.id);
+      this.#state.taskPlans = this.#state.taskPlans.filter((plan) => plan.taskId !== replacement.id);
+      this.#state.taskPlanRevisions = this.#state.taskPlanRevisions.filter((revision) => revision.taskId !== replacement.id);
+    } else if (replacement) {
+      task = {
+        ...task,
+        id: replacement.id,
+        createdAt: replacement.createdAt,
+        completed: replacement.completed,
+        estimatedMinutes: draft.candidate.estimatedMinutes ?? replacement.estimatedMinutes,
+        progressPercent: draft.candidate.progressPercent ?? replacement.progressPercent,
+      };
+      this.#state.items = this.#state.items.map((item) => item.id === replacement.id ? task : item);
+      this.#state.taskPlans = this.#state.taskPlans.filter((plan) => plan.taskId !== replacement.id);
+      this.#state.taskPlanRevisions = this.#state.taskPlanRevisions.filter((revision) => revision.taskId !== replacement.id);
+    } else if (!existing) {
+      this.#state.items.push(task);
+    }
     draft.status = "applied";
     draft.appliedTaskId = task.id;
     if (draft.sourceId) {
       this.#state.sources = this.#state.sources.map((source) => source.id === draft.sourceId
-        ? { ...source, extractionStatus: "success", lastError: undefined, itemIds: [...new Set([...source.itemIds, task.id])], summary: `${source.sourceName}，补全后生成 1 条日程`, updatedAt: answeredAt, lastExtractedAt: answeredAt }
+        ? { ...source, extractionStatus: "success", lastError: undefined, itemIds: [...new Set([...source.itemIds.filter((id) => id !== replacement?.id), task.id])], summary: replacement ? `${source.sourceName}，补全后更新 1 条日程` : `${source.sourceName}，补全后生成 1 条日程`, updatedAt: answeredAt, lastExtractedAt: answeredAt }
         : source);
     }
     this.#state.companion = { state: "success", bubble: `信息已补全，已创建「${task.title}」。` };
     this.#recordWorkflowTrace([
       { stage: "observe", summary: "已读取补全后的任务草稿。", data: { draftId: draft.id } },
       { stage: "plan", summary: "必要字段完整，可以创建正式任务。", data: { hasTitle: true, hasDueAt: true } },
-      { stage: "act", summary: existing ? "匹配到已有任务，未重复创建。" : "已根据明确回答创建正式任务。", data: { taskId: task.id, duplicate: !!existing } },
+      { stage: "act", summary: existing ? "匹配到已有任务，未重复创建。" : replacement ? "已根据确认结果更新原日程。" : "已根据明确回答创建正式任务。", data: { taskId: task.id, duplicate: !!existing, replaced: !!replacement } },
       { stage: "verify", summary: "草稿已标记应用，恢复令牌不会再次创建任务。", data: { applied: true } },
     ]);
     this.#save();
-    return { ok: true, message: existing ? "信息已补全，匹配到已有任务。" : "信息已补全并创建任务，正在准备执行规划。", createdTaskId: task.id, snapshot: this.snapshot() };
+    return { ok: true, message: existing ? "信息已补全，匹配到已有任务。" : replacement ? "信息已补全并更新原日程，正在重新准备执行规划。" : "信息已补全并创建任务，正在准备执行规划。", createdTaskId: task.id, snapshot: this.snapshot() };
   }
 
   dismissClarification(id: string): ChroniSnapshot {
@@ -360,16 +379,28 @@ export class ChroniStore {
   addItems(items: DdlItem[], message = "已加入日程。", extracted: ExtractedInput[] = []): ChroniSnapshot {
     const existingKeys = new Set(this.#state.items.map((item) => dedupeKey(item)));
     const existingByKey = new Map(this.#state.items.map((item) => [dedupeKey(item), item]));
-    const sources = extracted.map((input) => sourceRecordFromInput(input));
-    const sourceByName = new Map(sources.map((source) => [source.sourceName, source]));
+    const sources = extracted.map((input) => {
+      const existing = this.#state.sources.find((source) => source.sourceName === input.sourceName && source.text === input.text);
+      if (!existing) return sourceRecordFromInput(input);
+      const updatedAt = new Date().toISOString();
+      return { ...existing, sourceType: input.sourceType, updatedAt, lastExtractedAt: updatedAt, lastError: undefined };
+    });
+    const resolvedPreviousSourceIds = new Set(sources.flatMap((source) => {
+      const hasResolvedItem = items.some((item) => sourceForItem(item, sources)?.id === source.id);
+      if (!hasResolvedItem) return [];
+      return this.#state.sources
+        .filter((existing) => existing.sourceName === source.sourceName && existing.text === source.text)
+        .map((existing) => existing.id);
+    }));
+    this.#expirePendingDraftsForSources(resolvedPreviousSourceIds);
     const accepted = items
       .filter((item) => !existingKeys.has(dedupeKey(item)))
       .map((item) => {
-        const source = sourceForItem(item, sources, sourceByName);
+        const source = sourceForItem(item, sources);
         return source ? { ...item, sourceId: source.id } : item;
       });
     for (const source of sources) {
-      const sourceItems = items.filter((item) => sourceForItem(item, sources, sourceByName)?.id === source.id);
+      const sourceItems = items.filter((item) => sourceForItem(item, sources)?.id === source.id);
       const acceptedForSource = accepted.filter((item) => item.sourceId === source.id);
       const duplicateIds = sourceItems
         .map((item) => existingByKey.get(dedupeKey(item))?.id)
@@ -390,7 +421,12 @@ export class ChroniStore {
   }
 
   recordSourceFailure(extracted: ExtractedInput[], reason: string): ChroniSnapshot {
-    const sources = extracted.map((input) => sourceRecordFromInput(input, "failed", reason));
+    const sources = extracted.map((input) => {
+      const existing = this.#state.sources.find((source) => source.sourceName === input.sourceName && source.text === input.text);
+      if (!existing) return sourceRecordFromInput(input, "failed", reason);
+      const updatedAt = new Date().toISOString();
+      return { ...existing, sourceType: input.sourceType, extractionStatus: "failed" as const, lastError: reason, updatedAt, lastExtractedAt: updatedAt };
+    });
     this.#state.sources = sources.length ? pruneSources([...sources, ...this.#state.sources]) : this.#state.sources;
     this.#save();
     return this.snapshot();
@@ -480,6 +516,7 @@ export class ChroniStore {
     });
     const existing = this.#state.items.filter((item) => item.sourceId !== sourceId);
     const accepted = mergeNewItems(existing, retainedCandidates);
+    if (items.length) this.#expirePendingDraftsForSources(new Set([sourceId]));
     const itemIds = itemIdsForCandidates(accepted, items);
     this.#state.items = accepted;
     const validTaskIds = new Set(accepted.map((item) => item.id));
@@ -505,6 +542,21 @@ export class ChroniStore {
     return this.snapshot();
   }
 
+  #expirePendingDraftsForSources(sourceIds: Set<string>): void {
+    if (!sourceIds.size) return;
+    const updatedAt = new Date().toISOString();
+    const draftIds = new Set(this.#state.intakeDrafts
+      .filter((draft) => draft.status === "needs-clarification" && draft.sourceId && sourceIds.has(draft.sourceId))
+      .map((draft) => draft.id));
+    if (!draftIds.size) return;
+    this.#state.intakeDrafts = this.#state.intakeDrafts.map((draft) => draftIds.has(draft.id)
+      ? { ...draft, status: "cancelled", updatedAt }
+      : draft);
+    this.#state.clarifications = this.#state.clarifications.map((clarification) => draftIds.has(clarification.draftId) && clarification.status === "pending"
+      ? { ...clarification, status: "expired", answeredAt: updatedAt }
+      : clarification);
+  }
+
   markSourceFailed(sourceId: string, reason: string): ChroniSnapshot {
     let found = false;
     this.#state.sources = this.#state.sources.map((record) => {
@@ -522,6 +574,16 @@ export class ChroniStore {
     this.#state.companion = found
       ? { state: "confused", bubble: reason }
       : { state: "confused", bubble: "找不到原始输入，无法重新识别。" };
+    this.#save();
+    return this.snapshot();
+  }
+
+  markSourceAwaitingClarification(sourceId: string, reason: string): ChroniSnapshot {
+    const updatedAt = new Date().toISOString();
+    this.#state.sources = this.#state.sources.map((source) => source.id === sourceId
+      ? { ...source, extractionStatus: "failed", lastError: reason, summary: `${source.sourceName}，等待确认并保留现有日程`, updatedAt, lastExtractedAt: updatedAt }
+      : source);
+    this.#state.companion = { state: "needs_clarification", bubble: reason };
     this.#save();
     return this.snapshot();
   }
@@ -847,10 +909,19 @@ function sourceNameFromSummary(summary: string): string {
   return summary.split(":", 1)[0] || "";
 }
 
-function sourceForItem(item: DdlItem, sources: SourceRecord[], sourceByName: Map<string, SourceRecord>): SourceRecord | undefined {
-  return sourceByName.get(sourceNameFromSummary(item.sourceSummary))
-    ?? sources.find((source) => hasSourceEvidence(item.sourceSummary, source.text))
+function sourceForItem(item: DdlItem, sources: SourceRecord[]): SourceRecord | undefined {
+  const expectedName = sourceNameFromSummary(item.sourceSummary);
+  const named = sources.filter((source) => source.sourceName === expectedName);
+  const evidence = sourceEvidenceFromSummary(item.sourceSummary);
+  return named.find((source) => hasSourceEvidence(evidence, source.text))
+    ?? sources.find((source) => hasSourceEvidence(evidence, source.text))
+    ?? (named.length === 1 ? named[0] : undefined)
     ?? sources[0];
+}
+
+function sourceEvidenceFromSummary(summary: string): string {
+  const separator = summary.indexOf(":");
+  return separator >= 0 ? summary.slice(separator + 1) : summary;
 }
 
 function hasSourceEvidence(summary: string, sourceText: string): boolean {
@@ -870,7 +941,7 @@ function pruneSources(sources: SourceRecord[]): SourceRecord[] {
   const seen = new Set<string>();
   const result: SourceRecord[] = [];
   for (const source of sources) {
-    const key = `${source.sourceName}|${source.text.slice(0, 200)}`;
+    const key = `${source.sourceName}|${createHash("sha256").update(source.text).digest("hex")}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(source);

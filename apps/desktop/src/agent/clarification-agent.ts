@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ExtractedInput, IntakeDraft, PendingClarification } from "../shared/types.js";
 import type { ChroniLlmSettings } from "../shared/types.js";
+import { deadlineDateFromText, isConditionalDeadlineText, stripDeadlineTemporalExpressions } from "../shared/deadline-text.js";
 import { requestChatCompletion } from "../llm-client.js";
 
 export type CompletenessAnalysis = {
@@ -13,11 +14,12 @@ export function analyzeCompleteness(input: ExtractedInput, now = new Date()): Co
   const createdAt = now.toISOString();
   const draftId = `draft-${randomUUID()}`;
   const title = inferTitle(input.text);
-  const dueAt = explicitDeadline(input.text, now);
+  const dueAt = deadlineDateFromText(input.text, now);
   const ambiguousNextWeek = /下周(?![一二三四五六日天])/.test(input.text);
+  const conditionalDeadline = isConditionalDeadlineText(input.text);
   const candidate: IntakeDraft["candidate"] = {
     ...(title ? { title } : {}),
-    ...(dueAt && !ambiguousNextWeek ? { dueAt } : {}),
+    ...(dueAt && !ambiguousNextWeek && !conditionalDeadline ? { dueAt } : {}),
     importance: inferImportance(input.text),
     taskType: inferTaskType(input.text),
   };
@@ -38,9 +40,9 @@ export function analyzeCompleteness(input: ExtractedInput, now = new Date()): Co
       id: `clarification-${randomUUID()}`,
       draftId,
       field: "dueAt",
-      question: ambiguousNextWeek ? "“下周”具体是指哪一天截止？" : "这项任务的最终截止日期和时间是什么？",
-      reason: ambiguousNextWeek ? "相对日期“下周”无法映射到唯一日期。" : "缺少明确且合法的截止时间。",
-      options: ambiguousNextWeek ? nextWeekOptions(now) : [],
+      question: ambiguousNextWeek ? "“下周”具体是指哪一天截止？" : conditionalDeadline ? "请确认这项任务最终采用哪个截止时间。" : "这项任务的最终截止日期和时间是什么？",
+      reason: ambiguousNextWeek ? "相对日期“下周”无法映射到唯一日期。" : conditionalDeadline ? "原文说明时间仍受条件或后续通知影响，不能直接创建正式日程。" : "缺少明确且合法的截止时间。",
+      options: ambiguousNextWeek ? nextWeekOptions(now) : conditionalDeadline && dueAt ? [{ id: "use-candidate-deadline", label: "采用原文候选时间", value: dueAt }] : [],
       now,
     }));
   }
@@ -172,32 +174,12 @@ function atDeadline(value: Date): Date {
   return result;
 }
 
-function explicitDeadline(text: string, now: Date): string | undefined {
-  const full = text.match(/(20\d{2})[年\/.\-](\d{1,2})[月\/.\-](\d{1,2})日?(?:\s*(\d{1,2})[:：点](\d{2})?)?/);
-  if (full) return localDate(Number(full[1]), Number(full[2]), Number(full[3]), Number(full[4] ?? 23), Number(full[5] ?? 59));
-  const partial = text.match(/(\d{1,2})[月\/.\-](\d{1,2})日?(?:\s*(\d{1,2})[:：点](\d{2})?)?/);
-  if (partial) {
-    const month = Number(partial[1]);
-    const day = Number(partial[2]);
-    let year = now.getFullYear();
-    if (new Date(year, month - 1, day, 23, 59).getTime() < now.getTime()) year += 1;
-    return localDate(year, month, day, Number(partial[3] ?? 23), Number(partial[4] ?? 59));
-  }
-  return undefined;
-}
-
-function localDate(year: number, month: number, day: number, hour: number, minute: number): string | undefined {
-  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return undefined;
-  return date.toISOString();
-}
-
 function inferTitle(text: string): string | undefined {
-  const cleaned = text
-    .replace(/20\d{2}[年\/.\-]\d{1,2}[月\/.\-]\d{1,2}日?/g, " ")
-    .replace(/\d{1,2}[月\/.\-]\d{1,2}日?/g, " ")
-    .replace(/\d{1,2}[:：点]\d{0,2}/g, " ")
-    .replace(/(今天|明天|后天|下周|本周|周[一二三四五六日天]|星期[一二三四五六日天]|截止|截至|之前|完成|提交|上交|请|需要|记得)/g, " ")
+  const cleaned = stripDeadlineTemporalExpressions(text)
+    .replace(/如果[^，,。；;]+[，,]?/g, " ")
+    .replace(/以[^，,。；;]+为准/g, " ")
+    .replace(/(可能|暂定|最终|尚未确定|待确认|待通知|另行通知)/g, " ")
+    .replace(/(截止|截至|之前|完成|提交|上交|请|需要|记得)/g, " ")
     .replace(/[。！!，,：:\s]+/g, " ")
     .trim();
   if (!cleaned || !/(作业|报告|论文|项目|实验|考试|答辩|汇报|任务|presentation|assignment|report)/i.test(cleaned)) return undefined;

@@ -147,12 +147,17 @@ test("records duplicate intake without creating another schedule item", async ()
   await withStore(async (store) => {
     const text = "7月12日 23:59 提交课程报告";
     const first = await processIntake({ kind: "text", text }, store);
+    const sourceId = first.snapshot.sources[0].id;
     const itemCountAfterFirst = first.snapshot.items.length;
     const second = await processIntake({ kind: "text", text }, store);
 
     assert.equal(second.snapshot.items.length, itemCountAfterFirst);
+    assert.equal(second.snapshot.sources.length, 1);
+    assert.equal(second.snapshot.sources[0].id, sourceId);
+    assert.equal(second.snapshot.items[0].sourceId, sourceId);
     assert.equal(second.snapshot.sources[0].extractionStatus, "duplicate");
     assert.equal(second.snapshot.sources[0].itemIds.length, 1);
+    assert.match(second.message, /已经存在/);
   });
 });
 
@@ -290,6 +295,174 @@ test("relative deadlines use the explicit time rather than unrelated numbers", (
   assert.equal(items.length, 1);
   assert.equal(new Date(items[0].dueAt).getHours(), 18);
   assert.equal(new Date(items[0].dueAt).getMinutes(), 0);
+});
+
+test("Chinese numeral clock times create a schedule item without clarification", async () => {
+  const text = "今天晚上八点提交课程项目";
+  const items = extractDdlItemsFromText(text, "日程安排.txt");
+  const halfPast = extractDdlItemsFromText("明天下午三点半完成课程报告");
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].title, "课程项目");
+  assert.equal(new Date(items[0].dueAt).getHours(), 20);
+  assert.equal(halfPast[0].title, "课程报告");
+  assert.equal(new Date(halfPast[0].dueAt).getHours(), 15);
+  assert.equal(new Date(halfPast[0].dueAt).getMinutes(), 30);
+
+  await withStore(async (store) => {
+    const result = await processIntake({
+      kind: "files",
+      files: [{ name: "日程安排.txt", contentBase64: Buffer.from(text).toString("base64") }],
+    }, store);
+    assert.equal(result.ok, true);
+    assert.equal(result.snapshot.items.length, 1);
+    assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending").length, 0);
+  });
+});
+
+test("common Chinese aliases, comma-separated tasks, and contextual titles stay accurate", () => {
+  const tonight = extractDdlItemsFromText("今晚八点提交课程项目");
+  const tomorrowNight = extractDdlItemsFromText("明晚8点提交课程报告");
+  const tomorrowMorning = extractDdlItemsFromText("明早九点参加答辩");
+  const numberedDate = extractDdlItemsFromText("7月20号晚上八点提交报告");
+  const multiple = extractDdlItemsFromText("明天八点交报告，后天九点交作业");
+  const contextual = extractDdlItemsFromText("数据库系统作业五已经发布。请在 2026-07-16 22:00 前提交。");
+
+  assert.equal(new Date(tonight[0].dueAt).getHours(), 20);
+  assert.equal(new Date(tomorrowNight[0].dueAt).getHours(), 20);
+  assert.equal(new Date(tomorrowMorning[0].dueAt).getHours(), 9);
+  assert.equal(tomorrowMorning[0].title, "答辩");
+  assert.equal(numberedDate[0].title, "报告");
+  assert.deepEqual(multiple.map((item) => item.title), ["报告", "作业"]);
+  assert.equal(contextual[0].title, "数据库系统作业五");
+});
+
+test("a deadline without a task name asks only for the missing title", async () => {
+  await withStore(async (store) => {
+    const result = await processIntake({ kind: "text", text: "明天八点提交" }, store);
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.snapshot.clarifications.filter((item) => item.status === "pending").map((item) => item.field), ["title"]);
+  });
+});
+
+test("conditional deadlines remain pending instead of becoming formal schedule items", async () => {
+  await withStore(async (store) => {
+    const result = await processIntake({ kind: "text", text: "如果老师同意，明天八点提交报告，以通知为准" }, store);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.snapshot.items.length, 0);
+    assert.equal(result.snapshot.intakeDrafts[0].candidate.title, "报告");
+    assert.equal(result.snapshot.clarifications[0].field, "dueAt");
+    assert.match(result.snapshot.clarifications[0].reason, /条件|通知/);
+  });
+});
+
+test("one document with multiple incomplete tasks creates independent drafts on one source", async () => {
+  await withStore(async (store) => {
+    const result = await processIntake({ kind: "text", text: "下周完成机器学习作业。今天晚上提交课程报告。" }, store);
+    const pending = result.snapshot.clarifications.filter((item) => item.status === "pending");
+
+    assert.equal(result.ok, false);
+    assert.equal(result.snapshot.sources.length, 1);
+    assert.equal(result.snapshot.intakeDrafts.length, 2);
+    assert.deepEqual(new Set(result.snapshot.intakeDrafts.map((draft) => draft.sourceId)).size, 1);
+    assert.deepEqual(result.snapshot.intakeDrafts.map((draft) => draft.candidate.title).sort(), ["机器学习作业", "课程报告"]);
+    assert.equal(pending.length, 2);
+  });
+});
+
+test("a model cannot downgrade a locally explicit deadline to pending confirmation", async () => {
+  await withStore(async (store) => {
+    const text = "今天晚上八点提交课程项目";
+    store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-v4-flash" } });
+    store.updateAgentMemory({ useLlmPlanning: false });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        items: [],
+        pendingItems: [{
+          title: "课程项目",
+          importance: "medium",
+          sourceSummary: text,
+          contextExcerpt: text,
+          deliverables: [],
+          question: "这项任务叫什么，截止时间是什么？",
+          reason: "模型没有确定标题和时间。",
+        }],
+      }) } }],
+    }), { status: 200 });
+    try {
+      const result = await processIntake({ kind: "text", text }, store);
+      assert.equal(result.ok, true);
+      assert.equal(result.snapshot.items.length, 1);
+      assert.equal(result.snapshot.items[0].title, "课程项目");
+      assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending").length, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+test("reprocessing a corrected source closes its stale clarification draft", async () => {
+  await withStore(async (store) => {
+    const initial = await processIntake({ kind: "text", text: "今天晚上提交课程项目" }, store);
+    assert.equal(initial.ok, false);
+    assert.equal(initial.snapshot.clarifications.filter((item) => item.status === "pending").length, 1);
+
+    const source = initial.snapshot.sources[0];
+    store.updateSourceText(source.id, "今天晚上八点提交课程项目");
+    const result = await reprocessSource(source.id, store);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.snapshot.items.length, 1);
+    assert.equal(result.snapshot.items[0].title, "课程项目");
+    assert.equal(result.snapshot.clarifications.filter((item) => item.status === "pending").length, 0);
+    assert.equal(result.snapshot.intakeDrafts[0].status, "cancelled");
+  });
+});
+
+test("pending reprocessing preserves the old task and updates it after confirmation", async () => {
+  await withStore(async (store) => {
+    const initial = await processIntake({ kind: "text", text: "7月20日 20:00 提交课程报告" }, store);
+    const taskId = initial.snapshot.items[0].id;
+    const sourceId = initial.snapshot.sources[0].id;
+    const revisedText = "课程报告改为7月22日下午第二节课提交，具体钟点未说明";
+    store.updateSourceText(sourceId, revisedText);
+    store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-v4-flash" } });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        items: [],
+        pendingItems: [{
+          title: "课程报告",
+          importance: "medium",
+          sourceSummary: revisedText,
+          contextExcerpt: revisedText,
+          deliverables: [],
+          question: "下午第二节课具体几点？",
+          reason: "课次不能安全换算为钟点。",
+        }],
+      }) } }],
+    }), { status: 200 });
+    try {
+      const pendingResult = await reprocessSource(sourceId, store);
+      assert.equal(pendingResult.ok, true);
+      assert.equal(pendingResult.snapshot.items.length, 1);
+      assert.equal(pendingResult.snapshot.items[0].id, taskId);
+      assert.equal(pendingResult.snapshot.clarifications.filter((item) => item.status === "pending").length, 1);
+      assert.equal(pendingResult.snapshot.intakeDrafts[0].replacesTaskId, taskId);
+
+      const clarification = pendingResult.snapshot.clarifications.find((item) => item.status === "pending");
+      const answered = store.answerClarification(clarification.id, { value: "2026-07-22T14:00:00+08:00" });
+      assert.equal(answered.snapshot.items.length, 1);
+      assert.equal(answered.snapshot.items[0].id, taskId);
+      assert.equal(answered.snapshot.items[0].dueAt, "2026-07-22T06:00:00.000Z");
+      assert.deepEqual(answered.snapshot.sources[0].itemIds, [taskId]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 test("invalid calendar dates are not rolled into a different date", () => {
@@ -771,6 +944,74 @@ test("multi-file intake links each created item to the matching source text", as
     assert.equal(sourceA?.itemIds.length, 1);
     assert.equal(sourceB?.itemIds.length, 1);
     assert.notEqual(sourceA?.itemIds[0], sourceB?.itemIds[0]);
+  });
+});
+
+test("files with the same name keep distinct sources and correct item links", async () => {
+  await withStore(async (store) => {
+    const result = await processIntake({
+      kind: "files",
+      files: [
+        { name: "notice.txt", contentBase64: Buffer.from("明天 20:00 提交课程报告").toString("base64") },
+        { name: "notice.txt", contentBase64: Buffer.from("后天 21:00 提交实验作业").toString("base64") },
+      ],
+    }, store);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.snapshot.sources.length, 2);
+    assert.equal(result.snapshot.items.length, 2);
+    for (const item of result.snapshot.items) {
+      const source = result.snapshot.sources.find((candidate) => candidate.id === item.sourceId);
+      assert.ok(source);
+      assert.equal(source.text.includes(item.title), true);
+    }
+  });
+});
+
+test("pending tasks from same-named files stay attached to their own source", async () => {
+  await withStore(async (store) => {
+    store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-v4-flash" } });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      const sourceText = String(body.messages.at(-1).content);
+      const report = sourceText.includes("课程报告");
+      const evidence = report ? "本周提交课程报告，具体时间未通知" : "下周完成实验作业，具体日期未通知";
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({
+          items: [],
+          pendingItems: [{
+            title: report ? "课程报告" : "实验作业",
+            importance: "medium",
+            sourceSummary: evidence,
+            contextExcerpt: evidence,
+            deliverables: [],
+            question: report ? "课程报告何时截止？" : "实验作业何时截止？",
+            reason: "原文没有精确日期和时间。",
+          }],
+        }) } }],
+      }), { status: 200 });
+    };
+    try {
+      const result = await processIntake({
+        kind: "files",
+        files: [
+          { name: "notice.txt", contentBase64: Buffer.from("本周提交课程报告，具体时间未通知").toString("base64") },
+          { name: "notice.txt", contentBase64: Buffer.from("下周完成实验作业，具体日期未通知").toString("base64") },
+        ],
+      }, store);
+
+      assert.equal(result.ok, true);
+      assert.equal(result.snapshot.sources.length, 2);
+      assert.equal(result.snapshot.intakeDrafts.length, 2);
+      for (const draft of result.snapshot.intakeDrafts) {
+        const source = result.snapshot.sources.find((candidate) => candidate.id === draft.sourceId);
+        assert.ok(source);
+        assert.equal(source.text.includes(draft.candidate.title), true);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

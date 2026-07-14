@@ -579,7 +579,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
       </header>
 
       {feedback && <p className={`inline-feedback ${isPositiveFeedback(feedback) ? "ok" : "warn"}`} role="status" aria-live="polite">{feedback}</p>}
-      <ClarificationPanel snapshot={snapshot} setSnapshot={setSnapshot} />
+      <ClarificationPanel snapshot={snapshot} setSnapshot={setSnapshot} variant="agent" />
 
       {!latest ? (
         <section className="agent-welcome">
@@ -882,14 +882,14 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
           <h3>抽取预览</h3>
           {!preview.ok && <p className="preview-error">{preview.reason}</p>}
           {preview.ok && <p className={`inline-feedback ${isPositiveFeedback(preview.message) ? "ok" : "warn"}`}>{preview.message}</p>}
-          {preview.extracted.map((input) => (
-            <article key={`${input.sourceName}-${input.sourceType}`}>
+          {preview.extracted.map((input, index) => (
+            <article key={`${input.sourceName}-${input.sourceType}-${index}`}>
               <b>{input.sourceName}</b>
               <span>{input.sourceType}，抽取 {input.text.length} 字</span>
             </article>
           ))}
-          {preview.failures.map((failure) => (
-            <article key={`${failure.sourceName}-${failure.sourceType}-failed`} className="preview-failure">
+          {preview.failures.map((failure, index) => (
+            <article key={`${failure.sourceName}-${failure.sourceType}-failed-${index}`} className="preview-failure">
               <b>{failure.sourceName}</b>
               <span>{failure.reason}</span>
             </article>
@@ -900,13 +900,13 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
               <span>{importanceLabel(item.importance)} · {formatDue(item.dueAt)} · {remainingText(item.dueAt)}</span>
             </article>
           ))}
-          {preview.pendingItems.map((item) => (
-            <article key={`${item.sourceName}-${item.title}-pending`} className="preview-failure">
+          {preview.pendingItems.map((item, index) => (
+            <article key={`${item.sourceName}-${item.title}-pending-${index}`} className="preview-failure">
               <b>{item.title} · 待确认</b>
               <span>{item.question}</span>
             </article>
           ))}
-          {preview.ok && (
+          {!!preview.extracted.length && previewPayload && (
             <button type="button" disabled={isBusy} onClick={async () => {
               if (isBusy) return;
               setBusyMessage("正在填入日程...");
@@ -922,7 +922,7 @@ function CorrectionPane({ snapshot, setSnapshot }: ViewProps) {
               } finally {
                 setBusyMessage("");
               }
-            }}>填入日程</button>
+            }}>{preview.ok ? "填入日程" : "继续识别并处理"}</button>
           )}
         </div>
       )}

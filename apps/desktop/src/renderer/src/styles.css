@@ -2924,6 +2924,30 @@ details.source-history[open] > summary::after {
   border-bottom: 1px solid var(--line);
 }
 
+.clarification-head-main,
+.clarification-meta {
+  display: flex;
+  align-items: center;
+}
+
+.clarification-head-main {
+  min-width: 0;
+  gap: 10px;
+}
+
+.clarification-count {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: #fff1d8;
+  color: #9a5d0b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .clarification-panel > header,
 .behavior-memory > header,
 .plan-steps > header,
@@ -2966,6 +2990,33 @@ details.source-history[open] > summary::after {
   padding: 12px;
 }
 
+.clarification-meta {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.clarification-meta span,
+.clarification-meta em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clarification-meta span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #fff1d8;
+  color: #9a5d0b;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.clarification-meta em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
 .clarification-copy p,
 .clarification-copy span,
 .preference-row p,
@@ -2999,12 +3050,110 @@ details.source-history[open] > summary::after {
 
 .clarification-input input {
   min-width: min(280px, 100%);
+  flex: 1;
+}
+
+.clarification-options button,
+.clarification-input button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #cbdad5;
+  border-radius: 7px;
+  background: #eef5f2;
+  color: #315e55;
+  font-weight: 900;
+}
+
+.clarification-options button:hover,
+.clarification-input button:hover {
+  border-color: #a9c5bc;
+  background: #e4f0ec;
+  box-shadow: none;
 }
 
 .text-action {
   border-color: transparent;
   background: transparent;
   color: var(--muted);
+}
+
+.reprocess-action {
+  color: #3f6f78;
+  font-weight: 800;
+}
+
+.discard-action:hover {
+  color: var(--red);
+}
+
+.agent-clarification-panel {
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid #ead9b8;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fff9ed 0%, #fffefa 72%);
+  box-shadow: 0 10px 28px rgba(91, 67, 31, 0.05);
+}
+
+.clarification-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: #b7791f;
+  color: white;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.agent-clarification-panel .clarification-head h3 {
+  font-size: 16px;
+}
+
+.clarification-intro {
+  margin: -2px 0 2px 44px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-clarification-panel .clarification-row {
+  border-color: #eadfcb;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.agent-clarification-panel .clarification-copy b {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.agent-clarification-panel .clarification-actions {
+  padding-top: 2px;
+  border-top: 1px solid #f0e8d9;
+}
+
+@media (max-width: 560px) {
+  .agent-clarification-panel {
+    padding: 14px;
+  }
+
+  .clarification-intro {
+    margin-left: 0;
+  }
+
+  .clarification-input {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .clarification-input input,
+  .clarification-input button {
+    width: 100%;
+  }
 }
 
 .task-detail-pane {
