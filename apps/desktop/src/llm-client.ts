@@ -49,8 +49,11 @@ export async function requestChatCompletion(
       signal: controller.signal,
     });
     if (!response.ok) {
-      const detail = await responseErrorDetail(response);
-      throw new LlmRequestError(kindForStatus(response.status), `HTTP ${response.status}${detail ? `: ${detail}` : ""}`, response.status);
+      // Provider response bodies may contain English diagnostics, request IDs or
+      // deployment details. The status is enough to give the user a next step.
+      await response.body?.cancel().catch(() => undefined);
+      const kind = kindForStatus(response.status);
+      throw new LlmRequestError(kind, requestFailureMessage(kind), response.status);
     }
     const data = await response.json() as { choices?: Array<{ message?: { content?: unknown } }> };
     const content = data.choices?.[0]?.message?.content;
@@ -61,7 +64,7 @@ export async function requestChatCompletion(
   } catch (error) {
     if (error instanceof LlmRequestError) throw error;
     if (controller.signal.aborted) throw new LlmRequestError("timeout", `模型请求超过 ${Math.ceil(timeoutMs / 1000)} 秒。`);
-    throw new LlmRequestError("network", error instanceof Error ? error.message : "无法连接模型服务。");
+    throw new LlmRequestError("network", "无法连接模型服务，请检查 API 地址和网络。");
   } finally {
     clearTimeout(timeout);
   }
@@ -78,7 +81,7 @@ export async function testLlmConnection(settings: ChroniLlmSettings, options: Om
   } catch (error) {
     const failure = error instanceof LlmRequestError
       ? error
-      : new LlmRequestError("network", error instanceof Error ? error.message : "无法连接模型服务。");
+      : new LlmRequestError("network", "无法连接模型服务，请检查 API 地址和网络。");
     return { ok: false, kind: failure.kind, message: connectionMessage(failure) };
   }
 }
@@ -108,29 +111,19 @@ function kindForStatus(status: number): LlmRequestFailureKind {
   return "response";
 }
 
-async function responseErrorDetail(response: Response): Promise<string> {
-  try {
-    const text = (await response.text()).slice(0, 2_000);
-    if (!text) return "";
-    try {
-      const parsed = JSON.parse(text) as { error?: { message?: unknown }; message?: unknown };
-      const detail = parsed.error?.message ?? parsed.message;
-      return typeof detail === "string" ? detail.slice(0, 300) : text.slice(0, 300);
-    } catch {
-      return text.slice(0, 300);
-    }
-  } catch {
-    return "";
-  }
+function requestFailureMessage(kind: LlmRequestFailureKind): string {
+  if (kind === "authentication") return "API Key 无效或没有模型访问权限。";
+  if (kind === "model") return "API 地址或模型名称不可用，请检查配置。";
+  if (kind === "rate_limit") return "模型服务正忙或额度不足，请稍后重试。";
+  return "模型服务响应异常，请稍后重试。";
 }
 
 function connectionMessage(error: LlmRequestError): string {
-  const detail = error.message;
-  if (error.kind === "configuration") return detail;
-  if (error.kind === "authentication") return `API Key 无效或无权限。${detail}`;
-  if (error.kind === "model") return `API 地址或模型名称不可用。${detail}`;
-  if (error.kind === "rate_limit") return `模型服务限流或余额不足。${detail}`;
-  if (error.kind === "timeout") return `连接超时。${detail}`;
-  if (error.kind === "response") return `模型响应异常。${detail}`;
-  return `无法连接模型服务。${detail}`;
+  if (error.kind === "configuration") return error.message;
+  if (error.kind === "authentication") return "API Key 无效或没有模型访问权限，请检查后重试。";
+  if (error.kind === "model") return "API 地址或模型名称不可用，请检查后重试。";
+  if (error.kind === "rate_limit") return "模型服务正忙或额度不足，请稍后重试。";
+  if (error.kind === "timeout") return "连接模型服务超时，请稍后重试。";
+  if (error.kind === "response") return "模型服务返回了无法识别的内容，请稍后重试。";
+  return "无法连接模型服务，请检查 API 地址和网络。";
 }

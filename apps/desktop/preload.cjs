@@ -1,5 +1,12 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
+let latestControlRoute;
+const controlNavigateCallbacks = new Set();
+ipcRenderer.on("chroni:control-navigate", (_event, route) => {
+  latestControlRoute = route;
+  for (const callback of controlNavigateCallbacks) callback(route);
+});
+
 contextBridge.exposeInMainWorld("chroni", {
   platform: process.platform,
   getSnapshot: () => ipcRenderer.invoke("chroni:snapshot"),
@@ -26,7 +33,7 @@ contextBridge.exposeInMainWorld("chroni", {
   deletePlanningPreference: (id) => ipcRenderer.invoke("chroni:planning-preference-delete", id),
   clearBehaviorMemory: () => ipcRenderer.invoke("chroni:behavior-memory-clear"),
   quickAdd: (text) => ipcRenderer.invoke("chroni:quick-add", text),
-  openControlCenter: () => ipcRenderer.invoke("chroni:open-control"),
+  openControlCenter: (route) => ipcRenderer.invoke("chroni:open-control", route),
   openPetMenu: () => ipcRenderer.invoke("chroni:open-pet-menu"),
   showSchedule: (expanded) => ipcRenderer.invoke("chroni:show-schedule", expanded),
   reprocessSource: (sourceId) => ipcRenderer.invoke("chroni:source-reprocess", sourceId),
@@ -45,5 +52,10 @@ contextBridge.exposeInMainWorld("chroni", {
     const listener = (_event, command) => callback(command);
     ipcRenderer.on("chroni:pet-action", listener);
     return () => ipcRenderer.removeListener("chroni:pet-action", listener);
+  },
+  onControlNavigate: (callback) => {
+    controlNavigateCallbacks.add(callback);
+    if (latestControlRoute) callback(latestControlRoute);
+    return () => controlNavigateCallbacks.delete(callback);
   },
 });

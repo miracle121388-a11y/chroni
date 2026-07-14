@@ -11,9 +11,10 @@ import { ensureTaskPlan, extractPayload, processIntake, reprocessSource } from "
 import { testLlmConnection } from "./llm-client.js";
 import { resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
-import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
+import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
+import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
-import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface } from "./windows.js";
+import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface, type ControlCenterRoute } from "./windows.js";
 import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
 
 let store: ChroniStore;
@@ -101,11 +102,12 @@ function installIpc(): void {
   });
   ipcMain.handle("chroni:intake", async (_event, payload: IntakePayload) => {
     const validatedPayload = validateIntakePayload(payload);
+    const previousPendingIds = pendingClarificationIds();
     beginPetInput(validatedPayload, "正在识别 DDL...");
     try {
       const result = await processIntake(validatedPayload, store);
       broadcast("chroni:snapshot-updated", result.snapshot);
-      revealScheduleAfterIntake(result.ok);
+      revealScheduleAfterIntake(result, previousPendingIds);
       if (result.ok) scheduleAgentForTaskChange();
       return result;
     } catch (error) {
@@ -143,10 +145,15 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:preferences-update", (_event, patch: ChroniPreferencesPatch) => {
+    const previousHotkey = store.snapshot().preferences.hotkey;
     let snapshot = store.updatePreferences(validatePreferencesPatch(patch));
     applyPreferences(snapshot.preferences);
     if (!registerHotkey() && snapshot.preferences.hotkey.trim()) {
-      snapshot = store.setCompanion("confused", `快捷键 ${snapshot.preferences.hotkey} 注册失败，可能已被占用。`);
+      const failedHotkey = snapshot.preferences.hotkey;
+      snapshot = store.updatePreferences({ hotkey: previousHotkey });
+      const restored = registerHotkey();
+      const recovery = !previousHotkey ? "已保持快捷键关闭" : restored ? "已保留原快捷键并继续生效" : "原快捷键当前也无法注册，请重新设置";
+      snapshot = store.setCompanion("confused", `快捷键 ${failedHotkey} 注册失败，${recovery}。可能是组合键格式不正确或已被占用。`);
     }
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
@@ -166,7 +173,7 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:agent-export-ics", async () => {
-    if (!agentTools.exportIcs) throw new Error("Agent ICS export is unavailable.");
+    if (!agentTools.exportIcs) throw new Error("日历导出功能当前不可用。");
     return agentTools.exportIcs();
   });
   ipcMain.handle("chroni:clarification-answer", async (_event, id: string, payload: ClarificationAnswerPayload) => {
@@ -212,11 +219,12 @@ function installIpc(): void {
   ipcMain.handle("chroni:behavior-memory-clear", () => publishStoreSnapshot(store.clearBehaviorMemory()));
   ipcMain.handle("chroni:quick-add", async (_event, text: string) => {
     const payload = validateIntakePayload({ kind: "text", text });
+    const previousPendingIds = pendingClarificationIds();
     beginPetInput(payload, "正在识别 DDL...");
     try {
       const result = await processIntake(payload, store);
       broadcast("chroni:snapshot-updated", result.snapshot);
-      revealScheduleAfterIntake(result.ok);
+      revealScheduleAfterIntake(result, previousPendingIds);
       if (result.ok) scheduleAgentForTaskChange();
       return result;
     } catch (error) {
@@ -224,7 +232,7 @@ function installIpc(): void {
       throw error;
     }
   });
-  ipcMain.handle("chroni:open-control", () => showControlCenter());
+  ipcMain.handle("chroni:open-control", (_event, route?: unknown) => showControlCenter(controlCenterRoute(route)));
   ipcMain.handle("chroni:open-pet-menu", (event) => showPetMenu(BrowserWindow.fromWebContents(event.sender)));
   ipcMain.handle("chroni:show-schedule", (_event, expanded: boolean) => showSchedule(expanded));
   ipcMain.handle("chroni:source-reprocess", async (_event, sourceId: string) => {
@@ -257,7 +265,7 @@ function publishStoreSnapshot(snapshot: ChroniSnapshot): ChroniSnapshot {
 
 function beginPetInput(payload: IntakePayload, bubble: string): { state: CompanionState; bubble: string } {
   const previous = { ...store.snapshot().companion };
-  requestPetAction(payload.kind === "text" ? "eat" : "idle", "replace");
+  requestPetAction(payload.kind === "text" ? "eat" : "study", "replace");
   broadcast("chroni:snapshot-updated", store.setCompanion("processing", bubble));
   return previous;
 }
@@ -280,8 +288,7 @@ function restoreCompanionAfterWork(previous?: { state: CompanionState; bubble: s
 }
 
 function publishUnexpectedPetFailure(error: unknown, prefix: string): void {
-  const detail = error instanceof Error && error.message ? `：${error.message}` : "。";
-  broadcast("chroni:snapshot-updated", store.setCompanion("confused", `${prefix}${detail}`));
+  broadcast("chroni:snapshot-updated", store.setCompanion("confused", formatOperationError(error, `${prefix}，请稍后重试。`)));
 }
 
 function installDeadlineAgent(): void {
@@ -307,10 +314,10 @@ function installDeadlineAgent(): void {
         now: new Date(),
       });
       if (!outcome.sent) return outcome;
-      new Notification({
+      showTaskNotification({
         title: "Chroni Agent：高风险 DDL",
-        body: `${task.title} · ${task.reasons[0] ?? "需要优先处理"}`,
-      }).show();
+        body: `${task.title} · ${formatUserFacingMessage(task.reasons[0], "需要优先处理")}`,
+      }, task.taskId);
       store.markItemReminded(task.taskId);
       requestPetAction("wake", "enqueue");
       return outcome;
@@ -381,7 +388,7 @@ function agentApiOperations(): AgentApiOperations {
       return snapshot;
     },
     exportIcs: async () => {
-      if (!agentTools.exportIcs) throw new Error("Agent ICS export is unavailable.");
+      if (!agentTools.exportIcs) throw new Error("日历导出功能当前不可用。");
       return agentTools.exportIcs();
     },
     answerClarification: async (id, payload) => {
@@ -432,12 +439,22 @@ function refreshCompanionFromSchedule(): void {
   setTimeout(refreshCompanionFromSchedule, 60_000);
 }
 
-function revealScheduleAfterIntake(ok: boolean): void {
-  if (ok) {
+function revealScheduleAfterIntake(result: IntakeResult, previousPendingIds: Set<string>): void {
+  const needsConfirmation = result.snapshot.clarifications.some((item) => item.status === "pending" && !previousPendingIds.has(item.id))
+    || (!result.ok && result.reason.startsWith("需要确认"));
+  if (needsConfirmation) {
+    showControlCenter({ tab: "schedule", focus: "clarifications" });
+    return;
+  }
+  if (result.ok) {
     showSchedule(true);
     return;
   }
   refreshScheduleAfterUpdate();
+}
+
+function pendingClarificationIds(): Set<string> {
+  return new Set(store.snapshot().clarifications.filter((item) => item.status === "pending").map((item) => item.id));
 }
 
 function refreshCompanionSnapshot() {
@@ -456,19 +473,35 @@ function refreshReminders(): void {
       const isSnoozeWakeUp = Number.isFinite(snoozedUntil)
         && snoozedUntil <= now
         && (!Number.isFinite(lastRemindedAt) || snoozedUntil > lastRemindedAt);
-      new Notification({
+      showTaskNotification({
         title: isSnoozeWakeUp
           ? "Chroni：稍后提醒"
           : new Date(item.dueAt).getTime() < now ? "Chroni：DDL 已逾期" : "Chroni：DDL 临近",
         body: `${item.title} · ${timeUntil(item.dueAt)}`,
         silent: false,
-      }).show();
+      }, item.id);
       const next = store.markItemReminded(item.id);
       broadcast("chroni:snapshot-updated", next);
       requestPetAction("wake", "enqueue");
     }
   }
   setTimeout(refreshReminders, 60_000);
+}
+
+function showTaskNotification(options: Electron.NotificationConstructorOptions, taskId: string): void {
+  const notification = new Notification(options);
+  notification.on("click", () => showControlCenter({ tab: "schedule", taskId }));
+  notification.show();
+}
+
+function controlCenterRoute(value: unknown): ControlCenterRoute | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const candidate = value as Record<string, unknown>;
+  const route: ControlCenterRoute = {};
+  if (candidate.tab === "schedule" || candidate.tab === "agent" || candidate.tab === "preferences" || candidate.tab === "services") route.tab = candidate.tab;
+  if (typeof candidate.taskId === "string" && candidate.taskId.trim()) route.taskId = candidate.taskId.trim().slice(0, 200);
+  if (candidate.focus === "clarifications") route.focus = candidate.focus;
+  return Object.keys(route).length ? route : undefined;
 }
 
 function inQuietHours(enabled: boolean, start: string, end: string): boolean {

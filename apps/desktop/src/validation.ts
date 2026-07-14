@@ -44,14 +44,24 @@ export function validateItemPatch(value: unknown): ItemPatch {
   if (patch.dueAt !== undefined) result.dueAt = dateString(patch.dueAt, "dueAt");
   if (patch.sourceSummary !== undefined) result.sourceSummary = boundedString(patch.sourceSummary, "sourceSummary", 500);
   if (patch.completed !== undefined) result.completed = booleanValue(patch.completed, "completed");
-  if (patch.snoozedUntil !== undefined) result.snoozedUntil = dateString(patch.snoozedUntil, "snoozedUntil");
-  if (patch.estimatedMinutes !== undefined) {
-    if (!Number.isInteger(patch.estimatedMinutes) || (patch.estimatedMinutes as number) < 15 || (patch.estimatedMinutes as number) > 1_440) fail("estimatedMinutes must be an integer from 15 to 1440.");
-    result.estimatedMinutes = patch.estimatedMinutes as number;
+  if (Object.hasOwn(patch, "snoozedUntil")) {
+    result.snoozedUntil = patch.snoozedUntil === null || patch.snoozedUntil === undefined
+      ? null
+      : dateString(patch.snoozedUntil, "snoozedUntil");
   }
-  if (patch.progressPercent !== undefined) {
-    if (!Number.isInteger(patch.progressPercent) || (patch.progressPercent as number) < 0 || (patch.progressPercent as number) > 100) fail("progressPercent must be an integer from 0 to 100.");
-    result.progressPercent = patch.progressPercent as number;
+  if (Object.hasOwn(patch, "estimatedMinutes")) {
+    if (patch.estimatedMinutes === null || patch.estimatedMinutes === undefined) result.estimatedMinutes = null;
+    else {
+      if (!Number.isInteger(patch.estimatedMinutes) || (patch.estimatedMinutes as number) < 15 || (patch.estimatedMinutes as number) > 1_440) fail("estimatedMinutes must be an integer from 15 to 1440.");
+      result.estimatedMinutes = patch.estimatedMinutes as number;
+    }
+  }
+  if (Object.hasOwn(patch, "progressPercent")) {
+    if (patch.progressPercent === null || patch.progressPercent === undefined) result.progressPercent = null;
+    else {
+      if (!Number.isInteger(patch.progressPercent) || (patch.progressPercent as number) < 0 || (patch.progressPercent as number) > 100) fail("progressPercent must be an integer from 0 to 100.");
+      result.progressPercent = patch.progressPercent as number;
+    }
   }
   return result;
 }

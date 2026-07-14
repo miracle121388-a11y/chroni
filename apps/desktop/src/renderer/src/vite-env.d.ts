@@ -3,6 +3,12 @@
 import type { AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult, PetActionCommand, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
 
 declare global {
+  type ChroniControlRoute = {
+    tab?: "schedule" | "agent" | "preferences" | "services";
+    taskId?: string;
+    focus?: "clarifications";
+  };
+
   interface Window {
     chroni: {
       platform: "darwin" | "win32" | "linux" | string;
@@ -30,7 +36,7 @@ declare global {
       deletePlanningPreference(id: string): Promise<ChroniSnapshot>;
       clearBehaviorMemory(): Promise<ChroniSnapshot>;
       quickAdd(text: string): Promise<IntakeResult>;
-      openControlCenter(): Promise<void>;
+      openControlCenter(route?: ChroniControlRoute): Promise<void>;
       openPetMenu(): Promise<void>;
       showSchedule(expanded: boolean): Promise<void>;
       reprocessSource(sourceId: string): Promise<IntakeResult>;
@@ -42,6 +48,7 @@ declare global {
       filePath(file: File): string;
       onSnapshotUpdated(callback: (snapshot: ChroniSnapshot) => void): () => void;
       onPetAction(callback: (command: PetActionCommand) => void): () => void;
+      onControlNavigate(callback: (route: ChroniControlRoute) => void): () => void;
     };
   }
 }

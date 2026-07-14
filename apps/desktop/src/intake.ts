@@ -12,6 +12,7 @@ import { analyzeCompletenessWithLlm } from "./agent/clarification-agent.js";
 import { selectPlanningPreferences } from "./agent/preference-selector.js";
 import { generateTaskPlan } from "./agent/task-plan-agent.js";
 import { deadlineDateFromText, isConditionalDeadlineText, stripDeadlineTemporalExpressions } from "./shared/deadline-text.js";
+import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
 const spreadsheetExtensions = new Set([".xlsx"]);
@@ -26,6 +27,8 @@ const llmChunkOverlap = 800;
 
 type ExtractOptions = {
   llm?: ChroniLlmSettings;
+  /** Stable interpretation anchor for relative expressions during reprocessing. */
+  referenceNow?: Date;
 };
 
 type LlmDdlCandidate = {
@@ -80,7 +83,10 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
     let firstQuestion = "";
     for (const sourceInput of result.extracted) {
       for (const input of clarificationTaskInputs(sourceInput)) {
-        const analysis = await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.llmSettings()));
+        const analysis = groundCompletenessAnalysis(
+          await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.llmSettings())),
+          input,
+        );
         if (analysis.status !== "needs-clarification") continue;
         clarificationSnapshot = store.saveIntakeDraft(analysis.draft, analysis.clarifications, sourceInput);
         firstQuestion ||= analysis.clarifications[0]?.question ?? "还需要确认任务信息。";
@@ -101,7 +107,10 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
   for (const sourceInput of result.extracted) {
     for (const input of ambiguousTaskInputs(sourceInput)) {
       if (result.pendingItems.some((pending) => pendingCoversInput(pending, input))) continue;
-      const analysis = await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.llmSettings()));
+      const analysis = groundCompletenessAnalysis(
+        await analyzeCompletenessWithLlm(input, resolveLlmSettings(store.llmSettings())),
+        input,
+      );
       if (analysis.clarifications.some((item) => item.required && item.field === "dueAt")) blocking.push({ sourceInput, analysis });
     }
   }
@@ -117,7 +126,13 @@ export async function processIntake(payload: IntakePayload, store: ChroniStore):
   }
   for (const entry of blocking) snapshot = store.saveIntakeDraft(entry.analysis.draft, entry.analysis.clarifications, entry.sourceInput);
   snapshot = recordExtractionFailures(store, result.failures) ?? snapshot;
-  if (!created.length && blocking.length && !result.pendingItems.length) return { ok: false, reason: `需要确认：${blocking[0].analysis.clarifications[0]?.question ?? "请补充截止时间。"}`, snapshot };
+  const hasBlockedModelDeadline = result.pendingItems.some(isBlockedModelDeadline);
+  if (!created.length && ((blocking.length && !result.pendingItems.length) || hasBlockedModelDeadline)) {
+    const question = blocking[0]?.analysis.clarifications[0]?.question
+      ?? result.pendingItems[0]?.question
+      ?? "请补充截止时间。";
+    return { ok: false, reason: `需要确认：${question}`, snapshot };
+  }
   const duplicateOnly = !created.length && safeItems.length > 0 && !blocking.length && !result.pendingItems.length;
   const intakeMessage = duplicateOnly ? "识别到的日程已经存在，未重复添加。" : result.message;
   const clarificationMessage = blocking.length ? `${intakeMessage} 另有 ${blocking.length} 项等待确认。` : intakeMessage;
@@ -212,7 +227,8 @@ export async function reprocessSource(sourceId: string, store: ChroniStore): Pro
   }
   store.setCompanion("processing", "正在重新识别来源...");
   const previousItems = store.snapshot().items.filter((item) => item.sourceId === sourceId);
-  const result = await extractPayload({ kind: "text", text: source.text }, { llm: store.llmSettings() });
+  const referenceNow = stableSourceReferenceTime(source.createdAt);
+  const result = await extractPayload({ kind: "text", text: source.text }, { llm: store.llmSettings(), referenceNow });
   if (!result.ok) {
     const snapshot = store.markSourceFailed(sourceId, result.reason);
     return { ok: false, reason: result.reason, snapshot };
@@ -223,12 +239,22 @@ export async function reprocessSource(sourceId: string, store: ChroniStore): Pro
     sourceSummary: `${source.sourceName}: ${item.sourceSummary.replace(/^直接文本:\s*/, "")}`,
   }));
   const message = result.message.replace("已加入", "已重新识别");
+  const unmatchedPreviousItems = previousItemsNotRepresented(previousItems, nextItems);
+  const claimedReplacementIds = new Set<string>();
+  const pendingReplacements = result.pendingItems.map((pending) => {
+    const replacement = previousItemForPending(
+      unmatchedPreviousItems.filter((item) => !claimedReplacementIds.has(item.id)),
+      pending,
+    );
+    if (replacement) claimedReplacementIds.add(replacement.id);
+    return { pending, replacement };
+  });
+  const preserveTaskIds = pendingReplacements.flatMap(({ replacement }) => replacement ? [replacement.id] : []);
   let snapshot = nextItems.length
-    ? store.replaceSourceItems(sourceId, nextItems, message)
+    ? store.replaceSourceItems(sourceId, nextItems, message, { preserveTaskIds })
     : store.markSourceAwaitingClarification(sourceId, "重新识别后仍需确认截止时间，已保留现有日程。");
   const extracted: ExtractedInput = { sourceName: source.sourceName, sourceType: source.sourceType, text: source.text };
-  for (const pending of result.pendingItems) {
-    const replacement = previousItems.find((item) => sameTaskTitle(item.title, pending.title));
+  for (const { pending, replacement } of pendingReplacements) {
     snapshot = savePendingExtractedTask({
       ...pending,
       sourceName: source.sourceName,
@@ -236,7 +262,10 @@ export async function reprocessSource(sourceId: string, store: ChroniStore): Pro
       sourceSummary: `${source.sourceName}: ${pending.sourceSummary.replace(/^直接文本:\s*/, "")}`,
     }, store, extracted, replacement?.id);
   }
-  const refreshedTaskIds = nextItems.length ? snapshot.items.filter((item) => item.sourceId === sourceId).map((item) => item.id) : [];
+  const preservedTaskIdSet = new Set(preserveTaskIds);
+  const refreshedTaskIds = nextItems.length
+    ? snapshot.items.filter((item) => item.sourceId === sourceId && !preservedTaskIdSet.has(item.id)).map((item) => item.id)
+    : [];
   const planningFailureCount = await ensureTaskPlans(refreshedTaskIds, store, refreshedTaskIds.length > 1 ? "rules-only" : "default", true);
   snapshot = store.snapshot();
   const refreshedItems = snapshot.items.filter((item) => refreshedTaskIds.includes(item.id));
@@ -250,6 +279,51 @@ function sameTaskTitle(left: string, right: string): boolean {
   const a = normalize(left);
   const b = normalize(right);
   return a.length >= 2 && b.length >= 2 && (a === b || a.includes(b) || b.includes(a));
+}
+
+function previousItemForPending(previousItems: DdlItem[], pending: PendingExtractedTask): DdlItem | undefined {
+  const titleMatches = previousItems.filter((item) => sameTaskTitle(item.title, pending.title));
+  if (titleMatches.length === 1) return titleMatches[0];
+  const pendingEvidence = normalizeEvidenceText(sourceEvidence(pending.sourceSummary));
+  const candidates = titleMatches.length ? titleMatches : previousItems;
+  if (candidates.length === 1) return candidates[0];
+  const best = candidates
+    .map((item) => ({ item, overlap: evidenceOverlapScore(pendingEvidence, normalizeEvidenceText(sourceEvidence(item.sourceSummary))) }))
+    .sort((left, right) => right.overlap - left.overlap)[0];
+  return best && best.overlap >= (titleMatches.length ? 0.15 : 0.35) ? best.item : undefined;
+}
+
+function previousItemsNotRepresented(previousItems: DdlItem[], nextItems: DdlItem[]): DdlItem[] {
+  const represented = new Set<string>();
+  for (const nextItem of nextItems) {
+    const candidates = previousItems.filter((previous) => !represented.has(previous.id) && sameTaskTitle(previous.title, nextItem.title));
+    if (!candidates.length) continue;
+    const exact = candidates.find((previous) => previous.dueAt.slice(0, 16) === nextItem.dueAt.slice(0, 16));
+    const matched = exact ?? candidates
+      .map((item) => ({ item, overlap: evidenceOverlapScore(normalizeEvidenceText(sourceEvidence(nextItem.sourceSummary)), normalizeEvidenceText(sourceEvidence(item.sourceSummary))) }))
+      .sort((left, right) => right.overlap - left.overlap)[0]?.item;
+    if (matched) represented.add(matched.id);
+  }
+  return previousItems.filter((item) => !represented.has(item.id));
+}
+
+function stableSourceReferenceTime(createdAt: string): Date {
+  const parsed = new Date(createdAt);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function groundCompletenessAnalysis(
+  analysis: Awaited<ReturnType<typeof analyzeCompletenessWithLlm>>,
+  input: ExtractedInput,
+): Awaited<ReturnType<typeof analyzeCompletenessWithLlm>> {
+  const evidence = `${input.sourceName}: ${input.text.trim().slice(0, 2_000)}`;
+  return {
+    ...analysis,
+    draft: {
+      ...analysis.draft,
+      candidate: { ...analysis.draft.candidate, sourceSummary: evidence },
+    },
+  };
 }
 
 function ambiguousTaskInputs(input: ExtractedInput): ExtractedInput[] {
@@ -288,6 +362,7 @@ function containsAmbiguousNextWeek(text: string): boolean {
 export async function extractPayload(payload: IntakePayload, options: ExtractOptions = {}): Promise<ExtractResult> {
   const extracted: ExtractedInput[] = [];
   const failures: ExtractedFailure[] = [];
+  const referenceNow = validReferenceTime(options.referenceNow);
   try {
     if (payload.kind === "text") {
       const text = payload.text?.trim() ?? "";
@@ -303,13 +378,13 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
       }
     }
 
-    const llm = await extractWithLlmIfAvailable(extracted, options.llm);
-    const ruleItems = extracted.flatMap((input) => extractDdlItemsFromText(input.text, input.sourceName));
+    const llm = await extractWithLlmIfAvailable(extracted, options.llm, referenceNow);
+    const ruleItems = extracted.flatMap((input) => extractDdlItemsFromText(input.text, input.sourceName, referenceNow));
     const pendingItems = llm.pendingItems.filter((pending) => ![...llm.items, ...ruleItems].some((item) => pendingCoversResolvedItem(pending, item)));
     const items = mergeModelAndRuleItems(llm.items, ruleItems, pendingItems);
     if (!items.length && !pendingItems.length) {
       if (llm.errors.length && isLlmEnabled(options.llm)) {
-        return { ok: false, reason: `模型服务不可用：${llm.errors[0]}`, extracted, failures, items: [], pendingItems: [] };
+        return { ok: false, reason: "模型服务暂时不可用，请检查 API 配置和网络后重试。", extracted, failures, items: [], pendingItems: [] };
       }
       if (hasPossibleTaskWithoutDeadline(extracted.map((input) => input.text).join("\n"))) {
         return { ok: false, reason: "关键信息不足：没有明确截止时间。", extracted, failures, items: [], pendingItems: [] };
@@ -329,7 +404,7 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
   } catch (error) {
     return {
       ok: false,
-      reason: error instanceof Error ? error.message : String(error),
+      reason: formatOperationError(error, "日程识别暂时不可用，请稍后重试。"),
       extracted,
       failures,
       items: [],
@@ -339,14 +414,14 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
 }
 
 function extractionMessage(count: number, llm: LlmExtraction, pendingCount: number): string {
-  if (pendingCount && !count) return `DeepSeek 已识别 ${pendingCount} 项任务，等待补充精确截止时间。`;
+  if (pendingCount && !count) return `模型已识别 ${pendingCount} 项任务，等待补充精确截止时间。`;
   const pendingSuffix = pendingCount ? `，另有 ${pendingCount} 项等待确认` : "";
   if (!llm.attempted) return count === 1 ? "已加入 1 条日程。" : `已加入 ${count} 条日程。`;
   if (llm.items.length && llm.errors.length) {
     return `模型已提取日程，另有 ${llm.errors.length} 个分块失败；共加入 ${count} 条日程。`;
   }
-  if (llm.items.length) return `DeepSeek 已参与提取，共加入 ${count} 条日程${pendingSuffix}。`;
-  if (llm.errors.length) return `模型服务不可用，已使用本地规则加入 ${count} 条日程：${llm.errors[0]}`;
+  if (llm.items.length) return `模型已参与提取，共加入 ${count} 条日程${pendingSuffix}。`;
+  if (llm.errors.length) return `模型服务暂时不可用，已使用本地规则加入 ${count} 条日程。`;
   return `模型未返回有效日程，已使用本地规则加入 ${count} 条日程。`;
 }
 
@@ -383,12 +458,12 @@ function fallbackExtractedInputs(payload: IntakePayload, extracted: ExtractedInp
   });
 }
 
-async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?: ChroniLlmSettings): Promise<LlmExtraction> {
+async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings: ChroniLlmSettings | undefined, referenceNow: Date): Promise<LlmExtraction> {
   const resolvedSettings = resolveLlmSettings(settings);
   const result: LlmExtraction = { items: [], pendingItems: [], attempted: 0, rejected: 0, errors: [] };
   if (!resolvedSettings.enabled || !resolvedSettings.apiKey || !resolvedSettings.model) return result;
 
-  const today = new Date().toISOString();
+  const today = referenceNow.toISOString();
   const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   for (const [sourceIndex, input] of extracted.entries()) {
     const sourceId = `source-${sourceIndex + 1}`;
@@ -439,10 +514,10 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
         const parsed = parseLlmJson(content);
         const candidates = Array.isArray(parsed.items) ? parsed.items as LlmDdlCandidate[] : [];
         for (const candidate of candidates) {
-          const item = itemFromLlmCandidate(candidate, input.text, input.sourceName);
+          const item = itemFromLlmCandidate(candidate, input.text, input.sourceName, referenceNow);
           if (item) result.items.push(item);
           else {
-            const pending = pendingItemFromImpreciseCandidate(candidate, input);
+            const pending = pendingItemFromImpreciseCandidate(candidate, input, referenceNow);
             if (pending) result.pendingItems.push(pending);
             else result.rejected += 1;
           }
@@ -454,7 +529,7 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings?:
           else result.rejected += 1;
         }
       } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
+        const detail = formatUserFacingMessage(error, "模型服务暂时不可用，请稍后重试。");
         result.errors.push(`${input.sourceName} 第 ${chunkIndex + 1}/${chunks.length} 段：${detail}`);
       }
     }
@@ -494,13 +569,13 @@ function parseLlmJson(content: string): { items?: unknown; pendingItems?: unknow
   }
 }
 
-export function itemFromLlmCandidate(candidate: LlmDdlCandidate, evidenceText = "", sourceName = ""): DdlItem | null {
+export function itemFromLlmCandidate(candidate: LlmDdlCandidate, evidenceText = "", sourceName = "", referenceNow = new Date()): DdlItem | null {
   const title = String(candidate.title ?? "").trim().slice(0, 16);
   const dueAtRaw = String(candidate.dueAt ?? "").trim();
   const sourceSummary = String(candidate.sourceSummary ?? title).trim().slice(0, 500);
   if (!title || !hasDeadlineIntent(`${title} ${sourceSummary}`)) return null;
   if (evidenceText && !hasSourceEvidence(sourceSummary, evidenceText)) return null;
-  if (hasImpreciseClockExpression(sourceSummary) || isConditionalDeadlineText(sourceSummary)) return null;
+  if (modelDeadlineEvidenceStatus(dueAtRaw, sourceSummary, referenceNow) !== "grounded") return null;
   const dueAt = strictIsoDate(dueAtRaw);
   if (!dueAt) return null;
   const importance = candidate.importance === "high" || candidate.importance === "medium" || candidate.importance === "low"
@@ -510,12 +585,11 @@ export function itemFromLlmCandidate(candidate: LlmDdlCandidate, evidenceText = 
   return createItem(title, dueAt.toISOString(), sourceName ? `${sourceName}: ${sourceSummary}` : sourceSummary, importance, extraction);
 }
 
-function pendingItemFromImpreciseCandidate(candidate: LlmDdlCandidate, input: ExtractedInput): PendingExtractedTask | null {
+function pendingItemFromImpreciseCandidate(candidate: LlmDdlCandidate, input: ExtractedInput, referenceNow: Date): PendingExtractedTask | null {
   const title = String(candidate.title ?? "").trim().slice(0, 80);
   const sourceSummary = String(candidate.sourceSummary ?? "").trim().slice(0, 500);
-  const conditional = isConditionalDeadlineText(sourceSummary);
-  const impreciseClock = hasImpreciseClockExpression(sourceSummary);
-  if (!title || !sourceSummary || (!impreciseClock && !conditional) || !hasSourceEvidence(sourceSummary, input.text)) return null;
+  const evidenceStatus = modelDeadlineEvidenceStatus(String(candidate.dueAt ?? "").trim(), sourceSummary, referenceNow);
+  if (!title || !sourceSummary || evidenceStatus === "grounded" || !hasSourceEvidence(sourceSummary, input.text)) return null;
   const importance = candidate.importance === "high" || candidate.importance === "medium" || candidate.importance === "low"
     ? candidate.importance
     : importanceFromText(`${title} ${sourceSummary}`);
@@ -527,8 +601,8 @@ function pendingItemFromImpreciseCandidate(candidate: LlmDdlCandidate, input: Ex
     taskType: typeof candidate.taskType === "string" ? candidate.taskType.trim().slice(0, 80) : undefined,
     sourceSummary: `${input.sourceName}: ${sourceSummary}`,
     extraction: extractionContextFromCandidate(candidate, input.text, sourceSummary),
-    question: conditional ? `“${title}”的候选截止时间是否已经正式生效？` : `“${title}”的具体日期和钟点是什么？`,
-    reason: conditional ? "原文说明该变更仍取决于后续条件或通知，不能直接覆盖正式截止时间。" : "原文使用课次或模糊时段，无法安全换算为精确钟点。",
+    question: evidenceStatus === "conditional" ? `“${title}”的候选截止时间是否已经正式生效？` : `“${title}”的准确截止日期和时间是什么？`,
+    reason: modelDeadlineIssueReason(evidenceStatus),
   };
 }
 
@@ -608,6 +682,53 @@ function normalizeEvidenceText(value: string): string {
     .toLowerCase();
 }
 
+type ModelDeadlineEvidenceStatus = "grounded" | "conditional" | "ambiguous" | "mismatch" | "missing";
+
+function modelDeadlineEvidenceStatus(dueAtRaw: string, sourceSummary: string, referenceNow: Date): ModelDeadlineEvidenceStatus {
+  if (isConditionalDeadlineText(sourceSummary)) return "conditional";
+  const parsedEvidence = deadlineDateFromText(sourceSummary, referenceNow);
+  if (!parsedEvidence) return hasDeadlineTemporalReference(sourceSummary) ? "ambiguous" : "missing";
+  if (!strictIsoDate(dueAtRaw)) return "mismatch";
+  return deadlineEvidenceMatches(dueAtRaw, parsedEvidence) ? "grounded" : "mismatch";
+}
+
+function deadlineEvidenceMatches(dueAtRaw: string, parsedEvidence: string): boolean {
+  const candidate = strictIsoDate(dueAtRaw);
+  const evidenceDate = new Date(parsedEvidence);
+  return !!candidate && !Number.isNaN(evidenceDate.getTime())
+    && Math.abs(candidate.getTime() - evidenceDate.getTime()) < 60_000;
+}
+
+function hasDeadlineTemporalReference(text: string): boolean {
+  return /20\d{2}\s*[年/.\-]|\d{1,2}\s*[月/.\-]\s*\d{1,2}|今天|今日|今早|今晚|明天|明日|明早|明晚|后天|后日|\d+\s*天后|(?:上|下|本|这)?(?:个)?(?:周|星期)[一二三四五六日天]?|第[一二三四五六七八九十\d]+节|上午|下午|晚上|中午|凌晨|早上|早晨|傍晚|\d{1,2}\s*[:：点时]/i.test(text);
+}
+
+function modelDeadlineIssueReason(status: Exclude<ModelDeadlineEvidenceStatus, "grounded">): string {
+  if (status === "conditional") return "原文说明该变更仍取决于后续条件或通知，不能直接覆盖正式截止时间。";
+  if (status === "mismatch") return "模型返回的时间与原文时间证据不一致，已阻止直接创建日程。";
+  if (status === "ambiguous") return "原文只有日期、课次或模糊时段，无法安全换算为准确截止时间。";
+  return "原文没有可验证的截止时间，模型给出的时间不能直接采用。";
+}
+
+function isBlockedModelDeadline(pending: PendingExtractedTask): boolean {
+  return (["conditional", "ambiguous", "mismatch", "missing"] as const)
+    .some((status) => pending.reason === modelDeadlineIssueReason(status));
+}
+
+function evidenceOverlapScore(left: string, right: string): number {
+  if (!left || !right) return 0;
+  if (left.includes(right) || right.includes(left)) return Math.min(left.length, right.length) / Math.max(left.length, right.length);
+  const shorter = left.length <= right.length ? left : right;
+  const longer = left.length <= right.length ? right : left;
+  if (shorter.length < 2) return 0;
+  const pairs = Array.from({ length: shorter.length - 1 }, (_, index) => shorter.slice(index, index + 2));
+  return pairs.filter((pair) => longer.includes(pair)).length / pairs.length;
+}
+
+function validReferenceTime(value?: Date): Date {
+  return value && !Number.isNaN(value.getTime()) ? new Date(value) : new Date();
+}
+
 export async function extractFromFiles(files: ChroniInputFile[]): Promise<ExtractedInput[]> {
   const result = await extractFromFilesWithFailures(files);
   if (!result.extracted.length && result.failures.length) throw new Error(result.failures[0].reason);
@@ -622,7 +743,7 @@ async function extractFromFilesWithFailures(files: ChroniInputFile[]): Promise<{
     try {
       extracted.push(await extractSingleFile(file));
     } catch (error) {
-      failures.push(failureFromFile(file, error instanceof Error ? error.message : String(error)));
+      failures.push(failureFromFile(file, formatOperationError(error, "文件读取失败，请重新选择文件。")));
     }
   }
   return { extracted, failures };
@@ -639,7 +760,7 @@ function failureFromFile(file: ChroniInputFile, reason: string): ExtractedFailur
   };
 }
 
-export function extractDdlItemsFromText(text: string, sourceName = "输入内容"): DdlItem[] {
+export function extractDdlItemsFromText(text: string, sourceName = "输入内容", referenceNow = new Date()): DdlItem[] {
   const normalized = normalizeText(text);
   if (!normalized) return [];
 
@@ -647,12 +768,12 @@ export function extractDdlItemsFromText(text: string, sourceName = "输入内容
   const items = candidates
     .map((line, index) => {
       if (!hasDeadlineIntent(line) || isConditionalDeadlineText(line)) return null;
-      const dueAt = safeDateFromText(line);
+      const dueAt = safeDateFromText(line, referenceNow);
       if (!dueAt) return null;
       let titleSource = line;
       let title = shortTitle(titleSource);
       const previous = candidates[index - 1];
-      if (title === "未命名 DDL" && previous && hasTaskTitleEvidence(previous) && !safeDateFromText(previous)) {
+      if (title === "未命名 DDL" && previous && hasTaskTitleEvidence(previous) && !safeDateFromText(previous, referenceNow)) {
         titleSource = `${previous}。${line}`;
         title = shortTitle(titleSource);
       }
@@ -663,14 +784,14 @@ export function extractDdlItemsFromText(text: string, sourceName = "输入内容
 
   if (items.length) return mergeDuplicateItems(items);
   if (!hasDeadlineIntent(normalized) || isConditionalDeadlineText(normalized)) return [];
-  const dueAt = safeDateFromText(normalized);
+  const dueAt = safeDateFromText(normalized, referenceNow);
   const title = shortTitle(normalized);
   return dueAt && title !== "未命名 DDL" ? [createItem(title, dueAt, `${sourceName}: ${normalized.slice(0, 180)}`)] : [];
 }
 
-function safeDateFromText(text: string): string | null {
+function safeDateFromText(text: string, referenceNow = new Date()): string | null {
   try {
-    return dateFromText(text);
+    return dateFromText(text, referenceNow);
   } catch {
     return null;
   }
@@ -682,11 +803,14 @@ async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput>
   if (unsupportedExtensions.has(extension)) throw new Error(`文件类型不支持：${name}`);
   if (!extension) throw new Error(`无法判断文件类型：${name}`);
 
-  const buffer = readFileBuffer(file);
+  const isPlainText = plainTextExtensions.has(extension);
+  const sizeLimit = isPlainText ? maxTextBytes : maxDocumentBytes;
+  const sizeError = `${isPlainText ? "文本文件" : "文件"}过大：${name}`;
+  const buffer = readFileBuffer(file, sizeLimit, sizeError);
   const sourceType = extension.slice(1);
   if (buffer.length > maxDocumentBytes) throw new Error(`文件过大：${name}`);
 
-  if (plainTextExtensions.has(extension)) {
+  if (isPlainText) {
     if (buffer.length > maxTextBytes) throw new Error(`文本文件过大：${name}`);
     const text = textFromBuffer(buffer);
     assertReliableExtractedText(text, name);
@@ -797,11 +921,17 @@ export function workbookText(sheets: WorkbookSheet[]): string {
   }).join("\n\n");
 }
 
-function readFileBuffer(file: ChroniInputFile): Buffer {
-  if (file.contentBase64) return Buffer.from(file.contentBase64, "base64");
+function readFileBuffer(file: ChroniInputFile, maxBytes: number, sizeError: string): Buffer {
+  if (file.contentBase64) {
+    if (file.contentBase64.length > Math.ceil(maxBytes / 3) * 4 + 4) throw new Error(sizeError);
+    const buffer = Buffer.from(file.contentBase64, "base64");
+    if (buffer.length > maxBytes) throw new Error(sizeError);
+    return buffer;
+  }
   if (!file.path || !existsSync(file.path)) throw new Error(`文件无法读取：${file.name}`);
   const stat = statSync(file.path);
   if (!stat.isFile()) throw new Error(`不是可读取的文件：${file.name}`);
+  if (stat.size > maxBytes) throw new Error(sizeError);
   return readFileSync(file.path);
 }
 
@@ -875,7 +1005,7 @@ function normalizeText(text: string): string {
 function candidateLines(text: string): string[] {
   const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
   const sentenceParts = lines.flatMap((line) => line.split(/[。；;.!?？]+/).map((part) => part.trim()).filter(Boolean));
-  const taskParts = sentenceParts.flatMap((line) => hasMultipleTemporalExpressions(line)
+  const taskParts = sentenceParts.flatMap((line) => hasMultipleTemporalExpressions(line) && !isConditionalDeadlineText(line)
     ? line.split(/[，,]/).map((part) => part.trim()).filter(Boolean)
     : [line]);
   return [...new Set(taskParts)].filter((line) => line.length <= 280);
@@ -1026,13 +1156,13 @@ function sourceEvidence(summary: string): string {
   return separator >= 0 ? summary.slice(separator + 1) : summary;
 }
 
-function dateFromText(text: string): string | null {
-  return deadlineDateFromText(text) ?? null;
+function dateFromText(text: string, referenceNow = new Date()): string | null {
+  return deadlineDateFromText(text, referenceNow) ?? null;
 }
 
 function hasImpreciseClockExpression(text: string): boolean {
   return /第[一二三四五六七八九十\d]+节(?:课)?/.test(text)
-    || (/(上午|下午|晚上|中午|凌晨|早上|今晚|明晚)/.test(text) && !deadlineDateFromText(text));
+    || (hasDeadlineTemporalReference(text) && !deadlineDateFromText(text));
 }
 
 function strictIsoDate(value: string): Date | null {

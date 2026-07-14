@@ -62,17 +62,18 @@ test("requestChatCompletion aborts requests after the configured timeout", async
 
 test("testLlmConnection categorizes common provider failures", async () => {
   const cases = [
-    [401, "authentication"],
-    [404, "model"],
-    [429, "rate_limit"],
+    [401, "authentication", /API Key 无效/],
+    [404, "model", /API 地址或模型名称不可用/],
+    [429, "rate_limit", /模型服务正忙或额度不足/],
   ];
-  for (const [status, kind] of cases) {
+  for (const [status, kind, message] of cases) {
     const result = await testLlmConnection(settings, {
       fetchImpl: async () => new Response(JSON.stringify({ error: { message: "provider detail" } }), { status }),
     });
     assert.equal(result.ok, false);
     assert.equal(result.kind, kind);
-    assert.match(result.message, /provider detail/);
+    assert.match(result.message, message);
+    assert.doesNotMatch(result.message, /provider detail|HTTP/i);
   }
 });
 

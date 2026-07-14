@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import type { AgentIcsExportResult, AgentMemoryPatch, AgentRunResult, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniSnapshot, ExplicitPreferenceInput, TaskPlanResult, TaskPlanUpdatePayload } from "./shared/types.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniStore } from "./store.js";
+import { formatOperationError } from "./shared/errors.js";
 import { InputValidationError, validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validatePlanActivation, validatePreferenceStatusPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "./validation.js";
 
 type SnapshotUpdateReason = "data" | "preferences";
@@ -40,6 +41,28 @@ class HttpError extends Error {
   }
 }
 
+export function resolveApiPort(value: string | undefined, fallback = 8765): number {
+  const trimmed = value?.trim();
+  if (!trimmed) return fallback;
+  const parsed = Number(trimmed);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 65_535 ? parsed : fallback;
+}
+
+function publicApiError(error: unknown, status: number): string {
+  if (error instanceof HttpError) return error.message;
+  const fallback = status >= 500
+    ? "服务暂时无法完成请求，请稍后重试。"
+    : status === 404
+      ? "找不到请求的内容。"
+      : "请求内容无法处理，请检查后重试。";
+  if (error instanceof InputValidationError) {
+    const field = error.message.match(/^([A-Za-z][A-Za-z0-9_.\[\]-]*)\b/)?.[1];
+    return field ? `请求字段 ${field} 的值无效，请检查后重试。` : fallback;
+  }
+  if (status >= 500) return fallback;
+  return formatOperationError(error, fallback);
+}
+
 export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCallback, options: ApiServerOptions = {}): Server {
   const apiToken = process.env.CHRONI_API_TOKEN?.trim() || randomBytes(24).toString("base64url");
   const allowedOrigin = process.env.CHRONI_API_ALLOWED_ORIGIN?.trim() || "";
@@ -49,10 +72,10 @@ export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCal
       await route(request, response, store, onSnapshot, apiToken, () => baseUrl, options.agent);
     } catch (error) {
       const status = error instanceof HttpError ? error.statusCode : error instanceof InputValidationError ? 400 : 500;
-      sendJson(response, status, { ok: false, error: error instanceof Error ? error.message : String(error) });
+      sendJson(response, status, { ok: false, error: publicApiError(error, status) });
     }
   });
-  const configuredPort = Number(process.env.CHRONI_API_PORT || 8765);
+  const configuredPort = resolveApiPort(process.env.CHRONI_API_PORT);
   let baseUrl = `http://127.0.0.1:${configuredPort}`;
   server.listen(configuredPort, "127.0.0.1", () => {
     const address = server.address();
@@ -87,7 +110,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
       version: "0.1.0",
       baseUrl: getBaseUrl(),
       apiToken,
-      authentication: "Use Authorization: Bearer <apiToken> for every endpoint except /api/health.",
+      authentication: "除 /api/health 外，请在 Authorization 请求头中使用 Bearer <apiToken>。",
       supportedInputs: [
         "text",
         "txt",
@@ -117,14 +140,14 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   if (!hasValidBearerToken(request, apiToken)) {
     response.setHeader("www-authenticate", "Bearer");
-    throw new HttpError(401, "Chroni API authorization is required.");
+    throw new HttpError(401, "需要提供有效的 Chroni API 访问令牌。");
   }
   if (request.method === "GET" && pathname === "/api/snapshot") {
     sendJson(response, 200, { ok: true, snapshot: store.snapshot() });
     return;
   }
   if (request.method === "POST" && pathname === "/api/agent/run") {
-    if (!agent) throw new HttpError(503, "DeadlineAgent is not available in this process.");
+    if (!agent) throw new HttpError(503, "Deadline Agent 当前不可用，请先启动桌面应用。");
     const result = await agent.run();
     const snapshot = store.snapshot();
     onSnapshot(snapshot, "data");
@@ -132,20 +155,20 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     return;
   }
   if (request.method === "GET" && pathname === "/api/agent/latest") {
-    if (!agent) throw new HttpError(503, "DeadlineAgent is not available in this process.");
+    if (!agent) throw new HttpError(503, "Deadline Agent 当前不可用，请先启动桌面应用。");
     sendJson(response, 200, { ok: true, latest: agent.latest() });
     return;
   }
   if (request.method === "PATCH" && pathname === "/api/agent/memory") {
     const patch = validateAgentMemoryPatch(await readJson(request), store.snapshot().agent.memory);
-    if (!agent) throw new HttpError(503, "DeadlineAgent is not available in this process.");
+    if (!agent) throw new HttpError(503, "Deadline Agent 当前不可用，请先启动桌面应用。");
     const snapshot = agent.updateMemory(patch);
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "POST" && pathname === "/api/agent/export-ics") {
-    if (!agent) throw new HttpError(503, "DeadlineAgent is not available in this process.");
+    if (!agent) throw new HttpError(503, "Deadline Agent 当前不可用，请先启动桌面应用。");
     sendJson(response, 200, { ok: true, ...await agent.exportIcs() });
     return;
   }
@@ -155,7 +178,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   const clarificationAnswer = pathname.match(/^\/api\/agent\/clarifications\/([^/]+)\/answer$/);
   if (request.method === "POST" && clarificationAnswer) {
-    if (!agent) throw new HttpError(503, "Agent clarification operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "待确认处理功能当前不可用，请先启动桌面应用。");
     const result = await agent.answerClarification(validateIdentifier(decodeURIComponent(clarificationAnswer[1]), "clarification id"), validateClarificationAnswer(await readJson(request)));
     onSnapshot(result.snapshot, "data");
     sendJson(response, 200, result);
@@ -163,7 +186,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   const clarificationDismiss = pathname.match(/^\/api\/agent\/clarifications\/([^/]+)\/dismiss$/);
   if (request.method === "POST" && clarificationDismiss) {
-    if (!agent) throw new HttpError(503, "Agent clarification operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "待确认处理功能当前不可用，请先启动桌面应用。");
     const snapshot = agent.dismissClarification(validateIdentifier(decodeURIComponent(clarificationDismiss[1]), "clarification id"));
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
@@ -173,12 +196,12 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   if (request.method === "GET" && intakeDraft) {
     const id = validateIdentifier(decodeURIComponent(intakeDraft[1]), "draft id");
     const draft = store.snapshot().intakeDrafts.find((item) => item.id === id);
-    if (!draft) throw new HttpError(404, "Intake draft was not found.");
+    if (!draft) throw new HttpError(404, "找不到这条待确认草稿，可能已经处理或放弃。");
     sendJson(response, 200, { ok: true, draft });
     return;
   }
   if (request.method === "DELETE" && intakeDraft) {
-    if (!agent) throw new HttpError(503, "Agent draft operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "草稿处理功能当前不可用，请先启动桌面应用。");
     const snapshot = agent.cancelIntakeDraft(validateIdentifier(decodeURIComponent(intakeDraft[1]), "draft id"));
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
@@ -191,7 +214,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     return;
   }
   if ((request.method === "POST" || request.method === "PUT") && planRoute) {
-    if (!agent) throw new HttpError(503, "Task planning operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "任务规划功能当前不可用，请先启动桌面应用。");
     const taskId = validateIdentifier(decodeURIComponent(planRoute[1]), "task id");
     const result = request.method === "POST"
       ? await agent.generateTaskPlan(taskId, false)
@@ -202,7 +225,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   const regenerateRoute = pathname.match(/^\/api\/items\/([^/]+)\/plan\/regenerate$/);
   if (request.method === "POST" && regenerateRoute) {
-    if (!agent) throw new HttpError(503, "Task planning operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "任务规划功能当前不可用，请先启动桌面应用。");
     const result = await agent.generateTaskPlan(validateIdentifier(decodeURIComponent(regenerateRoute[1]), "task id"), true);
     onSnapshot(result.snapshot, "data");
     sendJson(response, 200, result);
@@ -210,7 +233,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   const activateRoute = pathname.match(/^\/api\/items\/([^/]+)\/plan\/activate$/);
   if (request.method === "POST" && activateRoute) {
-    if (!agent) throw new HttpError(503, "Task planning operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "任务规划功能当前不可用，请先启动桌面应用。");
     const result = agent.activateTaskPlan(validateIdentifier(decodeURIComponent(activateRoute[1]), "task id"), validatePlanActivation(await readJson(request)));
     onSnapshot(result.snapshot, "data");
     sendJson(response, 200, result);
@@ -223,14 +246,14 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     return;
   }
   if (request.method === "PATCH" && pathname === "/api/agent/behavior-memory") {
-    if (!agent) throw new HttpError(503, "Behavior Memory operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "个性化规划功能当前不可用，请先启动桌面应用。");
     const snapshot = agent.updateBehaviorMemory(validateBehaviorMemoryPatch(await readJson(request)));
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "POST" && pathname === "/api/agent/behavior-memory/preferences") {
-    if (!agent) throw new HttpError(503, "Behavior Memory operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "个性化规划功能当前不可用，请先启动桌面应用。");
     const snapshot = agent.upsertPlanningPreference(validateExplicitPreference(await readJson(request)));
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
@@ -238,21 +261,21 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   const preferenceRoute = pathname.match(/^\/api\/agent\/behavior-memory\/preferences\/([^/]+)$/);
   if (request.method === "PATCH" && preferenceRoute) {
-    if (!agent) throw new HttpError(503, "Behavior Memory operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "个性化规划功能当前不可用，请先启动桌面应用。");
     const snapshot = agent.setPlanningPreferenceStatus(validateIdentifier(decodeURIComponent(preferenceRoute[1]), "preference id"), validatePreferenceStatusPatch(await readJson(request)));
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "DELETE" && preferenceRoute) {
-    if (!agent) throw new HttpError(503, "Behavior Memory operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "个性化规划功能当前不可用，请先启动桌面应用。");
     const snapshot = agent.deletePlanningPreference(validateIdentifier(decodeURIComponent(preferenceRoute[1]), "preference id"));
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "DELETE" && pathname === "/api/agent/behavior-memory") {
-    if (!agent) throw new HttpError(503, "Behavior Memory operations are unavailable in this process.");
+    if (!agent) throw new HttpError(503, "个性化规划功能当前不可用，请先启动桌面应用。");
     const snapshot = agent.clearBehaviorMemory();
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
@@ -300,7 +323,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     return;
   }
 
-  sendJson(response, 404, { ok: false, error: "Unknown Chroni API endpoint.", endpoints: apiEndpoints() });
+  sendJson(response, 404, { ok: false, error: "找不到这个 Chroni API 地址，请检查请求路径和方法。", endpoints: apiEndpoints() });
 }
 
 function apiEndpoints(): string[] {
@@ -334,7 +357,7 @@ function apiEndpoints(): string[] {
 async function readJson(request: IncomingMessage): Promise<unknown> {
   const declaredLength = Number(request.headers["content-length"] ?? 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_API_BODY_BYTES) {
-    throw new HttpError(413, `Request body exceeds ${MAX_API_BODY_BYTES} bytes.`);
+    throw new HttpError(413, `请求内容过大，不能超过 ${MAX_API_BODY_BYTES} 字节。`);
   }
   const chunks: Buffer[] = [];
   let receivedBytes = 0;
@@ -343,16 +366,16 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
     receivedBytes += buffer.length;
     if (receivedBytes > MAX_API_BODY_BYTES) {
       request.resume();
-      throw new HttpError(413, `Request body exceeds ${MAX_API_BODY_BYTES} bytes.`);
+      throw new HttpError(413, `请求内容过大，不能超过 ${MAX_API_BODY_BYTES} 字节。`);
     }
     chunks.push(buffer);
   }
   const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw.trim()) throw new HttpError(400, "Request body must be JSON.");
+  if (!raw.trim()) throw new HttpError(400, "请求内容不能为空，并且必须使用 JSON 格式。");
   try {
     return JSON.parse(raw) as unknown;
   } catch {
-    throw new HttpError(400, "Request body must be valid JSON.");
+    throw new HttpError(400, "请求内容不是有效的 JSON。");
   }
 }
 
@@ -384,10 +407,10 @@ function sendJson(response: ServerResponse, status: number, body: unknown): void
 function applyCors(request: IncomingMessage, response: ServerResponse, allowedOrigin: string): void {
   const origin = typeof request.headers.origin === "string" ? request.headers.origin : "";
   if (!origin) return;
-  if (!allowedOrigin || origin !== allowedOrigin) throw new HttpError(403, "Browser origin is not allowed to access the Chroni API.");
+  if (!allowedOrigin || origin !== allowedOrigin) throw new HttpError(403, "当前网页来源没有访问 Chroni API 的权限。");
   response.setHeader("access-control-allow-origin", origin);
   response.setHeader("vary", "Origin");
-  response.setHeader("access-control-allow-methods", "GET,POST,PATCH,DELETE,OPTIONS");
+  response.setHeader("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   response.setHeader("access-control-allow-headers", "authorization,content-type");
 }
 

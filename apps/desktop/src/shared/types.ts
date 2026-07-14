@@ -36,7 +36,7 @@ export type Importance = "high" | "medium" | "low";
 
 export type ServiceState = "ready" | "limited" | "unavailable";
 
-export type SourceExtractionStatus = "success" | "failed" | "duplicate";
+export type SourceExtractionStatus = "success" | "pending" | "failed" | "duplicate";
 
 export type CompanionStyle = "classic" | "mint" | "sunrise";
 
@@ -444,6 +444,8 @@ export type ServiceStatus = {
   parser: ServiceState;
   ocr: ServiceState;
   model: ServiceState;
+  storage: "ready" | "recovered" | "reset" | "read-only";
+  storageDiagnostic?: string;
   modelEnvironmentConfigured: boolean;
   modelEnabledOverride?: boolean;
   storagePath: string;
@@ -510,4 +512,16 @@ export type IntakeResult =
   | { ok: true; created: DdlItem[]; message: string; snapshot: ChroniSnapshot }
   | { ok: false; reason: string; snapshot: ChroniSnapshot };
 
-export type ItemPatch = Partial<Pick<DdlItem, "title" | "importance" | "dueAt" | "sourceSummary" | "completed" | "snoozedUntil" | "estimatedMinutes" | "progressPercent">>;
+export type ItemPatch = Partial<Pick<DdlItem, "title" | "importance" | "dueAt" | "sourceSummary" | "completed">> & {
+  /** `null` explicitly removes a previously stored snooze. */
+  snoozedUntil?: string | null;
+  /** `null` explicitly removes a previously stored estimate. */
+  estimatedMinutes?: number | null;
+  /** `null` explicitly removes a previously stored progress value. */
+  progressPercent?: number | null;
+};
+
+export type ReplaceSourceItemsOptions = {
+  /** Tasks represented by unresolved reprocessing drafts remain live until the user answers or cancels. */
+  preserveTaskIds?: string[];
+};

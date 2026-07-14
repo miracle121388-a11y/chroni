@@ -10,6 +10,12 @@ type WindowSet = {
   tray?: Tray;
 };
 
+export type ControlCenterRoute = {
+  tab?: "schedule" | "agent" | "preferences" | "services";
+  taskId?: string;
+  focus?: "clarifications";
+};
+
 const windows: WindowSet = {};
 let scheduleHideTimer: NodeJS.Timeout | undefined;
 const windowDragSessions = new Map<number, { kind: "pet" | "schedule"; startWindow: WindowPosition; startCursor: WindowPosition }>();
@@ -46,6 +52,11 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
   screen.on("display-metrics-changed", repositionPetForDisplays);
 
   windows.schedule = createViewWindow("schedule", scheduleWindowOptions());
+  // The pet itself is visible in macOS full-screen Spaces, so its popover must
+  // follow it there as well. Keep the existing Windows window policy intact.
+  if (process.platform === "darwin") {
+    windows.schedule.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
   positionScheduleWindow();
   const scheduleWebContentsId = windows.schedule.webContents.id;
   windows.schedule.webContents.once("destroyed", () => windowDragSessions.delete(scheduleWebContentsId));
@@ -125,7 +136,7 @@ export function showPetMenu(source?: BrowserWindow | null): void {
   });
 }
 
-export function showControlCenter(): void {
+export function showControlCenter(route?: ControlCenterRoute): void {
   if (!windows.control || windows.control.isDestroyed()) {
     windows.control = createViewWindow("control", {
       width: 980,
@@ -140,6 +151,18 @@ export function showControlCenter(): void {
   }
   windows.control.show();
   windows.control.focus();
+  if (route) {
+    if (windows.control.webContents.isLoading()) {
+      windows.control.webContents.once("did-finish-load", () => sendControlRoute(route));
+    } else {
+      sendControlRoute(route);
+    }
+  }
+}
+
+function sendControlRoute(route: ControlCenterRoute): void {
+  if (!windows.control || windows.control.isDestroyed()) return;
+  windows.control.webContents.send("chroni:control-navigate", route);
 }
 
 export function showSchedule(expanded = true, focus = false): void {

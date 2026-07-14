@@ -144,7 +144,8 @@ test("DeadlineAgent records model fallback and a disabled reminder truthfully", 
 
   assert.equal(result.plan.plannerSource, "rules-fallback");
   assert.equal(result.actions.find((action) => action.tool === "reminder")?.status, "skipped");
-  assert.match(result.actions.find((action) => action.tool === "reminder")?.summary ?? "", /disabled/);
+  assert.match(result.actions.find((action) => action.tool === "reminder")?.summary ?? "", /系统通知未开启/);
+  assert.doesNotMatch(result.actions.find((action) => action.tool === "reminder")?.summary ?? "", /disabled/);
   assert.equal(result.trace.some((entry) => entry.data.fallbackReason === "request-failed"), true);
 });
 

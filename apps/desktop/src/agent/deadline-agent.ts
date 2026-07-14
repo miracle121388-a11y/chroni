@@ -3,6 +3,7 @@ import { verifyAgentPlan } from "./agent-state.js";
 import { createTraceRecorder } from "./agent-trace.js";
 import { observeTasks, type DeadlineAgentTools } from "./agent-tools.js";
 import { planFromProposal, type AgentPlanner } from "./agent-planner.js";
+import { formatOperationError } from "../shared/errors.js";
 import type { AgentMemory, AgentPlan, AgentRunResult, AgentRunTrigger, AgentTaskAssessment } from "../shared/types.js";
 
 export type DeadlineAgentOptions = {
@@ -94,9 +95,8 @@ export class DeadlineAgent {
         }
         trace.record("act", "已比较风险优先重排与当前计划。", { tool: "replan", plannedMinutes: plan.plannedMinutes, overflowMinutes: plan.overflowMinutes });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        actions.push({ tool: "replan", status: "failed", summary: message });
-        trace.record("act", "重新规划工具调用失败，保留初始计划。", { tool: "replan", error: message.slice(0, 240) }, false);
+        actions.push({ tool: "replan", status: "failed", summary: formatOperationError(error, "重新规划暂时不可用，已保留原计划") });
+        trace.record("act", "重新规划工具调用失败，保留初始计划。", { tool: "replan" }, false);
       }
     } else {
       actions.push({ tool: "replan", status: "skipped", summary: "当前风险和容量无需重新规划。" });
@@ -107,12 +107,11 @@ export class DeadlineAgent {
     if (reminderTarget && memory.reminderFrequency !== "off") {
       try {
         const outcome = await this.tools.sendReminder(reminderTarget) ?? { sent: true, reason: "sent" as const };
-        actions.push({ tool: "reminder", status: outcome.sent ? "success" : "skipped", summary: outcome.sent ? `已提醒：${reminderTarget.title}` : `未发送提醒：${outcome.reason}` });
+        actions.push({ tool: "reminder", status: outcome.sent ? "success" : "skipped", summary: outcome.sent ? `已提醒：${reminderTarget.title}` : reminderSkippedSummary(outcome.reason) });
         trace.record("act", outcome.sent ? "提醒工具已发送通知。" : "提醒工具未发送通知。", { tool: "reminder", taskId: reminderTarget.taskId, reason: outcome.reason });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        actions.push({ tool: "reminder", status: "failed", summary: message });
-        trace.record("act", "提醒工具调用失败。", { tool: "reminder", error: message.slice(0, 240) }, false);
+        actions.push({ tool: "reminder", status: "failed", summary: formatOperationError(error, "提醒暂时无法发送") });
+        trace.record("act", "提醒工具调用失败。", { tool: "reminder" }, false);
       }
     }
 
@@ -121,7 +120,7 @@ export class DeadlineAgent {
         await this.tools.persistPlan(plan);
         actions.push({ tool: "persist-plan", status: "success", summary: "今日工作块已保存。" });
       } catch (error) {
-        actions.push({ tool: "persist-plan", status: "failed", summary: error instanceof Error ? error.message : String(error) });
+        actions.push({ tool: "persist-plan", status: "failed", summary: formatOperationError(error, "今日工作计划暂未保存") });
       }
     }
     const verification = verifyAgentPlan(priorities, plan);
@@ -150,6 +149,15 @@ export class DeadlineAgent {
     await this.#saveRun(result);
     return result;
   }
+}
+
+function reminderSkippedSummary(reason: string): string {
+  if (reason === "disabled") return "未发送提醒：系统通知未开启。";
+  if (reason === "unsupported") return "未发送提醒：当前系统不支持通知。";
+  if (reason === "quiet-hours") return "未发送提醒：当前处于免打扰时段。";
+  if (reason === "duplicate") return "未发送提醒：近期已经提醒过。";
+  if (reason === "not-needed") return "未发送提醒：当前无需提醒。";
+  return "本次无需发送提醒。";
 }
 
 function isBetterPlan(candidate: AgentPlan, current: AgentPlan, highRiskIds: string[]): boolean {

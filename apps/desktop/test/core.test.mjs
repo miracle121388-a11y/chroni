@@ -8,6 +8,10 @@ import { ensureOcrCachePath, ensureTaskPlan, extractDdlItemsFromText, extractPay
 import { lightweightScheduleItems, scheduleBucket, shouldRemindItem, snoozeUntil, visibleScheduleSummary } from "../dist/shared/schedule.js";
 import { companionStateForItems, ChroniStore } from "../dist/store.js";
 
+function localIso(year, month, day, hour, minute) {
+  return new Date(year, month - 1, day, hour, minute, 0, 0).toISOString();
+}
+
 async function withStore(fn) {
   const dir = mkdtempSync(join(tmpdir(), "chroni-test-"));
   const store = new ChroniStore(dir);
@@ -132,13 +136,13 @@ test("model and local items merge when their source evidence overlaps", () => {
   assert.equal(result[0].title, "季度异常分析报告提交");
 });
 
-test("records failed task-like intake as a local source", async () => {
+test("records incomplete task-like intake as a pending local source", async () => {
   await withStore(async (store) => {
     const result = await processIntake({ kind: "text", text: "请提醒我提交课程报告" }, store);
 
     assert.equal(result.ok, false);
     assert.equal(result.snapshot.sources[0].sourceName, "直接文本");
-    assert.equal(result.snapshot.sources[0].extractionStatus, "failed");
+    assert.equal(result.snapshot.sources[0].extractionStatus, "pending");
     assert.match(result.snapshot.sources[0].lastError ?? "", /截止时间/);
   });
 });
@@ -242,7 +246,7 @@ test("reprocess preserves pending model clarifications on the original source", 
       choices: [{ message: { content: JSON.stringify({
         items: [{
           title: "课程报告提交",
-          dueAt: "2026-07-20T23:59:00+08:00",
+          dueAt: localIso(2026, 7, 20, 23, 59),
           importance: "high",
           sourceSummary: "7月20日 23:59 提交课程报告 PDF",
           contextExcerpt: "7月20日 23:59 提交课程报告 PDF",
@@ -719,10 +723,10 @@ test("llm candidates must still look like real deadline tasks", () => {
 
   assert.notEqual(itemFromLlmCandidate({
     title: "课程报告",
-    dueAt: "2026-07-12T23:59:00.000Z",
+    dueAt: localIso(2026, 7, 12, 23, 59),
     importance: "medium",
     sourceSummary: "7月12日 23:59 提交课程报告",
-  }), null);
+  }, "", "", new Date(2026, 6, 1, 10, 0)), null);
 });
 
 test("llm candidates must be grounded in the extracted source text", () => {
@@ -736,10 +740,10 @@ test("llm candidates must be grounded in the extracted source text", () => {
 
   assert.notEqual(itemFromLlmCandidate({
     title: "课程报告",
-    dueAt: "2026-07-12T23:59:00.000Z",
+    dueAt: localIso(2026, 7, 12, 23, 59),
     importance: "medium",
     sourceSummary: "7月12日 23:59 提交课程报告",
-  }, sourceText), null);
+  }, sourceText, "", new Date(2026, 6, 1, 10, 0)), null);
 });
 
 test("markdown formatting differences do not reject grounded model details", () => {
@@ -750,7 +754,7 @@ test("markdown formatting differences do not reject grounded model details", () 
   ].join("\n");
   const item = itemFromLlmCandidate({
     title: "机器学习期末项目",
-    dueAt: "2026-07-20T23:59:00+08:00",
+    dueAt: localIso(2026, 7, 20, 23, 59),
     importance: "high",
     sourceSummary: "机器学习项目需要在 2026 年 7 月 20 日 23:59 前提交。",
     contextExcerpt: "机器学习项目需要在 2026 年 7 月 20 日 23:59 前提交。提交内容包括：项目源码压缩包；README.md；实验报告 PDF。提交方式：课程平台期末项目入口上传。",
@@ -865,7 +869,7 @@ test("intake persists model tasks, detailed plans, and pending clarifications to
         : {
           items: [{
             title: "课程报告提交",
-            dueAt: "2026-07-20T23:59:00+08:00",
+            dueAt: localIso(2026, 7, 20, 23, 59),
             importance: "high",
             sourceSummary: "7月20日 23:59 提交课程报告",
             contextExcerpt: "7月20日 23:59 提交课程报告，提交课程报告 PDF 到课程平台。",
@@ -1120,8 +1124,8 @@ test("DeepSeek extraction processes every source independently", async () => {
     const prompt = body.messages.at(-1).content;
     const isCourse = prompt.includes("course-a.txt");
     const item = isCourse
-      ? { title: "课程报告", dueAt: "2026-07-20T23:59:00+08:00", importance: "medium", sourceSummary: "7月20日 23:59 提交课程报告" }
-      : { title: "实验报告", dueAt: "2026-07-22T18:00:00+08:00", importance: "high", sourceSummary: "7月22日 18:00 提交实验报告" };
+      ? { title: "课程报告", dueAt: localIso(2026, 7, 20, 23, 59), importance: "medium", sourceSummary: "7月20日 23:59 提交课程报告" }
+      : { title: "实验报告", dueAt: localIso(2026, 7, 22, 18, 0), importance: "high", sourceSummary: "7月22日 18:00 提交实验报告" };
     return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ items: [item] }) }, finish_reason: "stop" }] }), { status: 200 });
   };
   try {
@@ -1188,7 +1192,7 @@ test("DeepSeek extraction chunks long sources without dropping the end", async (
     const prompt = body.messages.at(-1).content;
     prompts.push(prompt);
     const items = prompt.includes("7月30日 20:00 提交最终报告")
-      ? [{ title: "最终报告", dueAt: "2026-07-30T20:00:00+08:00", importance: "high", sourceSummary: "7月30日 20:00 提交最终报告" }]
+      ? [{ title: "最终报告", dueAt: localIso(2026, 7, 30, 20, 0), importance: "high", sourceSummary: "7月30日 20:00 提交最终报告" }]
       : [];
     return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ items }) }, finish_reason: "stop" }] }), { status: 200 });
   };

@@ -144,9 +144,10 @@ summary:focus-visible {
 
 .bubble {
   position: absolute;
-  top: 146px;
+  top: 136px;
   left: 50%;
-  max-width: 164px;
+  width: max-content;
+  max-width: calc(100vw - 8px);
   padding: 9px 11px;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 16px;
@@ -155,6 +156,11 @@ summary:focus-visible {
   font-size: 12px;
   line-height: 1.4;
   text-align: center;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   opacity: 0;
   pointer-events: none;
   transform: translateX(-50%) translateY(-6px) scale(0.96);
@@ -593,6 +599,16 @@ summary:focus-visible {
 .preview-error {
   color: var(--muted);
   font-size: 13px;
+}
+
+.preview-note {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #edf4fb;
+  color: var(--primary-2);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .extract-preview .preview-failure span {
@@ -1490,6 +1506,10 @@ summary:focus-visible {
   background: #64748b;
 }
 
+.source-status.status-pending {
+  background: #b7791f;
+}
+
 .source-status.status-failed {
   background: var(--red);
 }
@@ -1499,6 +1519,14 @@ summary:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--red);
+  font-size: 12px;
+}
+
+.source-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9a6700;
   font-size: 12px;
 }
 
@@ -1616,6 +1644,9 @@ summary:focus-visible {
 .service-ready { color: #15803d; }
 .service-limited { color: #b45309; }
 .service-unavailable { color: #b91c1c; }
+.service-recovered,
+.service-reset { color: #b45309; }
+.service-read-only { color: #b91c1c; }
 
 .privacy,
 .notes {
@@ -1998,6 +2029,29 @@ details.source-history[open] > summary::after {
 
 .source-list {
   gap: 7px;
+}
+
+.source-load-more {
+  display: block;
+  margin: 10px auto 0;
+  padding: 7px 14px;
+  border: 1px solid #d7e0e7;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--primary-2);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.hotkey-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hotkey-actions button {
+  min-height: 34px;
+  padding: 7px 12px;
 }
 
 .source-row {
