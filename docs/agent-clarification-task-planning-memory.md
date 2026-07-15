@@ -49,6 +49,6 @@ Trace entries contain only stage summaries, IDs, counts, planner source, version
 
 - Clarification LLM unavailable: deterministic local completeness rules create a manual question.
 - Task planning LLM unavailable or invalid: a three-stage rules fallback creates an editable draft.
-- Multi-task intake: local rule drafts are created immediately; model regeneration remains available per task to avoid long serial waits and unexpected API cost.
+- Multi-task intake: when LLM planning is enabled, task plans are generated with at most three concurrent model requests; individual failures fall back to local rule drafts. With LLM disabled, rule drafts are created immediately.
 - Behavior Memory is fully local and does not require an LLM.
 - Tasks without an active TaskPlan continue using `DdlItem.estimatedMinutes`.

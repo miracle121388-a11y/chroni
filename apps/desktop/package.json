@@ -1,6 +1,6 @@
 {
   "name": "@chroni/desktop",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Local-first desktop deadline agent with document extraction, daily planning, and companion reminders.",
   "license": "MIT",

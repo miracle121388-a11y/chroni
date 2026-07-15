@@ -15,9 +15,11 @@ import "@fontsource-variable/noto-sans-sc/wght.css";
 import "@fontsource-variable/noto-serif-sc/wght.css";
 import "@fontsource-variable/source-sans-3/wght.css";
 import "@fontsource-variable/source-serif-4/standard.css";
+import xiaotongDonationQrBase64 from "../../../third_party/xiaotong/donate_qr.b64?raw";
 import "./styles.css";
 
 const api = window.chroni;
+const xiaotongDonationQr = `data:image/jpeg;base64,${xiaotongDonationQrBase64.replace(/\s+/g, "")}`;
 document.documentElement.dataset.platform = api.platform;
 const petFrameModules = import.meta.glob("./assets/tongluv/frames/*/*.png", { eager: true, query: "?url", import: "default" }) as Record<string, string>;
 const petAnimationFrames: Record<PetAction, string[]> = {
@@ -1355,9 +1357,24 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
         </section>
       )}
       <section className="third-party-credit">
-        <h3>桌宠形象</h3>
-        <p>当前桌宠形象基于开源项目 XIAOTONG Desktop Pet / 蓝色小嗵，Chroni 已保留其许可证和附加条款副本。</p>
-        <a href="https://github.com/gildingmazzonimo621-design/XIAOTONG-Desktop-pet" target="_blank" rel="noreferrer">原始项目仓库</a>
+        <h3>桌宠原作信息 · About</h3>
+        <p>Chroni 的桌宠形象基于 XIAOTONG Desktop Pet / 蓝色小嗵。以下信息按原项目附加条款完整保留。</p>
+        <div className="xiaotong-about">
+          <figure className="xiaotong-donation">
+            <figcaption>☕ 请作者喝杯咖啡</figcaption>
+            <img src={xiaotongDonationQr} alt="XIAOTONG 原作者捐赠二维码" />
+          </figure>
+          <dl className="xiaotong-details">
+            <div><dt>原作版本</dt><dd>v1.0.1</dd></div>
+            <div><dt>原作者</dt><dd>WWW.没有COM</dd></div>
+            <div><dt>微信 / WeChat</dt><dd>xy12981118</dd></div>
+          </dl>
+        </div>
+        <div className="third-party-links">
+          <a href="https://github.com/gildingmazzonimo621-design/XIAOTONG-Desktop-pet" target="_blank" rel="noreferrer">原始项目仓库</a>
+          <a href="https://github.com/weidaozhong/Tongluv/blob/main/LICENSE" target="_blank" rel="noreferrer">Apache-2.0</a>
+          <a href="https://github.com/weidaozhong/Tongluv/blob/main/ADDITIONAL_TERMS.md" target="_blank" rel="noreferrer">附加条款</a>
+        </div>
       </section>
       <details className="advanced-settings">
         <summary>排错说明</summary>

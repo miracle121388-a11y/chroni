@@ -2332,6 +2332,89 @@ details.source-history[open] > summary::after {
   text-decoration: underline;
 }
 
+.xiaotong-about {
+  display: grid;
+  grid-template-columns: minmax(132px, 0.42fr) minmax(180px, 1fr);
+  align-items: center;
+  gap: 20px;
+  margin-top: 14px;
+}
+
+.xiaotong-donation {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.xiaotong-donation figcaption {
+  color: var(--ink);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+}
+
+.xiaotong-donation img {
+  width: 124px;
+  height: 124px;
+  padding: 6px;
+  border: 1px solid rgba(31, 30, 29, 0.1);
+  border-radius: 12px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.xiaotong-details {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.xiaotong-details div {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(31, 30, 29, 0.08);
+}
+
+.xiaotong-details div:last-child {
+  border-bottom: 0;
+}
+
+.xiaotong-details dt,
+.xiaotong-details dd {
+  margin: 0;
+  font-size: var(--text-caption);
+  line-height: 1.45;
+}
+
+.xiaotong-details dt {
+  color: var(--muted);
+}
+
+.xiaotong-details dd {
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+}
+
+.third-party-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+}
+
+@media (max-width: 560px) {
+  .xiaotong-about {
+    grid-template-columns: 1fr;
+  }
+
+  .xiaotong-details div {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
 @media (max-width: 860px) {
   .control-shell {
     grid-template-columns: 176px minmax(0, 1fr);
