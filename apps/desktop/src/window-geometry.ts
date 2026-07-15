@@ -16,6 +16,20 @@ export type NormalizedWindowPlacement = {
   yRatio: number;
 };
 
+export function fitWindowSizeToWorkArea(
+  preferred: WindowSize,
+  area: WindowSize,
+  frame: WindowSize = { width: 0, height: 0 },
+  margin = 0,
+): WindowSize {
+  const availableWidth = Math.max(1, area.width - Math.max(0, frame.width) - margin * 2);
+  const availableHeight = Math.max(1, area.height - Math.max(0, frame.height) - margin * 2);
+  return {
+    width: Math.max(1, Math.min(preferred.width, availableWidth)),
+    height: Math.max(1, Math.min(preferred.height, availableHeight)),
+  };
+}
+
 export function hasCrossedDragThreshold(start: WindowPosition, cursor: WindowPosition, threshold = 6): boolean {
   return Math.hypot(cursor.x - start.x, cursor.y - start.y) >= threshold;
 }

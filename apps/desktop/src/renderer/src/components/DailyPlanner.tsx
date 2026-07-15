@@ -299,7 +299,7 @@ function InboxPanel({ tasks, text, busy, onText, onCreate, onOpen }: { tasks: Da
       <form onSubmit={onCreate}><input value={text} disabled={busy} onChange={(event) => onText(event.target.value)} placeholder="记录一个还没决定时间的任务..." aria-label="添加待安排任务" /><button type="submit" disabled={busy || !text.trim()} title="添加到待安排" aria-label="添加到待安排">＋</button></form>
       <div className="daily-inbox-list">
         {tasks.map((task) => <button className={`daily-inbox-task color-${task.color}`} draggable={!busy} disabled={busy} key={task.id} type="button" onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)} onClick={() => onOpen(task.id)}><i aria-hidden="true" /><span><b>{task.title}</b><small>{task.origin === "agent" ? "Agent 规划" : "拖到时间轴排期"}</small></span><em aria-hidden="true">›</em></button>)}
-        {!tasks.length && <div className="daily-inbox-empty"><span aria-hidden="true">⌁</span><b>想法已经归位</b><p>新任务可以先留在这里，再拖到右侧安排。</p></div>}
+        {!tasks.length && <div className="daily-inbox-empty"><span aria-hidden="true"><svg className="inline-icon" viewBox="0 0 16 16" focusable="false"><path d="M2 8c2.1-3.4 3.8 3.4 6 0s3.9-3.4 6 0" /></svg></span><b>想法已经归位</b><p>新任务可以先留在这里，再拖到右侧安排。</p></div>}
       </div>
     </aside>
   );
@@ -417,7 +417,20 @@ function TimelineTask({ task, date, compact = false, density = "regular", displa
   const end = new Date(start.getTime() + taskDuration(task) * 60_000);
   const archived = task.dismissed;
   const interactive = !archived && !disabled;
-  return <article className={`daily-task-card color-${displayColor ?? task.color} density-${density} ${complete ? "completed" : ""} ${compact ? "compact" : ""} ${archived ? "archived" : ""}`} draggable={interactive} tabIndex={interactive ? 0 : -1} aria-label={`${task.title}，${task.allDay ? "全天" : `${formatClock(start)} 至 ${formatClock(end)}`}，按回车编辑`} onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)} onClick={() => { if (interactive) onOpen(task.id, date); }} onKeyDown={(event) => { if (event.target !== event.currentTarget || !interactive || (event.key !== "Enter" && event.key !== " ")) return; event.preventDefault(); onOpen(task.id, date); }}><button type="button" className="daily-check" disabled={!interactive} aria-label={complete ? `恢复 ${task.title}` : `完成 ${task.title}`} onClick={(event) => { event.stopPropagation(); if (interactive) onToggle(task, date); }}>{complete ? "✓" : ""}</button><div><time>{task.allDay ? "全天" : `${formatClock(start)} – ${formatClock(end)}`}</time><b>{task.title}</b><span>{archived ? "历史保留" : task.origin === "agent" ? "✦ Agent 规划" : task.recurrence !== "none" ? recurrenceLabel(task.recurrence) : formatDuration(taskDuration(task))}</span></div><i aria-hidden="true" /></article>;
+  const scheduleLabel = task.allDay ? "全天" : `${formatClock(start)} 至 ${formatClock(end)}`;
+  return (
+    <article
+      className={`daily-task-card color-${displayColor ?? task.color} density-${density} ${complete ? "completed" : ""} ${compact ? "compact" : ""} ${archived ? "archived" : ""}`}
+      draggable={interactive}
+      onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)}
+    >
+      <button type="button" className="daily-check" disabled={!interactive} aria-label={complete ? `恢复 ${task.title}` : `完成 ${task.title}`} onClick={() => { if (interactive) onToggle(task, date); }}>{complete ? "✓" : ""}</button>
+      <button type="button" className="daily-task-open" disabled={!interactive} aria-label={`${task.title}，${scheduleLabel}${interactive ? "，编辑任务" : "，历史保留"}`} onClick={() => { if (interactive) onOpen(task.id, date); }}>
+        <span className="daily-task-copy"><time>{task.allDay ? "全天" : `${formatClock(start)} – ${formatClock(end)}`}</time><b>{task.title}</b><span>{archived ? "历史保留" : task.origin === "agent" ? "✦ Agent 规划" : task.recurrence !== "none" ? recurrenceLabel(task.recurrence) : formatDuration(taskDuration(task))}</span></span>
+        <i aria-hidden="true" />
+      </button>
+    </article>
+  );
 }
 
 function CompactDays({ days, tasks, disabled, onSelectDate, onOpen, onToggle }: { days: Date[]; tasks: DailyTask[]; disabled: boolean; onSelectDate(date: Date): void; onOpen(id: string, date: Date): void; onToggle(task: DailyTask, date: Date): void }) {

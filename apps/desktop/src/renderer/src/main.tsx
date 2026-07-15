@@ -9,6 +9,8 @@ import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
 import type { AgentMemory, CompanionState, DailyTask, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ChroniUpdateStatus, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
 import { DailyPlanner } from "./components/DailyPlanner";
+import "@fontsource-variable/inter/wght.css";
+import "@fontsource-variable/noto-sans-sc/wght.css";
 import "./styles.css";
 
 const api = window.chroni;
@@ -1646,7 +1648,12 @@ function DdlRow({ item, source, plan, setSnapshot, editable, minimal = false, on
       <article className={`ddl-row editor-row tone-${urgency} ${snoozed ? "snoozed" : ""} ${item.completed ? "completed" : ""} ${editing ? "editing" : ""} ${isBusy ? "busy" : ""}`} role="listitem" aria-busy={isBusy}>
         <div className="editor-summary">
           <button className={`completion-toggle ${item.completed ? "done" : ""}`} type="button" disabled={isBusy} onClick={() => void completeItem()} aria-label={item.completed ? `恢复 ${item.title}` : `完成 ${item.title}`}>
-            {item.completed ? "↶" : "✓"}
+            {item.completed ? (
+              <svg className="inline-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M6.3 3.2H2.8v3.5" />
+                <path d="M3.1 6.3a5.3 5.3 0 1 1 .8 4.9" />
+              </svg>
+            ) : "✓"}
           </button>
           <div className="editor-copy">
             <div className="editor-title-line">
@@ -1728,7 +1735,12 @@ function DdlRow({ item, source, plan, setSnapshot, editable, minimal = false, on
         <em className="remaining-text">{remainingText(item.dueAt)}</em>
       </button>
       <div className="snooze-control" ref={snoozeControlRef}>
-        <button ref={snoozeToggleRef} className="snooze" type="button" title="稍后提醒" aria-label={`稍后提醒 ${item.title}`} aria-expanded={snoozeMenuOpen} aria-controls={snoozeMenuId} disabled={isBusy} onClick={() => setSnoozeMenuOpen((current) => !current)}>⏱</button>
+        <button ref={snoozeToggleRef} className="snooze" type="button" title="稍后提醒" aria-label={`稍后提醒 ${item.title}`} aria-expanded={snoozeMenuOpen} aria-controls={snoozeMenuId} disabled={isBusy} onClick={() => setSnoozeMenuOpen((current) => !current)}>
+          <svg className="inline-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <circle cx="8" cy="8.5" r="5.25" />
+            <path d="M8 5.5v3.2l2.2 1.3M5.7 1.8h4.6" />
+          </svg>
+        </button>
         {snoozeMenuOpen && (
           <div className="snooze-menu" id={snoozeMenuId} role="group" aria-label="选择稍后提醒时间">
             {snoozeOptions.map((option) => (

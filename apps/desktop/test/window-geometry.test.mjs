@@ -4,12 +4,28 @@ import test from "node:test";
 import {
   draggedWindowPosition,
   draggedWindowPositionWithinArea,
+  fitWindowSizeToWorkArea,
   hasCrossedDragThreshold,
   normalizedWindowPlacement,
   restoredWindowPosition,
   schedulePopoverPosition,
   snappedWindowPosition,
 } from "../dist/window-geometry.js";
+
+test("window content sizes fit inside small high-DPI work areas", () => {
+  assert.deepEqual(
+    fitWindowSizeToWorkArea({ width: 980, height: 680 }, { width: 1_920, height: 1_040 }, { width: 16, height: 40 }),
+    { width: 980, height: 680 },
+  );
+  assert.deepEqual(
+    fitWindowSizeToWorkArea({ width: 980, height: 680 }, { width: 683, height: 344 }, { width: 16, height: 40 }),
+    { width: 667, height: 304 },
+  );
+  assert.deepEqual(
+    fitWindowSizeToWorkArea({ width: 348, height: 418 }, { width: 300, height: 500 }, { width: -20, height: -20 }, 12),
+    { width: 276, height: 418 },
+  );
+});
 
 test("drag intent uses the same stable threshold on every platform", () => {
   const start = { x: 500, y: 300 };
