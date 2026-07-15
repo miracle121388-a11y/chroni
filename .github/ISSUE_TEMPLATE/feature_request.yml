@@ -1,0 +1,35 @@
+name: 功能建议
+description: 描述希望 Chroni 改善的真实工作流
+title: "[Feature] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 用户问题
+      description: 先描述目前在哪个场景下效率不足，而不是只给出一个控件名称。
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 期望结果
+      description: 说明完成后用户可以更快或更可靠地做什么。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 可选。可以包含交互、Agent、API 或兼容性思路。
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 当前替代方式
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已经搜索现有 Issue，并确认没有重复建议。
+          required: true

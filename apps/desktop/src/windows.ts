@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type NativeImage } from "electron";
+import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, screen, shell, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type NativeImage } from "electron";
 import { join } from "node:path";
 import type { ChroniPreferences, ChroniView, PetAction, PetActionCommand, PetPlacement } from "./shared/types.js";
 import { draggedWindowPosition, draggedWindowPositionWithinArea, normalizedWindowPlacement, restoredWindowPosition, schedulePopoverPosition, snappedWindowPosition, type WindowPosition } from "./window-geometry.js";
@@ -23,6 +23,7 @@ let petVisibilityGeneration = 0;
 let lastAppliedCompanionEnabled: boolean | undefined;
 let quitAfterSleep = false;
 let onCompanionVisibilityRequested: ((visible: boolean) => void) | undefined;
+let onCheckForUpdatesRequested: (() => void) | undefined;
 let lastPetPlacement: PetPlacement | undefined;
 let lastSchedulePlacement: PetPlacement | undefined;
 let onPetPlacementChanged: ((placement: PetPlacement) => void) | undefined;
@@ -126,8 +127,9 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
   });
 }
 
-export function createTray(options: { onCompanionVisibilityRequested?: (visible: boolean) => void } = {}): void {
+export function createTray(options: { onCompanionVisibilityRequested?: (visible: boolean) => void; onCheckForUpdatesRequested?: () => void } = {}): void {
   onCompanionVisibilityRequested = options.onCompanionVisibilityRequested;
+  onCheckForUpdatesRequested = options.onCheckForUpdatesRequested;
   windows.tray = new Tray(createTrayIcon());
   const menu = Menu.buildFromTemplate(appMenuTemplate());
   windows.tray.setToolTip("Chroni");
@@ -272,12 +274,30 @@ function createViewWindow(view: ChroniView, options: BrowserWindowConstructorOpt
       preload: join(app.getAppPath(), "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
     ...options,
   });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedExternalUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (event, url) => {
+    if (url === win.webContents.getURL()) return;
+    event.preventDefault();
+    if (isAllowedExternalUrl(url)) void shell.openExternal(url);
+  });
   void loadView(win, view);
   return win;
+}
+
+function isAllowedExternalUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "github.com";
+  } catch {
+    return false;
+  }
 }
 
 async function loadView(win: BrowserWindow, view: ChroniView): Promise<void> {
@@ -366,11 +386,13 @@ function appMenuTemplate(): MenuItemConstructorOptions[] {
   return [
     { label: "查看日程", click: () => showSchedule(true, true) },
     { label: "打开控制中心", click: () => showControlCenter() },
+    { label: "检查更新", click: () => onCheckForUpdatesRequested?.() },
     { type: "separator" },
     { label: "显示桌宠", click: () => { if (onCompanionVisibilityRequested) onCompanionVisibilityRequested(true); else showPet(true); } },
     { label: "隐藏桌宠", click: () => { if (onCompanionVisibilityRequested) onCompanionVisibilityRequested(false); else hidePet(true); } },
     { label: "隐藏日程表", click: () => hideSchedule() },
     { type: "separator" },
+    { label: `Chroni v${app.getVersion()}`, enabled: false },
     { label: "退出 Chroni", click: () => quitChroni() },
   ];
 }

@@ -14,6 +14,7 @@ import { shouldRemindItem } from "./shared/schedule.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
 import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
+import { ChroniUpdater } from "./updater.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface, type ControlCenterRoute } from "./windows.js";
 import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
 
@@ -22,6 +23,7 @@ let apiServer: ReturnType<typeof startChroniApiServer> | undefined;
 let deadlineAgent: DeadlineAgent;
 let agentTools: DeadlineAgentTools;
 let agentScheduler: AgentScheduler;
+let applicationUpdater: ChroniUpdater;
 let lastTaskFingerprint = "";
 let companionBeforeFileHover: { state: CompanionState; bubble: string } | undefined;
 
@@ -39,6 +41,7 @@ if (!gotLock) {
     process.env.CHRONI_OCR_CACHE_PATH ||= join(app.getPath("userData"), "cache", "ocr");
     store = new ChroniStore(app.getPath("userData"), createSecretCodec());
     installDeadlineAgent();
+    applicationUpdater = createApplicationUpdater();
     lastTaskFingerprint = taskFingerprint(store.snapshot());
     installIpc();
     createAppWindows({
@@ -50,6 +53,10 @@ if (!gotLock) {
         const snapshot = store.updatePreferences({ companionEnabled: visible });
         applyPreferences(snapshot.preferences);
         broadcast("chroni:snapshot-updated", snapshot);
+      },
+      onCheckForUpdatesRequested: () => {
+        showControlCenter({ tab: "services" });
+        void applicationUpdater.check();
       },
     });
     applyPreferences(store.snapshot().preferences);
@@ -67,7 +74,9 @@ if (!gotLock) {
     }, {
       discoveryFilePath: join(app.getPath("userData"), "chroni-api.json"),
       agent: agentApiOperations(),
+      version: app.getVersion(),
     });
+    applicationUpdater.start();
     refreshCompanionFromSchedule();
     refreshReminders();
     void agentScheduler.runStartupIfNeeded().catch((error) => console.error("Automatic Agent startup inspection failed.", error));
@@ -87,11 +96,16 @@ app.on("activate", () => showControlCenter());
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("before-quit", () => {
   agentScheduler?.dispose();
+  applicationUpdater?.dispose();
   if (apiServer?.listening) apiServer.close();
 });
 
 function installIpc(): void {
   ipcMain.handle("chroni:snapshot", () => store.snapshot());
+  ipcMain.handle("chroni:update-status", () => applicationUpdater.status());
+  ipcMain.handle("chroni:update-check", () => applicationUpdater.check());
+  ipcMain.handle("chroni:update-install", () => applicationUpdater.install());
+  ipcMain.handle("chroni:open-releases", () => shell.openExternal("https://github.com/miracle121388-a11y/chroni/releases"));
   ipcMain.handle("chroni:extract", async (_event, payload: IntakePayload) => {
     const validatedPayload = validateIntakePayload(payload);
     const previousCompanion = beginPetInput(validatedPayload, "正在预览并理解输入...");
@@ -274,6 +288,24 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:open-storage", () => shell.showItemInFolder(store.filePath));
+}
+
+function createApplicationUpdater(): ChroniUpdater {
+  return new ChroniUpdater({
+    currentVersion: app.getVersion(),
+    packaged: app.isPackaged,
+    platform: process.platform,
+    onStatus: (status) => broadcast("chroni:update-status", status),
+    onDownloaded: (status) => {
+      if (!Notification.isSupported()) return;
+      const notification = new Notification({
+        title: "Chroni 更新已准备好",
+        body: status.message,
+      });
+      notification.on("click", () => showControlCenter({ tab: "services" }));
+      notification.show();
+    },
+  });
 }
 
 function publishStoreSnapshot(snapshot: ChroniSnapshot): ChroniSnapshot {

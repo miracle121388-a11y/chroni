@@ -19,11 +19,13 @@
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-31566d" alt="Windows and macOS">
   <img src="https://img.shields.io/badge/Electron-42-47848f" alt="Electron 42">
   <img src="https://img.shields.io/badge/TypeScript-6-3178c6" alt="TypeScript 6">
+  <a href="https://github.com/miracle121388-a11y/chroni/releases/latest"><img src="https://img.shields.io/badge/download-latest%20release-2f6b61" alt="Download latest release"></a>
 </p>
 
 <p align="center">
   <a href="#为什么选择-chroni">核心能力</a> ·
   <a href="#界面预览">界面预览</a> ·
+  <a href="#下载与安装">下载</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="#连接-deepseek">DeepSeek</a> ·
   <a href="#本地-http-api">HTTP API</a> ·
@@ -33,7 +35,7 @@
 ![Chroni 每日任务时间轴，展示 Agent 自动规划的任务块](./docs/assets/chroni-daily-planner.png)
 
 > [!IMPORTANT]
-> Chroni 正在积极开发中，目前推荐从源码运行。仓库已提供 Windows 与 macOS 构建工作流，但公开分发前的签名安装包仍在完善中。
+> Chroni 正在积极开发中。Windows 与 macOS 用户可以直接从 GitHub Releases 安装；正式分发时请优先选择带代码签名和 macOS 公证的版本，并使用发布页附带的 SHA-256 校验和验证文件。
 
 ## Chroni 是什么
 
@@ -95,15 +97,51 @@ Deadline Agent 使用可审计的 `Observe -> Plan -> Act -> Verify` 循环：
 
 更完整的设计说明见 [主动追问、任务规划与 Behavior Memory](./docs/agent-clarification-task-planning-memory.md)。
 
+## 下载与安装
+
+前往 [Latest Release](https://github.com/miracle121388-a11y/chroni/releases/latest) 下载，无需安装 Node.js、pnpm 或开发工具。
+
+| 平台 | 推荐文件 | 使用方式 |
+| --- | --- | --- |
+| Windows 10/11 x64 | `Chroni-<version>-win-x64-setup.exe` | 双击安装，可选择目录，并创建开始菜单与桌面快捷方式 |
+| Windows 10/11 x64 | `Chroni-<version>-win-x64-portable.exe` | 不安装，直接放到任意目录运行 |
+| macOS 12+ | `Chroni-<version>-mac-universal.dmg` | 同时兼容 Intel 与 Apple Silicon，拖入 Applications 即可 |
+
+安装后的 Chroni 会常驻系统托盘。第一次启动可以直接使用本地规则；需要理解复杂通知、图片和跨段落材料时，再在“偏好 -> 高级 -> 大模型 API”中填写 DeepSeek Key。
+
+Chroni 会在后台检查 GitHub Releases。新版本下载完成后，“运行状态”页面会出现“重启并安装”，也可以通过托盘菜单手动检查。应用不会在工作过程中突然重启。
+
+<details>
+<summary><strong>验证下载文件</strong></summary>
+
+每个 Release 都包含 `SHA256SUMS.txt`。Windows PowerShell：
+
+```powershell
+Get-FileHash .\Chroni-0.1.0-win-x64-setup.exe -Algorithm SHA256
+```
+
+macOS：
+
+```bash
+shasum -a 256 Chroni-0.1.0-mac-universal.dmg
+grep 'Chroni-0.1.0-mac-universal.dmg' SHA256SUMS.txt
+```
+
+计算结果应与发布页完全一致。Release 还附带 GitHub build provenance attestation，可使用 GitHub CLI 验证构建来源。
+
+</details>
+
 ## 快速开始
 
-### 运行要求
+以下内容面向希望修改代码或从源码运行的开发者。普通用户请直接使用上方安装包。
 
-- Windows 10/11 或 macOS
+### 开发环境要求
+
+- Windows 10/11、macOS 12+ 或 Linux 开发环境
 - Node.js `22.13+`
 - pnpm `11.7.0`，也可以直接使用下方固定版本的 `npx` 命令
 
-### 1. 获取并安装
+### 1. 获取源码与依赖
 
 ```bash
 git clone https://github.com/miracle121388-a11y/chroni.git
@@ -135,7 +173,7 @@ Chroni API listening at http://127.0.0.1:8765
 
 Chroni 会显示桌宠并常驻系统托盘。关闭控制中心不会退出应用；需要完全退出时，请在托盘菜单选择“退出 Chroni”。开发终端中可使用 `Ctrl+C` 停止。
 
-### 3. 运行生产构建
+### 3. 运行本地生产构建
 
 ```bash
 npx pnpm@11.7.0 run start
@@ -342,11 +380,15 @@ npx pnpm@11.7.0 run check
 
 # 生成当前平台的桌面产物
 npx pnpm@11.7.0 run package:desktop
+
+# 显式生成 Windows 或 macOS 安装包
+npx pnpm@11.7.0 run package:windows
+npx pnpm@11.7.0 run package:macos
 ```
 
-构建产物位于 `apps/desktop/dist-electron/`。CI 在 Windows、macOS 和 Linux 上执行完整检查；`Desktop Release Builds` 工作流可以手动运行，也会在推送 `v*` 标签时构建 Windows 与 macOS artifact。
+构建产物位于 `apps/desktop/dist-electron/`。CI 在 Windows、macOS 和 Linux 上执行完整检查；`Desktop Release` 工作流可以手动生成 30 天 artifact，也会在推送 `v*` 标签时创建正式 GitHub Release、更新元数据、SHA-256 校验和与构建来源证明。
 
-Windows 公开分发需要配置代码签名 Secrets：`WINDOWS_CSC_LINK` 和 `WINDOWS_CSC_KEY_PASSWORD`。macOS 公开分发还需要 Apple Developer ID 签名与公证；未配置证书时工作流生成便于开源测试的未签名产物。
+Windows 公开分发需要代码签名；macOS 公开分发需要 Developer ID 签名与公证。完整的版本、Secrets、强制签名、标签和发布后验证步骤见 [发布指南](./docs/releasing.md)。
 
 <details>
 <summary><strong>常见文件识别问题</strong></summary>
@@ -362,7 +404,7 @@ Windows 公开分发需要配置代码签名 Secrets：`WINDOWS_CSC_LINK` 和 `W
 
 ## 参与开发
 
-Chroni 仍处于快速迭代阶段，欢迎通过 [Issues](https://github.com/miracle121388-a11y/chroni/issues) 报告问题或讨论新能力，也欢迎提交 Pull Request。
+Chroni 仍处于快速迭代阶段，欢迎通过 [Issues](https://github.com/miracle121388-a11y/chroni/issues) 报告问题或讨论新能力，也欢迎提交 Pull Request。开始前请阅读 [贡献指南](./CONTRIBUTING.md)；安全漏洞请按照 [安全策略](./SECURITY.md) 私密报告。
 
 提交前请运行：
 
@@ -370,7 +412,7 @@ Chroni 仍处于快速迭代阶段，欢迎通过 [Issues](https://github.com/mi
 npx pnpm@11.7.0 run check
 ```
 
-为了让改动更容易审查，请尽量保持单一目标，并在 PR 中写明用户场景、行为变化、验证方式，以及涉及 UI 时的 Windows/macOS 截图。
+为了让改动更容易审查，请尽量保持单一目标，并在 PR 中写明用户场景、行为变化、验证方式，以及涉及 UI 时的 Windows/macOS 截图。用户可见变化记录在 [CHANGELOG](./CHANGELOG.md)。
 
 ## 致谢与许可证
 

@@ -10,6 +10,10 @@ ipcRenderer.on("chroni:control-navigate", (_event, route) => {
 contextBridge.exposeInMainWorld("chroni", {
   platform: process.platform,
   getSnapshot: () => ipcRenderer.invoke("chroni:snapshot"),
+  getUpdateStatus: () => ipcRenderer.invoke("chroni:update-status"),
+  checkForUpdates: () => ipcRenderer.invoke("chroni:update-check"),
+  installUpdate: () => ipcRenderer.invoke("chroni:update-install"),
+  openReleases: () => ipcRenderer.invoke("chroni:open-releases"),
   extract: (payload) => ipcRenderer.invoke("chroni:extract", payload),
   intake: (payload) => ipcRenderer.invoke("chroni:intake", payload),
   companionClicked: () => ipcRenderer.invoke("chroni:companion-clicked"),
@@ -50,6 +54,11 @@ contextBridge.exposeInMainWorld("chroni", {
     const listener = (_event, snapshot) => callback(snapshot);
     ipcRenderer.on("chroni:snapshot-updated", listener);
     return () => ipcRenderer.removeListener("chroni:snapshot-updated", listener);
+  },
+  onUpdateStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on("chroni:update-status", listener);
+    return () => ipcRenderer.removeListener("chroni:update-status", listener);
   },
   onPetAction: (callback) => {
     const listener = (_event, command) => callback(command);

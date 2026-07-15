@@ -71,13 +71,14 @@ function apiRequest(server, method, path, body, headers = {}) {
 
 test("api port 0 listens on a random available port", async () => {
   await withStore(async (store) => {
-    const server = await listenWithRandomPort(store);
+    const server = await listenWithRandomPort(store, () => {}, { version: "9.8.7" });
     try {
       const address = server.address();
       assert.equal(typeof address, "object");
       assert.notEqual(address.port, 8765);
       const health = await apiRequest(server, "GET", "/api/health");
       assert.equal(health.body.baseUrl, `http://127.0.0.1:${address.port}`);
+      assert.equal(health.body.version, "9.8.7");
     } finally {
       await closeServer(server);
     }

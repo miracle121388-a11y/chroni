@@ -6,7 +6,7 @@ import { attentionPetAction, basePetAction, isOneShotPetAction, petClickIntent, 
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import { hasCrossedDragThreshold } from "../../window-geometry";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
-import type { AgentMemory, CompanionState, DailyTask, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
+import type { AgentMemory, CompanionState, DailyTask, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ChroniUpdateStatus, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
 import { DailyPlanner } from "./components/DailyPlanner";
 import "./styles.css";
@@ -1242,6 +1242,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
 
 function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
   const [refreshing, setRefreshing] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<ChroniUpdateStatus | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; tone: "ok" | "warn" } | null>(null);
   const unavailableCount = [snapshot.services.parser, snapshot.services.ocr, snapshot.services.model].filter((state) => state === "unavailable").length;
   const storageNeedsAttention = snapshot.services.storage !== "ready";
@@ -1253,6 +1254,39 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
       : snapshot.services.storage === "recovered"
         ? "本地数据已安全恢复，建议检查诊断说明和自动备份。"
         : "";
+  useEffect(() => {
+    let active = true;
+    void api.getUpdateStatus().then((status) => {
+      if (active) setUpdateStatus(status);
+    }).catch(() => undefined);
+    const unsubscribe = api.onUpdateStatus((status) => {
+      if (active) setUpdateStatus(status);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  async function checkForUpdates() {
+    setFeedback(null);
+    try {
+      const status = await api.checkForUpdates();
+      setUpdateStatus(status);
+      if (status.phase === "error") setFeedback({ message: status.message, tone: "warn" });
+    } catch (error) {
+      setFeedback({ message: formatOperationError(error, "暂时无法检查更新"), tone: "warn" });
+    }
+  }
+
+  async function installUpdate() {
+    try {
+      await api.installUpdate();
+    } catch (error) {
+      setFeedback({ message: formatOperationError(error, "暂时无法安装更新"), tone: "warn" });
+    }
+  }
+
   async function refreshServices() {
     if (refreshing) return;
     setRefreshing(true);
@@ -1286,6 +1320,28 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
         <StatusRow label="本地数据" state={snapshot.services.storage} detail={snapshot.services.storageDiagnostic ? safeUserMessage(snapshot.services.storageDiagnostic, "本地数据已进入保护状态，请打开数据位置检查备份。") : "日程、来源和偏好保存到本机应用数据目录"} />
         <StatusRow label="隐私状态" state="ready" detail={safeUserMessage(snapshot.services.privacy, "敏感配置仅保存在本机。") } />
       </div>
+      {updateStatus && (
+        <section className="update-panel" aria-live="polite">
+          <div className="update-panel-head">
+            <div>
+              <p>Chroni Desktop</p>
+              <h3>版本 {updateStatus.currentVersion}</h3>
+            </div>
+            <span className={`update-phase ${updateStatus.phase}`}>{updatePhaseLabel(updateStatus)}</span>
+          </div>
+          <p>{updateStatus.message}</p>
+          {updateStatus.phase === "downloading" && (
+            <progress max="100" value={updateStatus.progressPercent ?? 0} aria-label="更新下载进度" />
+          )}
+          <div className="update-actions">
+            <button className="secondary slim" type="button" disabled={updateStatus.phase === "checking" || updateStatus.phase === "downloading"} onClick={() => void checkForUpdates()}>
+              {updateStatus.phase === "checking" ? "检查中" : updateStatus.phase === "downloading" ? "下载中" : "检查更新"}
+            </button>
+            <button className="secondary slim" type="button" onClick={() => void api.openReleases()}>GitHub Releases</button>
+            {updateStatus.phase === "downloaded" && <button className="primary slim" type="button" onClick={() => void installUpdate()}>重启并安装</button>}
+          </div>
+        </section>
+      )}
       <section className="third-party-credit">
         <h3>桌宠形象</h3>
         <p>当前桌宠形象基于开源项目 XIAOTONG Desktop Pet / 蓝色小嗵，Chroni 已保留其许可证和附加条款副本。</p>
@@ -1715,6 +1771,16 @@ function serviceStateLabel(state: string): string {
   if (state === "read-only") return "只读保护";
   if (state === "unavailable") return "不可用";
   return "状态待确认";
+}
+
+function updatePhaseLabel(status: ChroniUpdateStatus): string {
+  if (status.phase === "checking") return "检查中";
+  if (status.phase === "available" || status.phase === "downloading") return "正在更新";
+  if (status.phase === "downloaded") return "可安装";
+  if (status.phase === "up-to-date") return "最新版本";
+  if (status.phase === "error") return "检查失败";
+  if (status.phase === "unsupported") return "开发模式";
+  return "自动检查";
 }
 
 type ViewProps = {

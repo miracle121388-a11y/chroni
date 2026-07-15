@@ -36,6 +36,25 @@ export type Importance = "high" | "medium" | "low";
 
 export type ServiceState = "ready" | "limited" | "unavailable";
 
+export type ChroniUpdatePhase =
+  | "unsupported"
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "up-to-date"
+  | "error";
+
+export type ChroniUpdateStatus = {
+  currentVersion: string;
+  phase: ChroniUpdatePhase;
+  availableVersion?: string;
+  progressPercent?: number;
+  checkedAt?: string;
+  message: string;
+};
+
 export type SourceExtractionStatus = "success" | "pending" | "failed" | "duplicate";
 
 export type PetPlacement = {

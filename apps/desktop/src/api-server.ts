@@ -33,6 +33,7 @@ export type AgentApiOperations = {
 type ApiServerOptions = {
   discoveryFilePath?: string;
   agent?: AgentApiOperations;
+  version?: string;
 };
 
 class HttpError extends Error {
@@ -69,7 +70,7 @@ export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCal
   const server = createServer(async (request, response) => {
     try {
       applyCors(request, response, allowedOrigin);
-      await route(request, response, store, onSnapshot, apiToken, () => baseUrl, options.agent);
+      await route(request, response, store, onSnapshot, apiToken, () => baseUrl, options.agent, options.version ?? "0.1.0");
     } catch (error) {
       const status = error instanceof HttpError ? error.statusCode : error instanceof InputValidationError ? 400 : 500;
       sendJson(response, status, { ok: false, error: publicApiError(error, status) });
@@ -95,7 +96,7 @@ export function startChroniApiServer(store: ChroniStore, onSnapshot: SnapshotCal
   return server;
 }
 
-async function route(request: IncomingMessage, response: ServerResponse, store: ChroniStore, onSnapshot: SnapshotCallback, apiToken: string, getBaseUrl: () => string, agent?: AgentApiOperations): Promise<void> {
+async function route(request: IncomingMessage, response: ServerResponse, store: ChroniStore, onSnapshot: SnapshotCallback, apiToken: string, getBaseUrl: () => string, agent: AgentApiOperations | undefined, version: string): Promise<void> {
   if (request.method === "OPTIONS") {
     response.writeHead(204);
     response.end();
@@ -107,7 +108,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     sendJson(response, 200, {
       ok: true,
       product: "Chroni",
-      version: "0.1.0",
+      version,
       baseUrl: getBaseUrl(),
       apiToken,
       authentication: "除 /api/health 外，请在 Authorization 请求头中使用 Bearer <apiToken>。",

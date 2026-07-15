@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult, PetActionCommand, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
+import type { AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ChroniUpdateStatus, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult, PetActionCommand, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
 
 declare global {
   type ChroniControlRoute = {
@@ -13,6 +13,10 @@ declare global {
     chroni: {
       platform: "darwin" | "win32" | "linux" | string;
       getSnapshot(): Promise<ChroniSnapshot>;
+      getUpdateStatus(): Promise<ChroniUpdateStatus>;
+      checkForUpdates(): Promise<ChroniUpdateStatus>;
+      installUpdate(): Promise<ChroniUpdateStatus>;
+      openReleases(): Promise<void>;
       extract(payload: IntakePayload): Promise<ExtractResult>;
       intake(payload: IntakePayload): Promise<IntakeResult>;
       companionClicked(): Promise<ChroniSnapshot>;
@@ -50,6 +54,7 @@ declare global {
       endWindowDrag(): void;
       filePath(file: File): string;
       onSnapshotUpdated(callback: (snapshot: ChroniSnapshot) => void): () => void;
+      onUpdateStatus(callback: (status: ChroniUpdateStatus) => void): () => void;
       onPetAction(callback: (command: PetActionCommand) => void): () => void;
       onControlNavigate(callback: (route: ChroniControlRoute) => void): () => void;
     };
