@@ -1,24 +1,131 @@
-# Chroni
+<p align="center">
+  <img src="./apps/desktop/build/icon-source.svg" width="104" alt="Chroni 应用图标">
+</p>
 
-Chroni 是一个以桌宠为入口的本地 DDL 日程助手。用户可以拖入文字、文档、表格或图片，Chroni 会进行本地解析/OCR，并可调用 DeepSeek 等 OpenAI 兼容模型抽取明确的截止事项。
+<h1 align="center">Chroni</h1>
 
-## 环境要求
+<p align="center">
+  <strong>把散落在通知、文档、表格和截图里的 DDL，变成今天真正做得完的计划。</strong>
+</p>
 
-- Windows 10/11、macOS 或 Linux
-- Node.js 22.13 或更高版本（pnpm 11 需要该版本）
-- pnpm 11.7.0（也可以直接使用下方的 `npx pnpm@11.7.0`）
+<p align="center">
+  Local-first desktop deadline agent for Windows and macOS.<br>
+  文件解析、OCR、DeepSeek 结构化抽取、任务拆解、每日时间块与桌宠提醒，在一个闭环里完成。
+</p>
 
-## Windows 开发运行
+<p align="center">
+  <a href="https://github.com/miracle121388-a11y/chroni/actions/workflows/ci.yml"><img src="https://github.com/miracle121388-a11y/chroni/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/miracle121388-a11y/chroni?color=2f6b61" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-31566d" alt="Windows and macOS">
+  <img src="https://img.shields.io/badge/Electron-42-47848f" alt="Electron 42">
+  <img src="https://img.shields.io/badge/TypeScript-6-3178c6" alt="TypeScript 6">
+</p>
 
-在 PowerShell 中执行：
+<p align="center">
+  <a href="#为什么选择-chroni">核心能力</a> ·
+  <a href="#界面预览">界面预览</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#连接-deepseek">DeepSeek</a> ·
+  <a href="#本地-http-api">HTTP API</a> ·
+  <a href="#参与开发">参与开发</a>
+</p>
+
+![Chroni 每日任务时间轴，展示 Agent 自动规划的任务块](./docs/assets/chroni-daily-planner.png)
+
+> [!IMPORTANT]
+> Chroni 正在积极开发中，目前推荐从源码运行。仓库已提供 Windows 与 macOS 构建工作流，但公开分发前的签名安装包仍在完善中。
+
+## Chroni 是什么
+
+Chroni 不是把一句话转成一条待办的演示程序，而是一个以 **Deadline Agent** 为核心、以桌宠为轻量入口的桌面执行系统。它会先读取真实材料，保留可核验的原文证据，再把明确事项转换为任务、步骤和今日时间块；只有缺少会改变任务含义的必要信息时，才在已有规划之后请求确认。
+
+```mermaid
+flowchart LR
+  A["拖入通知、文档或截图"] --> B["本地解析与 OCR"]
+  B --> C["DeepSeek 结构化抽取"]
+  C --> D["证据校验与任务拆解"]
+  D --> E["风险、容量与依赖评估"]
+  E --> F["生成每日时间块"]
+  F --> G["桌宠提醒、执行与复盘"]
+  G --> E
+```
+
+从“这份材料里有哪些事”到“我今天几点做什么”，Chroni 负责的是完整链路。
+
+## 为什么选择 Chroni
+
+| 能力 | Chroni 的处理方式 |
+| --- | --- |
+| 多格式真实输入 | TXT、Markdown、PDF、DOCX、XLSX、ICS、图片等统一进入同一抽取管线；扫描 PDF 会进入 OCR。 |
+| 有依据的智能抽取 | LLM 负责理解复杂语义，本地代码负责证据、字段、日期和容量校验；无法可靠确认时不会静默编造日程。 |
+| 先完成规划，再主动追问 | 同一材料中明确的任务会直接落地；模糊日期、条件性事项等被单独标记，避免一个疑问阻塞整份文件。 |
+| Agent 主导的任务拆解 | 基于截止时间、剩余工时、工作时段、依赖和缓冲计算风险，生成可编辑、可激活、可追踪版本的 TaskPlan。 |
+| 可执行的每日规划 | 日、多日、周、月视图与 Inbox；任务按时长占据真实高度，同一时段自动分栏，并支持拖拽重排、缩放和历史回顾。 |
+| 个性化 Behavior Memory | 只从用户明确保存的规划修改中学习；达到独立证据与置信度门槛后才应用，并可随时停用、删除或清空。 |
+| 桌面原生提醒 | 桌宠、气泡、右侧日程抽屉、系统通知和托盘协同工作，提醒遵守勿扰时间、频率设置与去重策略。 |
+| Local-first 与可集成 | 状态保存在本机，API Key 交由系统安全存储；带鉴权的本地 HTTP API 可接入自动化脚本和其他工具。 |
+
+## 界面预览
+
+### Deadline Agent 工作台
+
+Agent 会说明当前计划覆盖率、风险、今日优先级和下一步，而不是只返回一段无法执行的建议。所有模型输出都必须经过本地工具和约束校验。
+
+![Chroni Deadline Agent 工作台，展示覆盖率、风险和今日工作块](./docs/assets/chroni-agent-workspace.png)
+
+### 桌宠与控制中心
+
+- **左键桌宠**：打开或切换日程抽屉；控制中心和日程窗口都可独立拖动。
+- **拖入材料**：进入解析、OCR、抽取与规划流程，桌宠会用动作和气泡反馈当前状态。
+- **完成任务**：同步更新日程、每日时间块与 TaskPlan 步骤，并触发完成反馈。
+- **后台常驻**：关闭窗口不会退出 Chroni；可从系统托盘重新打开控制中心或完全退出。
+
+## Agent 如何工作
+
+Deadline Agent 使用可审计的 `Observe -> Plan -> Act -> Verify` 循环：
+
+1. **Observe**：读取真实任务、当前时间、已激活步骤、用户工作时段和每日容量。
+2. **Plan**：计算剩余工时、截止前可用容量、依赖、缓冲和 slack，生成优先级与工作块。
+3. **Act**：在容量不足或高风险时重新规划，写入每日任务，并按偏好发送提醒。
+4. **Verify**：复查高风险、未安排任务、时间冲突和覆盖缺口，记录结构化 Trace。
+
+模型不能虚构任务，也不能直接修改截止时间、完成状态或来源证据。模型输出非法、超出容量、超时或不可用时，Chroni 会回退到本地规则并明确标识来源。
+
+每个 DDL 都可以进入“规划详情”工作区：修改步骤、耗时、依赖与状态，查看历史版本，然后显式“确认并启用”。Deadline Agent 只把依赖已满足且未受阻的下一步排进今天，避免把风险任务伪装成已经可执行。
+
+更完整的设计说明见 [主动追问、任务规划与 Behavior Memory](./docs/agent-clarification-task-planning-memory.md)。
+
+## 快速开始
+
+### 运行要求
+
+- Windows 10/11 或 macOS
+- Node.js `22.13+`
+- pnpm `11.7.0`，也可以直接使用下方固定版本的 `npx` 命令
+
+### 1. 获取并安装
+
+```bash
+git clone https://github.com/miracle121388-a11y/chroni.git
+cd chroni
+npx pnpm@11.7.0 install
+```
+
+### 2. 启动开发环境
+
+Windows PowerShell：
 
 ```powershell
-cd D:\Users\Lenovo\Desktop\Chroni
-npx pnpm@11.7.0 install
 npx pnpm@11.7.0 run dev
 ```
 
-`dev` 会同时启动 Vite renderer 和 Electron。看到以下信息表示启动完成：
+macOS Terminal：
+
+```bash
+npx pnpm@11.7.0 run dev
+```
+
+启动完成后，终端会看到：
 
 ```text
 VITE ready
@@ -26,53 +133,65 @@ Chroni desktop shell ready.
 Chroni API listening at http://127.0.0.1:8765
 ```
 
-Chroni 主要通过桌宠、屏幕右侧 DDL 抽屉和系统托盘运行。关闭控制中心不会退出应用；需要退出时请在托盘图标菜单中选择“退出 Chroni”。开发终端可按 `Ctrl+C` 停止。
+Chroni 会显示桌宠并常驻系统托盘。关闭控制中心不会退出应用；需要完全退出时，请在托盘菜单选择“退出 Chroni”。开发终端中可使用 `Ctrl+C` 停止。
 
-桌宠动作按真实行为触发：启动或重新显示时唤醒，单击摸头并切换日程，双击触发猫猫彩蛋；移动桌宠时显示被提起，松开后短暂显示落地缓冲，再自动恢复站立或当时正在进行的读书动作。拖入文件会看书，拖入或快速添加短文本会先吃汉堡，解析、OCR、任务规划和 Agent 巡检仍未结束时继续看书。完成任务后打羽毛球庆祝；隐藏桌宠或从托盘退出时先播放睡眠动画。临近、逾期、待确认和失败属于注意信息，主要通过气泡表达，不再错误复用摸头或猫猫动作。动作采用独立队列；所有临时动作都会结束并恢复当前基础状态，睡眠只由显式唤醒打断，指针中断也不会让桌宠卡在被提起状态。
+### 3. 运行生产构建
 
-生产构建后本机启动：
-
-```powershell
+```bash
 npx pnpm@11.7.0 run start
 ```
 
-分开排查 renderer 和 Electron：
+<details>
+<summary><strong>Windows 启动失败或需要分开排查</strong></summary>
+
+`ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL` 是 pnpm 的汇总行，真正原因通常在它上方第一条 `[electron]` 或 `[renderer]` 错误。
+
+可以使用两个 PowerShell 窗口分别运行：
 
 ```powershell
-# 终端 1
+# 窗口 1
 npx pnpm@11.7.0 --filter @chroni/desktop run dev:renderer
 
-# 终端 2
+# 窗口 2
 npx pnpm@11.7.0 --filter @chroni/desktop run dev:electron
 ```
 
-项目启动器会主动删除父终端中的 `ELECTRON_RUN_AS_NODE`，避免 Electron 被误当作普通 Node.js 执行。
-
-如果从 PowerShell 直接运行打包后的 `.exe`，且当前终端曾设置过 `ELECTRON_RUN_AS_NODE=1`，请先执行：
+项目启动器会清理父终端中的 `ELECTRON_RUN_AS_NODE`。如果直接运行打包后的 `.exe` 仍受该变量影响，可先执行：
 
 ```powershell
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 ```
 
-从资源管理器或开始菜单正常启动时通常不受该终端变量影响。
+</details>
 
-## DeepSeek 配置
+## 连接 DeepSeek
 
-### 使用项目根目录 `.env`（本地开发推荐）
+Chroni 支持 OpenAI 兼容接口，项目默认配置示例使用 DeepSeek。你可以选择控制中心或 `.env`，无需修改源代码。
 
-复制示例文件，并填写你自己的 Key：
+### 方式一：控制中心
+
+1. 从托盘打开“控制中心”。
+2. 进入“偏好”，展开“高级 -> 大模型 API”。
+3. `Base URL` 填写 `https://api.deepseek.com`。
+4. `模型`填写 `deepseek-v4-flash`；需要更强模型时可填写 `deepseek-v4-pro`。
+5. 填写 DeepSeek API Key，点击“保存并测试”。
+6. 测试成功后开启“启用 LLM 抽取”。
+
+API Key 使用 Electron `safeStorage` 交由操作系统安全存储加密，不会明文写入 `chroni-state.json`。连接测试会发送一个最小真实请求，并区分鉴权、模型、限流、网络和超时错误。
+
+### 方式二：项目根目录 `.env`
 
 ```powershell
+# Windows
 Copy-Item .env.example .env
 ```
 
-macOS / Linux：
-
 ```bash
+# macOS
 cp .env.example .env
 ```
 
-`.env` 内容如下：
+编辑 `.env`：
 
 ```dotenv
 CHRONI_LLM_ENABLED=1
@@ -81,85 +200,31 @@ CHRONI_LLM_MODEL=deepseek-v4-flash
 CHRONI_LLM_API_KEY=你的_DeepSeek_API_Key
 ```
 
-然后重新启动 `pnpm run dev` 或 `pnpm run start`。Chroni 启动器会读取仓库根目录的 `.env`；系统/终端中已经存在的同名环境变量优先级更高。`.env` 已被 Git 忽略，`.env.example` 只保留无密钥模板。
+重新启动 Chroni 后生效。系统或终端环境变量优先于 `.env`，`.env` 又优先于控制中心保存的同名字段。可在“运行状态”确认当前模型是否就绪。模型名称和接口变化请以 [DeepSeek API 文档](https://api-docs.deepseek.com/) 为准。
 
-`.env` 中的 LLM 配置优先于控制中心已保存的同名配置。使用环境变量时，API Key 不会回填到界面；控制中心的“测试连接”会使用当前进程最终解析出的有效配置。可在“运行状态”中确认当前模型是否就绪。将 `CHRONI_LLM_ENABLED` 设为 `0` 可显式关闭环境变量启用的模型。
-
-### 使用控制中心
-
-推荐在 Chroni 控制中心填写：
-
-1. 从托盘菜单打开“控制中心”。
-2. 进入“偏好”并展开“高级 -> 大模型 API”。
-3. `Base URL` 填写 `https://api.deepseek.com`。
-4. `模型`填写 `deepseek-v4-flash`；需要更强模型时可填写 `deepseek-v4-pro`。
-5. `API Key` 填写 DeepSeek 控制台生成的 Key。
-6. 点击“保存并测试”，等待界面显示模型连接成功。
-7. 开启“启用 LLM 抽取”。
-
-API Key 使用 Electron `safeStorage` 交给操作系统安全存储加密，不会以明文写入 `chroni-state.json`。如果系统安全存储不可用，界面填写的 Key 只在当前运行期间有效。
-
-也可以不创建 `.env`，直接在启动 Chroni 的同一个 PowerShell 窗口中使用环境变量：
-
-```powershell
-$env:CHRONI_LLM_ENABLED="1"
-$env:CHRONI_LLM_BASE_URL="https://api.deepseek.com"
-$env:CHRONI_LLM_MODEL="deepseek-v4-flash"
-$env:CHRONI_LLM_API_KEY="你的 DeepSeek API Key"
-npx pnpm@11.7.0 run dev
-```
-
-大模型字段在编辑期间只保留为界面草稿，点击“保存并测试”后才会写入本机。连接测试会真实发送一个最小请求，并区分 API Key、模型名称、限流和超时问题。模型请求默认在 25 秒后终止。
-
-启用 LLM 后，文件仍先在本机解析，但抽取出的文本会发送到所配置的模型服务。模型不可用时，如果本地规则仍能可靠识别，Chroni 会保留结果并明确提示已回退；无法可靠识别时不会生成可疑日程。
-
-## DeadlineAgent
-
-控制中心的 `Agent` 标签页提供一个混合式今日巡检闭环：本地规则可以独立运行；配置模型后，大模型会生成受约束的结构化时间分配和建议，再由本地代码验证、执行和复查。
-
-```text
-Observe 读取真实任务和当前时间
-  -> Plan 计算风险、今日优先级和工作块
-  -> Act 在高风险或容量不足时调用重新规划，并按设置发送提醒
-  -> Verify 复查高风险、未安排任务和时间缺口
-```
-
-点击“运行巡检”后，页面会显示规划来源、今日建议、高风险 DDL、今日工作块、未来一周预排、覆盖率、真实工具结果以及 Observe / Plan / Act / Verify Trace。风险不仅取决于 DDL 距离，还会结合剩余工时、每日容量、计划缓冲和截止前可用工作时段计算 slack，较远但工作量已经无法按时完成的任务会提前升级。模型不能虚构任务或直接修改截止时间、完成状态和来源内容；输出非法、超容量或调用失败时自动回退到本地规则。
-
-Agent Memory 包含每日最大工作分钟、工作开始/结束时间、提醒频率、自动巡检开关和 Agent 规划大模型开关。默认每日容量为 240 分钟，工作时段为 09:00–18:00。首次启动、应用常驻后的本地日期变化以及 DDL 变化都会按需巡检，任务变化会防抖合并，均可关闭。规划开关同时控制单任务 TaskPlan Agent 和 DeadlineAgent 的模型规划，不影响信息抽取模型。Memory、应用计划、最新巡检和最多十份 Trace 历史保存在 `chroni-state.json`，Trace 只记录结构化摘要、规划来源和工具结果，不包含 API Key、原始文档、模型原始响应或隐藏推理。
-
-### 主动追问、任务规划与 Behavior Memory
-
-信息不完整时，Chroni 不会猜测最终 DDL。它会保存可恢复的 `IntakeDraft`，并在日程页和 Agent 页显示待确认问题；回答后从原草稿继续处理，重复回答不会重复创建任务。必要字段未解决前不能创建正式任务，放弃草稿会使关联问题失效。
-
-文件抽取与任务拆解是独立阶段。第一阶段从原文提取截止时间、固定活动、提交物、提交方式、限制、风险和不确定性，并用规范化后的原文证据逐项校验；Markdown 标记差异不会导致有效结果被拒绝。课次、模糊时段和条件性候选截止会按候选任务进入待确认状态，不会阻塞同一文件里已经明确的其他任务。第二阶段只针对已经确认的单个任务生成计划，并接收第一阶段校验过的上下文；本地校验会强制保留原文提交物、提交方式、限制和不确定性。单任务可直接使用模型规划；批量导入会先即时生成本地草案，避免串行模型调用造成长时间等待，之后可在任务详情按需用模型优化。
-
-每个任务可从“规划详情”进入结构化工作区。任务创建后会生成规则或 LLM 规划草案，但只有点击“确认并启用”才成为 active plan。步骤支持修改标题、说明、耗时和状态，支持拖动/按钮排序、新增、删除与版本记录；保存时使用 `baseVersion` 防止静默覆盖，并实时重算建议最晚开始时间。DeadlineAgent 只会把依赖已满足且未受阻的下一步骤关联到今日工作块；受阻任务保留风险缺口但不会被伪装成可执行工作。重新识别来源时会保留匹配任务的 ID 和 active plan、清理失效关联，并生成新的可审查草案。
-
-Behavior Memory 只从用户明确保存的结构化规划 Diff 学习，不读取输入框过程，也不进行训练。同一次保存中的多个步骤修改会聚合为一次行为证据；至少三次独立的一致证据且置信度达到门槛后才成为 active。规则规划和模型规划都支持步骤时长、步骤数量、缓冲比例、估时倍率、复查、调研、长核心步骤、提前开始和规划粒度偏好。偏好按任务类型等范围隔离，显式偏好优先；用户可停用、删除、关闭学习、关闭自动应用或清除全部行为记录。
-
-“导出 ICS”会把当前未完成 DDL 写入 Electron 用户数据目录下的 `exports/`。任务抽取、风险检查、本地规划、风险优先重排、计划持久化、提醒和日历导出均通过明确工具边界提供。提醒遵守系统开关、勿扰时间和去重策略；Trace 会区分已发送、跳过和失败。
-
-## 每日任务
-
-控制中心默认打开“每日任务”。该页面提供 Inbox、可拖拽日时间轴、三日视图、周视图、月视图和任务编辑抽屉。任务支持开始/结束时间、全天、颜色、每天/工作日/每周重复、子任务、备注和按日期完成记录；未排期任务可以先留在 Inbox，再拖到时间轴。
-
-DeadlineAgent 每次巡检后会把今日工作块和未来预排写入每日任务，并保留 `taskId`、`stepId` 关联。用户手动改过标题或时间后，后续巡检不会静默覆盖；完成关联工作块时，对应 TaskPlan 步骤和原任务进度会同步更新。删除 Agent 任务会记录为已隐藏，下一次巡检不会重新创建同一工作块。上传文件并完成抽取、拆解后，自动变更巡检通常会在防抖窗口结束后刷新今日安排，也可以点击“Agent 排今日”立即重算。
+> [!NOTE]
+> 文件解析和 OCR 先在本机完成；启用 LLM 后，抽取出的文本会发送到你配置的模型服务。关闭 LLM 时本地规则仍可处理结构明确的内容，但复杂语义、跨段落关联和图片文本理解能力会受到限制。
 
 ## 支持的输入
 
-- 文本与结构化文本：TXT、MD、CSV、TSV、JSON、ICS、LOG、HTML、XML、YAML、RTF
-- 文档与表格：DOCX、PDF、XLSX
-- 图片 OCR：PNG、JPG/JPEG、WEBP、BMP、TIF/TIFF
-- 直接文本：桌宠拖放、控制中心快速添加、本地 HTTP API
+| 类型 | 格式 |
+| --- | --- |
+| 文本与结构化文本 | TXT、MD、CSV、TSV、JSON、ICS、LOG、HTML、XML、YAML、RTF |
+| 文档与表格 | DOCX、PDF、XLSX |
+| 图片 OCR | PNG、JPG/JPEG、WEBP、BMP、TIF/TIFF |
+| 直接输入 | 桌宠拖放、控制中心快速添加、本地 HTTP API |
 
-单个文档最大 18 MiB，纯文本最大 2 MiB。图片 OCR 的可靠性阈值为 55；没有文本层的扫描 PDF 会先渲染页面再进行 OCR。TXT 支持 UTF-8、UTF-16 和 GBK/GB18030。空文件、乱码、非法日期和没有明确任务语义的内容会返回具体失败原因。
+- 单个文档最大 `18 MiB`，纯文本最大 `2 MiB`。
+- TXT 支持 UTF-8、UTF-16、GBK 与 GB18030。
+- 没有文本层的扫描 PDF 会先渲染页面，再进行 OCR。
+- OCR 可靠性阈值为 `55`；空文件、乱码、非法日期和缺少任务语义时会返回具体原因。
+- `/api/extract` 只预览结果，`/api/intake` 会在校验后写入日程。
 
 ## 本地 HTTP API
 
-API 默认只监听 `127.0.0.1:8765`。每次启动会生成会话令牌；除健康检查外的所有接口都要求 Bearer 鉴权。实际监听地址会写入 Electron 用户数据目录的 `chroni-api.json`，其中包含 `baseUrl`、进程 ID 和启动时间；应用退出后该文件会自动删除。
+Chroni 默认只监听 `127.0.0.1:8765`。每次启动会生成会话令牌；除健康检查外的接口都要求 Bearer 鉴权。实际地址和进程信息写入 Electron 用户数据目录下的 `chroni-api.json`，退出后自动删除。
 
-PowerShell 示例：
+PowerShell 文本抽取示例：
 
 ```powershell
 $discovery = Get-Content "$env:APPDATA\Chroni\chroni-api.json" | ConvertFrom-Json
@@ -173,11 +238,12 @@ Invoke-RestMethod `
   -ContentType "application/json" `
   -Body (@{
     kind = "text"
-    text = "7月12日 23:59 提交课程报告"
+    text = "7月18日 18:00 前提交实验报告 PDF"
   } | ConvertTo-Json)
 ```
 
-文件可以通过 `contentBase64` 直接交给 API，不需要让调用方访问 Electron 的文件选择器。下面示例会解析并保存文件中的任务；将 `/api/intake` 改为 `/api/extract` 可只预览抽取结果而不写入日程：
+<details>
+<summary><strong>通过 API 上传文件并直接填入</strong></summary>
 
 ```powershell
 $file = Get-Item "D:\资料\课程安排.xlsx"
@@ -197,7 +263,10 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-主要接口：
+</details>
+
+<details>
+<summary><strong>主要 API</strong></summary>
 
 ```text
 GET    /api/health
@@ -234,42 +303,81 @@ PATCH  /api/preferences
 POST   /api/sources/:id/reprocess
 ```
 
-如果系统用户数据目录不是 `%APPDATA%\Chroni`，可在“运行状态”中点击“打开本地数据位置”确认 `chroni-api.json`。需要固定 API 令牌时，在启动前设置 `CHRONI_API_TOKEN`。浏览器跨域默认关闭；只有设置精确的 `CHRONI_API_ALLOWED_ORIGIN` 后，该 Origin 才能访问。HTTP JSON 请求体上限为 32 MiB，所有请求会进行运行时字段校验；HTTP snapshot 会移除 LLM API Key、来源全文和近期反馈事件。
+如需固定令牌，可在启动前设置 `CHRONI_API_TOKEN`。浏览器跨域默认关闭，只有设置精确的 `CHRONI_API_ALLOWED_ORIGIN` 后对应 Origin 才能访问。HTTP JSON 请求体上限为 `32 MiB`；HTTP snapshot 会移除 LLM API Key、来源全文和近期反馈事件。
 
-## 检查与打包
+</details>
 
-```powershell
+## 本地数据与隐私
+
+- 日程、来源、偏好、Agent Memory、计划版本和窗口位置保存在 Electron 用户数据目录。
+- 可在“运行状态”中点击“打开本地数据位置”；Windows 默认位于 `%APPDATA%\Chroni`。
+- Trace 只记录结构化摘要、规划来源和工具结果，不保存 API Key、模型隐藏推理或完整原始文档。
+- Behavior Memory 不读取输入框过程，只使用用户明确保存的结构化规划差异。
+- 桌宠位置按显示器工作区保存；分辨率变化或移除显示器后会自动校正到可见区域。
+- 开启模型后，解析文本会发送到配置的第三方服务；敏感材料请根据自己的隐私要求决定是否启用。
+
+## 技术架构
+
+```text
+Chroni
+├─ apps/desktop
+│  ├─ src/main.ts       Electron 生命周期、托盘与 IPC 入口
+│  ├─ src/windows.ts    桌宠、日程与控制中心窗口管理
+│  ├─ src/api-server.ts 带鉴权的本地 HTTP API
+│  ├─ src/renderer      React 控制中心、每日任务、日程和桌宠界面
+│  ├─ src/agent         抽取、规划、调度、Memory 与 Deadline Agent
+│  ├─ src/shared        类型、时间轴布局和跨进程契约
+│  └─ test              Node 测试与跨模块行为验证
+├─ docs                 Agent 设计与项目视觉
+└─ .github/workflows    Windows、macOS、Linux CI 与双端构建
+```
+
+核心技术：Electron 42、React 19、TypeScript 6、Vite 8、Tesseract.js、pdf-parse、Mammoth 与 read-excel-file。
+
+## 开发与打包
+
+```bash
+# 类型检查、测试、main/renderer 构建
 npx pnpm@11.7.0 run check
+
+# 生成当前平台的桌面产物
 npx pnpm@11.7.0 run package:desktop
 ```
 
-`check` 依次执行 TypeScript 检查、自动化测试和 renderer/main 构建。Windows 安装包、便携版以及 macOS DMG/ZIP 均输出到 `apps/desktop/dist-electron/`；打包命令会根据当前运行系统选择对应平台，macOS 产物需要在 macOS 或发布工作流中构建。
+构建产物位于 `apps/desktop/dist-electron/`。CI 在 Windows、macOS 和 Linux 上执行完整检查；`Desktop Release Builds` 工作流可以手动运行，也会在推送 `v*` 标签时构建 Windows 与 macOS artifact。
 
-仓库的 `Desktop Release Builds` 工作流可手动运行，也会在推送 `v*` 标签时分别构建 Windows 和 macOS 产物并上传 Actions artifact。正式签名 Windows 版本时，在 GitHub 仓库 Secrets 中配置 `WINDOWS_CSC_LINK`（PFX 的 Base64 或安全下载地址）和 `WINDOWS_CSC_KEY_PASSWORD`；没有证书时仍可生成未签名构建。公开分发 macOS 版本前还应使用 Apple Developer ID 完成签名与公证，仓库默认工作流生成的是便于开源测试的未签名产物。
+Windows 公开分发需要配置代码签名 Secrets：`WINDOWS_CSC_LINK` 和 `WINDOWS_CSC_KEY_PASSWORD`。macOS 公开分发还需要 Apple Developer ID 签名与公证；未配置证书时工作流生成便于开源测试的未签名产物。
 
-## 常见问题
+<details>
+<summary><strong>常见文件识别问题</strong></summary>
 
-### `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`
+- 确认扩展名在支持列表中，且文件不是 `0` 字节。
+- 二进制内容即使改名为 `.txt` 也不会被当作文本解析。
+- 扫描 PDF 和图片首次 OCR 需要初始化中英文识别数据，通常比纯文本慢。
+- XLSX 会读取全部工作表；同一个文件修正后可以再次选择，输入控件会自动重置。
+- 控制中心会区分“文件无法读取”“文本无法可靠解析”“OCR 置信度不足”和“没有明确截止时间”。
+- DeepSeek 返回空内容时，先在“偏好 -> 高级 -> 大模型 API”执行“保存并测试”，再根据鉴权、模型、限流或网络分类排查。
 
-该行只是 pnpm 的汇总，真实原因在它上方。当前开发脚本会以 Electron 子进程的退出码为准，正常关闭应用不会因为 Vite 被联动停止而误报失败。如果仍有错误，请从第一条 `[electron]` 或 `[renderer]` 错误开始检查。
+</details>
 
-### 文件显示为空或没有识别结果
+## 参与开发
 
-- 确认文件扩展名在支持列表中且文件不是 0 字节。
-- TXT 支持 UTF-8、UTF-16、GBK 和 GB18030；仍失败时确认文件不是二进制内容伪装成 TXT。
-- 扫描 PDF 会自动进入页面 OCR；页数较多时处理时间会明显增加。
-- XLSX 会读取全部工作表；图片 OCR 首次运行需要初始化中英文识别数据，耗时通常高于纯文本文件。
-- 控制中心会显示“文件无法读取”“文本无法可靠解析”“OCR 置信度不足”或“没有明确截止时间”等具体原因。
-- 同一个文件修正后可以直接再次选择，文件输入会在每次处理后重置。
+Chroni 仍处于快速迭代阶段，欢迎通过 [Issues](https://github.com/miracle121388-a11y/chroni/issues) 报告问题或讨论新能力，也欢迎提交 Pull Request。
 
-### DeepSeek 显示“模型返回内容为空”
+提交前请运行：
 
-先确认使用最新代码并重新启动 Chroni。`deepseek-v4-flash` 默认可进入思考模式，Chroni 的结构化抽取、规划和连接探测会统一关闭该模式，避免较小输出预算只产生推理内容而没有最终答案。仍然失败时，在“偏好 -> 高级 -> 大模型 API”点击“保存并测试”，根据界面显示的鉴权、模型、限流或网络分类继续排查；`.env` 和系统环境变量会覆盖界面保存值。
+```bash
+npx pnpm@11.7.0 run check
+```
 
-### 端口 8765 被占用
+为了让改动更容易审查，请尽量保持单一目标，并在 PR 中写明用户场景、行为变化、验证方式，以及涉及 UI 时的 Windows/macOS 截图。
 
-Chroni 会自动改用一个随机空闲端口，并同时更新 `chroni-api.json` 与启动终端中的实际地址。也可以在启动前设置 `CHRONI_API_PORT`，例如 `$env:CHRONI_API_PORT="8877"`。
+## 致谢与许可证
 
-## 数据与许可证
+Chroni 使用 [MIT License](./LICENSE) 开源。
 
-日程、来源、偏好和桌宠的显示器相对位置保存在 Electron 用户数据目录。重新启动、分辨率变化或移除显示器后，Chroni 会恢复并校正桌宠位置，保证窗口仍在可见工作区内。可在“运行状态”中点击“打开本地数据位置”。项目采用 MIT License。桌宠视觉资产来自 XIAOTONG Desktop Pet，相关许可证与附加条款保存在 `apps/desktop/third_party/xiaotong/`。
+桌宠视觉资产来自 XIAOTONG Desktop Pet，其许可证和附加条款保存在 [`apps/desktop/third_party/xiaotong/`](./apps/desktop/third_party/xiaotong/)。感谢所有参与测试、反馈和贡献的人。
+
+<p align="center">
+  <strong>让截止日期不再只是一条提醒，而是一份今天可以开始执行的计划。</strong>
+</p>
