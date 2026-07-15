@@ -1,6 +1,6 @@
 {
   "name": "@chroni/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Local-first desktop deadline agent with document extraction, daily planning, and companion reminders.",
   "license": "MIT",
@@ -27,10 +27,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
     "test": "pnpm run build && node --test test/*.test.mjs",
     "clean:package": "node scripts/clean-package-output.mjs",
-    "package": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs",
-    "package:win": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --win --x64",
-    "package:mac": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --mac --universal",
-    "package:linux": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --linux --x64"
+    "package": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --publish never",
+    "package:win": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --win --x64 --publish never",
+    "package:mac": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --mac --universal --publish never",
+    "package:linux": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --linux --x64 --publish never"
   },
   "dependencies": {
     "electron-updater": "6.8.9",

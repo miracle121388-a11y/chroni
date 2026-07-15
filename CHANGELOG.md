@@ -4,6 +4,22 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-15
+
+### Added
+
+- 内置 Inter 与 Noto Sans SC 可变字体，离线安装后仍能稳定呈现中英文界面。
+- Windows 桌宠、日程抽屉与控制中心窗口的跨屏定位和交互回归测试。
+
+### Changed
+
+- 优化控制中心、每日任务和时间轴的字重、行高、间距与中文排版。
+- 对齐 Windows 与 macOS 的桌宠点击、拖动、置顶和日程窗口交互。
+
+### Fixed
+
+- 打包命令不再于标签环境中提前上传产物，GitHub Release 由专用发布任务统一创建。
+
 ## [0.1.0] - 2026-07-15
 
 ### Added
@@ -22,5 +38,6 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 发布标签现在必须与根工作区和桌面应用版本一致。
 - 生产包启用 Electron Fuses 和 ASAR 完整性校验。
 
-[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.1
 [0.1.0]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.0

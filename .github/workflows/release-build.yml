@@ -23,12 +23,12 @@ jobs:
       CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
       CHRONI_REQUIRE_SIGNING: ${{ vars.CHRONI_REQUIRE_SIGNING || '0' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.7.0
           run_install: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -47,13 +47,13 @@ jobs:
         run: node scripts/generate-checksums.mjs apps/desktop/dist-electron apps/desktop/dist-electron/SHA256SUMS-windows.txt
       - name: Attest Windows packages
         if: github.ref_type == 'tag'
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             apps/desktop/dist-electron/*.exe
             apps/desktop/dist-electron/*.yml
             apps/desktop/dist-electron/*.blockmap
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: chroni-windows-${{ github.ref_name }}
           path: |
@@ -83,12 +83,12 @@ jobs:
       CHRONI_REQUIRE_SIGNING: ${{ vars.CHRONI_REQUIRE_SIGNING || '0' }}
       CHRONI_REQUIRE_NOTARIZATION: ${{ vars.CHRONI_REQUIRE_NOTARIZATION || '0' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.7.0
           run_install: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -111,14 +111,14 @@ jobs:
         run: node scripts/generate-checksums.mjs apps/desktop/dist-electron apps/desktop/dist-electron/SHA256SUMS-macos.txt
       - name: Attest macOS packages
         if: github.ref_type == 'tag'
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             apps/desktop/dist-electron/*.dmg
             apps/desktop/dist-electron/*.zip
             apps/desktop/dist-electron/*.yml
             apps/desktop/dist-electron/*.blockmap
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: chroni-macos-${{ github.ref_name }}
           path: |
@@ -138,8 +138,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: chroni-*-${{ github.ref_name }}
           path: release

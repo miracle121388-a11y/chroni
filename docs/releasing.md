@@ -54,8 +54,8 @@ CHRONI_REQUIRE_NOTARIZATION=1
 ## 创建发布
 
 ```bash
-git tag -a v0.1.0 -m "Chroni v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "Chroni v0.1.1"
+git push origin v0.1.1
 ```
 
 `Desktop Release` 工作流会：
@@ -76,10 +76,10 @@ git push origin v0.1.0
 - 下载全部 Release 产物，核对文件与 `SHA256SUMS.txt`。
 
 ```powershell
-Get-FileHash .\Chroni-0.1.0-win-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Chroni-0.1.1-win-x64-setup.exe -Algorithm SHA256
 ```
 
 ```bash
 shasum -a 256 -c SHA256SUMS.txt
-gh attestation verify Chroni-0.1.0-win-x64-setup.exe --repo miracle121388-a11y/chroni
+gh attestation verify Chroni-0.1.1-win-x64-setup.exe --repo miracle121388-a11y/chroni
 ```
