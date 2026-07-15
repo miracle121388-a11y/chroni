@@ -24,7 +24,7 @@ jobs:
       CHRONI_REQUIRE_SIGNING: ${{ vars.CHRONI_REQUIRE_SIGNING || '0' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.7.0
           run_install: false
@@ -84,7 +84,7 @@ jobs:
       CHRONI_REQUIRE_NOTARIZATION: ${{ vars.CHRONI_REQUIRE_NOTARIZATION || '0' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.7.0
           run_install: false
