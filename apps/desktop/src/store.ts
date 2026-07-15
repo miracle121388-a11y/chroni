@@ -9,6 +9,7 @@ import { validateTaskPlan } from "./agent/task-plan-validator.js";
 import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveLlmSettings } from "./llm-settings.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
 import { localFilePathFromText } from "./shared/local-file-input.js";
+import { InputValidationError } from "./validation.js";
 import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyTask, DailyTaskColor, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
 
 export type SecretCodec = {
@@ -295,6 +296,7 @@ export class ChroniStore {
         this.#state.taskPlanRevisions = this.#state.taskPlanRevisions.filter((revision) => revision.taskId !== existing.id);
       }
       this.#state.items = this.#state.items.map((item) => item.id === replacement.id ? task : item);
+      if (existing) this.#reconcileDailyTaskLinks(new Map([[existing.id, replacement.id]]));
       this.#state.taskPlans = this.#state.taskPlans.map((plan) => plan.taskId === replacement.id
         ? { ...plan, latestSafeStartAt: latestSafeStartAt(plan, task.dueAt), updatedAt: answeredAt }
         : plan);
@@ -400,7 +402,7 @@ export class ChroniStore {
       steps: payload.steps.map((step, index) => {
         const previous = current.steps.find((item) => item.id === step.id);
         const modifiedFields = previous
-          ? [previous.title !== step.title ? "title" : "", previous.description !== step.description ? "description" : "", previous.estimatedMinutes !== step.estimatedMinutes ? "estimatedMinutes" : "", previous.order !== index + 1 ? "order" : ""].filter(Boolean)
+          ? [previous.title !== step.title ? "title" : "", previous.description !== step.description ? "description" : "", previous.estimatedMinutes !== step.estimatedMinutes ? "estimatedMinutes" : "", previous.order !== index + 1 ? "order" : "", previous.status !== step.status ? "status" : ""].filter(Boolean)
           : ["createdByUser"];
         return { ...step, taskId, order: index + 1, origin: previous?.origin ?? "user", userModifiedFields: [...new Set([...(previous?.userModifiedFields ?? []), ...modifiedFields])], updatedAt };
       }),
@@ -464,19 +466,19 @@ export class ChroniStore {
     const now = new Date().toISOString();
     const scheduledStartAt = input.scheduledStartAt;
     const scheduledEndAt = input.scheduledEndAt ?? (scheduledStartAt
-      ? new Date(new Date(scheduledStartAt).getTime() + 30 * 60_000).toISOString()
+      ? defaultDailyTaskEnd(scheduledStartAt)
       : undefined);
-    assertDailyTaskRange(scheduledStartAt, scheduledEndAt);
+    assertDailyTaskSchedule(scheduledStartAt, scheduledEndAt, input.allDay === true, input.recurrence ?? "none", input.recurrenceEndsAt);
     const task: DailyTask = {
       id: `daily-${randomUUID()}`,
       title: input.title.trim(),
       notes: input.notes?.trim() ?? "",
       color: input.color ?? "teal",
-      allDay: input.allDay ?? false,
+      allDay: !!scheduledStartAt && input.allDay === true,
       ...(scheduledStartAt ? { scheduledStartAt } : {}),
       ...(scheduledEndAt ? { scheduledEndAt } : {}),
-      recurrence: input.recurrence ?? "none",
-      ...(input.recurrenceEndsAt ? { recurrenceEndsAt: input.recurrenceEndsAt } : {}),
+      recurrence: scheduledStartAt ? input.recurrence ?? "none" : "none",
+      ...(scheduledStartAt && input.recurrence && input.recurrence !== "none" && input.recurrenceEndsAt ? { recurrenceEndsAt: input.recurrenceEndsAt } : {}),
       subtasks: structuredClone(input.subtasks ?? []),
       completedDates: [],
       origin: "manual",
@@ -485,14 +487,14 @@ export class ChroniStore {
       createdAt: now,
       updatedAt: now,
     };
-    this.#state.dailyTasks = [task, ...this.#state.dailyTasks].slice(0, 2_000);
+    this.#state.dailyTasks = boundDailyTasks([task, ...this.#state.dailyTasks]);
     this.#save();
     return this.snapshot();
   }
 
   updateDailyTask(id: string, patch: DailyTaskPatch): ChroniSnapshot {
     const existing = this.#state.dailyTasks.find((task) => task.id === id);
-    if (!existing) throw new Error("找不到这条每日任务。");
+    if (!existing) throw new InputValidationError("daily task id does not exist.");
     const next: DailyTask = structuredClone(existing);
     if (patch.title !== undefined) next.title = patch.title;
     if (patch.notes !== undefined) next.notes = patch.notes;
@@ -501,22 +503,40 @@ export class ChroniStore {
     if (patch.recurrence !== undefined) next.recurrence = patch.recurrence;
     if (patch.subtasks !== undefined) next.subtasks = structuredClone(patch.subtasks);
     if (patch.completedDates !== undefined) next.completedDates = [...patch.completedDates];
-    if (typeof patch.scheduledStartAt === "string") next.scheduledStartAt = patch.scheduledStartAt;
+    if (typeof patch.scheduledStartAt === "string") {
+      next.scheduledStartAt = patch.scheduledStartAt;
+      if (!Object.hasOwn(patch, "scheduledEndAt")) {
+        const previousDuration = existing.scheduledStartAt && existing.scheduledEndAt
+          ? Math.max(1, new Date(existing.scheduledEndAt).getTime() - new Date(existing.scheduledStartAt).getTime())
+          : 30 * 60_000;
+        next.scheduledEndAt = dailyTaskEndAfter(next.scheduledStartAt, previousDuration);
+      }
+    }
     if (typeof patch.scheduledEndAt === "string") next.scheduledEndAt = patch.scheduledEndAt;
     if (typeof patch.recurrenceEndsAt === "string") next.recurrenceEndsAt = patch.recurrenceEndsAt;
-    next.userAdjusted = existing.userAdjusted || Object.keys(patch).some((field) => field !== "completedDates");
+    const adjustmentFields = new Set(["title", "allDay", "scheduledStartAt", "scheduledEndAt", "recurrence", "recurrenceEndsAt"]);
+    next.userAdjusted = existing.userAdjusted || Object.keys(patch).some((field) => adjustmentFields.has(field));
     next.dismissed = false;
     next.updatedAt = new Date().toISOString();
-    if (patch.scheduledStartAt === null) delete next.scheduledStartAt;
+    if (patch.scheduledStartAt === null) {
+      if (typeof patch.scheduledEndAt === "string") throw new InputValidationError("daily task patch.scheduledEndAt cannot be set when scheduledStartAt is null.");
+      delete next.scheduledStartAt;
+    }
     if (patch.scheduledEndAt === null) delete next.scheduledEndAt;
     if (patch.recurrenceEndsAt === null) delete next.recurrenceEndsAt;
     if (!next.scheduledStartAt) {
+      if (patch.allDay === true || (patch.recurrence !== undefined && patch.recurrence !== "none") || typeof patch.recurrenceEndsAt === "string") {
+        throw new InputValidationError("daily task.scheduledStartAt is required for all-day or recurring tasks.");
+      }
       delete next.scheduledEndAt;
       next.allDay = false;
+      next.recurrence = "none";
+      delete next.recurrenceEndsAt;
     } else if (!next.scheduledEndAt) {
-      next.scheduledEndAt = new Date(new Date(next.scheduledStartAt).getTime() + 30 * 60_000).toISOString();
+      next.scheduledEndAt = defaultDailyTaskEnd(next.scheduledStartAt);
     }
-    assertDailyTaskRange(next.scheduledStartAt, next.scheduledEndAt);
+    if (next.recurrence === "none") delete next.recurrenceEndsAt;
+    assertDailyTaskSchedule(next.scheduledStartAt, next.scheduledEndAt, next.allDay, next.recurrence, next.recurrenceEndsAt);
     this.#state.dailyTasks = this.#state.dailyTasks.map((task) => task.id === id ? next : task);
     this.#syncLinkedStepCompletion(next);
     this.#save();
@@ -525,33 +545,48 @@ export class ChroniStore {
 
   deleteDailyTask(id: string): ChroniSnapshot {
     const task = this.#state.dailyTasks.find((candidate) => candidate.id === id);
-    if (!task) return this.snapshot();
+    if (!task) throw new InputValidationError("daily task id does not exist.");
     const retainHistory = task.origin === "agent" || !!task.scheduledStartAt;
     this.#state.dailyTasks = retainHistory
       ? this.#state.dailyTasks.map((candidate) => candidate.id === id
         ? { ...candidate, dismissed: true, userAdjusted: true, updatedAt: new Date().toISOString() }
         : candidate)
       : this.#state.dailyTasks.filter((candidate) => candidate.id !== id);
+    this.#syncLinkedStepCompletion(task);
     this.#save();
     return this.snapshot();
   }
 
   #syncLinkedStepCompletion(task: DailyTask): void {
-    if (!task.linkedTaskId || !task.linkedStepId || !task.scheduledStartAt) return;
-    const dateKey = localDateKey(new Date(task.scheduledStartAt));
-    const completed = task.completedDates.includes(dateKey);
+    if (!task.linkedTaskId || !task.linkedStepId) return;
+    const linkedBlocks = this.#state.dailyTasks.filter((candidate) => candidate.linkedTaskId === task.linkedTaskId
+      && candidate.linkedStepId === task.linkedStepId
+      && !candidate.dismissed
+      && !!candidate.scheduledStartAt);
+    const completedMinutes = linkedBlocks.reduce((total, candidate) => {
+      const dateKey = localDateKey(new Date(candidate.scheduledStartAt!));
+      if (!candidate.completedDates.includes(dateKey)) return total;
+      return total + dailyTaskAllocatedMinutes(candidate);
+    }, 0);
     const now = new Date().toISOString();
     let changed = false;
     this.#state.taskPlans = this.#state.taskPlans.map((plan) => {
       if (plan.taskId !== task.linkedTaskId || plan.status !== "active") return plan;
+      let planChanged = false;
       const steps = plan.steps.map((step) => {
         if (step.id !== task.linkedStepId) return step;
-        const status = completed ? "completed" as const : step.status === "completed" ? "pending" as const : step.status;
+        if (step.status === "blocked" || step.status === "skipped" || step.userModifiedFields.includes("status")) return step;
+        const status = completedMinutes >= step.estimatedMinutes
+          ? "completed" as const
+          : completedMinutes > 0
+            ? "in-progress" as const
+            : "pending" as const;
         if (status === step.status) return step;
         changed = true;
+        planChanged = true;
         return { ...step, status, updatedAt: now };
       });
-      return changed ? { ...plan, steps, updatedAt: now } : plan;
+      return planChanged ? { ...plan, steps, updatedAt: now } : plan;
     });
     if (!changed) return;
     const plan = this.#state.taskPlans.find((candidate) => candidate.taskId === task.linkedTaskId && candidate.status === "active");
@@ -569,34 +604,49 @@ export class ChroniStore {
     const automaticPalette: DailyTaskColor[] = ["coral", "teal", "blue", "gold", "plum"];
     const colorIndexes = new Map<string, number>();
     const now = new Date();
+    const updatedAt = now.toISOString();
     const today = localDateKey(now);
     const matched = new Set<string>();
+    const blockOrdinals = new Map<string, number>();
     for (const block of blocks) {
+      const source = this.#state.items.find((item) => item.id === block.taskId);
+      if (!source) continue;
       const dateKey = localDateKey(new Date(block.startAt));
       const colorIndex = colorIndexes.get(dateKey) ?? 0;
       const automaticColor = automaticPalette[colorIndex % automaticPalette.length];
       colorIndexes.set(dateKey, colorIndex + 1);
-      const existing = this.#state.dailyTasks.find((task) => task.origin === "agent"
-        && task.linkedTaskId === block.taskId
-        && (task.linkedStepId ?? "") === (block.stepId ?? "")
-        && task.scheduledStartAt
-        && localDateKey(new Date(task.scheduledStartAt)) === dateKey);
+      const group = `${block.taskId}\u001f${block.stepId ?? ""}`;
+      const ordinal = blockOrdinals.get(group) ?? 0;
+      blockOrdinals.set(group, ordinal + 1);
+      const agentBlockKey = stableAgentBlockKey(block.taskId, block.stepId, ordinal);
+      const existing = this.#state.dailyTasks.find((task) => task.origin === "agent" && !matched.has(task.id) && task.agentBlockKey === agentBlockKey)
+        ?? this.#state.dailyTasks
+          .filter((task) => task.origin === "agent"
+            && !task.agentBlockKey
+            && !matched.has(task.id)
+            && task.linkedTaskId === block.taskId
+            && (task.linkedStepId ?? "") === (block.stepId ?? ""))
+          .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())[0];
       if (existing) {
         matched.add(existing.id);
+        existing.agentBlockKey = agentBlockKey;
+        existing.allocatedMinutes = block.allocatedMinutes;
+        existing.linkedTaskId = block.taskId;
+        if (block.stepId) existing.linkedStepId = block.stepId;
+        else delete existing.linkedStepId;
         if (!existing.userAdjusted) {
           existing.title = block.title;
           existing.scheduledStartAt = block.startAt;
           existing.scheduledEndAt = block.endAt;
           existing.color = automaticColor;
-          existing.updatedAt = now.toISOString();
+          existing.updatedAt = updatedAt;
         }
         continue;
       }
-      const source = this.#state.items.find((item) => item.id === block.taskId);
       const created: DailyTask = {
         id: `daily-agent-${randomUUID()}`,
         title: block.title,
-        notes: source ? `来自「${source.title}」的 Agent 规划，可在任务规划中查看完整拆解。` : "由 Chroni Agent 自动安排。",
+        notes: `来自「${source.title}」的 Agent 规划，可在任务规划中查看完整拆解。`,
         color: automaticColor,
         allDay: false,
         scheduledStartAt: block.startAt,
@@ -607,18 +657,20 @@ export class ChroniStore {
         origin: "agent",
         linkedTaskId: block.taskId,
         ...(block.stepId ? { linkedStepId: block.stepId } : {}),
+        agentBlockKey,
+        allocatedMinutes: block.allocatedMinutes,
         userAdjusted: false,
         dismissed: false,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
+        createdAt: updatedAt,
+        updatedAt,
       };
       this.#state.dailyTasks.push(created);
       matched.add(created.id);
     }
-    this.#state.dailyTasks = this.#state.dailyTasks.filter((task) => {
+    this.#state.dailyTasks = boundDailyTasks(this.#state.dailyTasks.filter((task) => {
       if (task.origin !== "agent" || matched.has(task.id) || task.userAdjusted || task.completedDates.length || !task.scheduledStartAt) return true;
       return localDateKey(new Date(task.scheduledStartAt)) < today;
-    }).slice(0, 2_000);
+    }));
   }
 
   saveAgentRun(result: AgentRunResult): ChroniSnapshot {
@@ -779,6 +831,20 @@ export class ChroniStore {
     return this.snapshot();
   }
 
+  #reconcileDailyTaskLinks(relinks: ReadonlyMap<string, string> = new Map()): void {
+    const validTaskIds = new Set(this.#state.items.map((item) => item.id));
+    this.#state.dailyTasks = this.#state.dailyTasks.flatMap((dailyTask) => {
+      if (!dailyTask.linkedTaskId || validTaskIds.has(dailyTask.linkedTaskId)) return [dailyTask];
+      const replacementId = relinks.get(dailyTask.linkedTaskId);
+      if (!replacementId || !validTaskIds.has(replacementId)) return [];
+      const relinked = { ...dailyTask, linkedTaskId: replacementId, updatedAt: new Date().toISOString() };
+      delete relinked.agentBlockKey;
+      delete relinked.linkedStepId;
+      delete relinked.allocatedMinutes;
+      return [relinked];
+    });
+  }
+
   replaceSourceItems(sourceId: string, items: DdlItem[], message = "已重新识别来源。", options: ReplaceSourceItemsOptions = {}): ChroniSnapshot {
     const source = this.#state.sources.find((record) => record.id === sourceId);
     if (!source) {
@@ -810,6 +876,14 @@ export class ChroniStore {
     if (items.length) this.#expirePendingDraftsForSources(new Set([sourceId]));
     this.#state.items = accepted;
     const validTaskIds = new Set(accepted.map((item) => item.id));
+    const dailyTaskRelinks = new Map<string, string>();
+    for (const previous of previousSourceItems) {
+      if (validTaskIds.has(previous.id)) continue;
+      const retained = retainedCandidates.find((candidate) => candidate.id === previous.id);
+      const replacement = retained ? accepted.find((candidate) => sameTaskOccurrence(candidate, retained)) : undefined;
+      if (replacement) dailyTaskRelinks.set(previous.id, replacement.id);
+    }
+    this.#reconcileDailyTaskLinks(dailyTaskRelinks);
     this.#state.taskPlans = this.#state.taskPlans.filter((plan) => validTaskIds.has(plan.taskId));
     this.#state.taskPlanRevisions = this.#state.taskPlanRevisions.filter((revision) => validTaskIds.has(revision.taskId));
     this.#state.clarifications = this.#state.clarifications.filter((clarification) => !clarification.taskId || validTaskIds.has(clarification.taskId));
@@ -1050,6 +1124,15 @@ export class ChroniStore {
       : source);
     const taskById = new Map(items.map((item) => [item.id, item]));
     const normalizedPlans = normalizeTaskPlans(parsed.taskPlans, taskById);
+    const validStepLinks = new Set(normalizedPlans.values.flatMap((plan) => plan.steps.map((step) => `${plan.taskId}\u001f${step.id}`)));
+    normalizedDailyTasks.values = normalizedDailyTasks.values.map((dailyTask) => {
+      if (!dailyTask.linkedTaskId || !dailyTask.linkedStepId || validStepLinks.has(`${dailyTask.linkedTaskId}\u001f${dailyTask.linkedStepId}`)) return dailyTask;
+      const repaired = { ...dailyTask };
+      delete repaired.linkedStepId;
+      delete repaired.agentBlockKey;
+      normalizedDailyTasks.repaired += 1;
+      return repaired;
+    });
     const planIds = new Set(normalizedPlans.values.map((plan) => plan.id));
     const normalizedRevisions = normalizeTaskPlanRevisions(parsed.taskPlanRevisions, itemIds, planIds);
     const normalizedAgent = normalizeAgentState(parsed.agent, itemIds);
@@ -2142,9 +2225,10 @@ function normalizeDailyTasks(value: unknown, validTaskIds: Set<string>): Normali
   if (!Array.isArray(value)) return { values: [], dropped: value === undefined ? 0 : 1, repaired: 0 };
   const values: DailyTask[] = [];
   const ids = new Set<string>();
+  const agentBlockKeys = new Set<string>();
   let dropped = 0;
   let repaired = 0;
-  for (const entry of value.slice(0, 2_000)) {
+  for (const entry of value.slice(0, 10_000)) {
     const input = plainRecord(entry);
     const id = safeNonEmptyString(input?.id, 200);
     const title = safeNonEmptyString(input?.title, 120);
@@ -2155,10 +2239,17 @@ function normalizeDailyTasks(value: unknown, validTaskIds: Set<string>): Normali
     ids.add(id);
     const createdAt = normalizedDate(input.createdAt) ?? new Date().toISOString();
     const updatedAt = normalizedDate(input.updatedAt) ?? createdAt;
-    const scheduledStartAt = normalizedDate(input.scheduledStartAt);
+    let scheduledStartAt = normalizedDate(input.scheduledStartAt);
     let scheduledEndAt = normalizedDate(input.scheduledEndAt);
-    if (scheduledStartAt && (!scheduledEndAt || new Date(scheduledEndAt).getTime() <= new Date(scheduledStartAt).getTime())) {
-      scheduledEndAt = new Date(new Date(scheduledStartAt).getTime() + 30 * 60_000).toISOString();
+    if (scheduledStartAt && (!scheduledEndAt
+      || new Date(scheduledEndAt).getTime() <= new Date(scheduledStartAt).getTime()
+      || localDateKey(new Date(scheduledEndAt)) !== localDateKey(new Date(scheduledStartAt)))) {
+      try {
+        scheduledEndAt = defaultDailyTaskEnd(scheduledStartAt);
+      } catch {
+        scheduledStartAt = undefined;
+        scheduledEndAt = undefined;
+      }
       repaired += 1;
     }
     if (!scheduledStartAt && scheduledEndAt) {
@@ -2173,6 +2264,9 @@ function normalizeDailyTasks(value: unknown, validTaskIds: Set<string>): Normali
     const recurrence = recurrences.includes(input.recurrence as DailyTask["recurrence"])
       ? input.recurrence as DailyTask["recurrence"]
       : "none";
+    if (!colors.includes(input.color as DailyTask["color"]) && input.color !== undefined) repaired += 1;
+    if (!recurrences.includes(input.recurrence as DailyTask["recurrence"]) && input.recurrence !== undefined) repaired += 1;
+    const subtaskIds = new Set<string>();
     const subtasks = Array.isArray(input.subtasks) ? input.subtasks.slice(0, 30).flatMap((entry, index) => {
       const subtask = plainRecord(entry);
       const subtaskTitle = safeNonEmptyString(subtask?.title, 120);
@@ -2180,9 +2274,40 @@ function normalizeDailyTasks(value: unknown, validTaskIds: Set<string>): Normali
         repaired += 1;
         return [];
       }
-      return [{ id: safeNonEmptyString(subtask.id, 200) ?? `subtask-${index + 1}`, title: subtaskTitle, completed: subtask.completed === true }];
+      const requestedId = safeNonEmptyString(subtask.id, 200);
+      let subtaskId = requestedId ?? `subtask-${index + 1}`;
+      while (subtaskIds.has(subtaskId)) subtaskId = `subtask-${index + 1}-${subtaskIds.size + 1}`;
+      if (!requestedId || subtaskId !== requestedId) repaired += 1;
+      subtaskIds.add(subtaskId);
+      return [{ id: subtaskId, title: subtaskTitle, completed: subtask.completed === true }];
     }) : [];
-    const recurrenceEndsAt = normalizedDate(input.recurrenceEndsAt);
+    let normalizedRecurrence = scheduledStartAt ? recurrence : "none";
+    if (!scheduledStartAt && (input.allDay === true || recurrence !== "none" || input.recurrenceEndsAt !== undefined)) repaired += 1;
+    let recurrenceEndsAt = normalizedRecurrence !== "none" ? normalizedDate(input.recurrenceEndsAt) : undefined;
+    if (recurrenceEndsAt && scheduledStartAt && localDateKey(new Date(recurrenceEndsAt)) < localDateKey(new Date(scheduledStartAt))) {
+      recurrenceEndsAt = undefined;
+      repaired += 1;
+    }
+    if (input.recurrenceEndsAt !== undefined && !recurrenceEndsAt) repaired += 1;
+    const completedDates = Array.isArray(input.completedDates)
+      ? [...new Set(input.completedDates.filter((date): date is string => typeof date === "string" && isCalendarDateKey(date)))].slice(0, 1_000)
+      : [];
+    if (Array.isArray(input.completedDates) && completedDates.length !== input.completedDates.length) repaired += 1;
+    const origin = input.origin === "agent" && validLinkedTaskId ? "agent" as const : "manual" as const;
+    let agentBlockKey = origin === "agent" ? safeNonEmptyString(input.agentBlockKey, 500) : undefined;
+    if (agentBlockKey && agentBlockKeys.has(agentBlockKey)) {
+      agentBlockKey = undefined;
+      repaired += 1;
+    }
+    if (agentBlockKey) agentBlockKeys.add(agentBlockKey);
+    const allocatedMinutes = origin === "agent"
+      ? isBoundedInteger(input.allocatedMinutes, 1, 1_440)
+        ? Number(input.allocatedMinutes)
+        : scheduledStartAt && scheduledEndAt
+          ? Math.max(1, Math.round((new Date(scheduledEndAt).getTime() - new Date(scheduledStartAt).getTime()) / 60_000))
+          : undefined
+      : undefined;
+    if (origin === "agent" && allocatedMinutes !== input.allocatedMinutes) repaired += 1;
     values.push({
       id,
       title,
@@ -2191,23 +2316,24 @@ function normalizeDailyTasks(value: unknown, validTaskIds: Set<string>): Normali
       allDay: input.allDay === true && !!scheduledStartAt,
       ...(scheduledStartAt ? { scheduledStartAt } : {}),
       ...(scheduledEndAt ? { scheduledEndAt } : {}),
-      recurrence,
+      recurrence: normalizedRecurrence,
       ...(recurrenceEndsAt ? { recurrenceEndsAt } : {}),
       subtasks,
-      completedDates: Array.isArray(input.completedDates)
-        ? [...new Set(input.completedDates.filter((date): date is string => typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)))].slice(0, 1_000)
-        : [],
-      origin: input.origin === "agent" && validLinkedTaskId ? "agent" : "manual",
+      completedDates,
+      origin,
       ...(validLinkedTaskId ? { linkedTaskId: validLinkedTaskId } : {}),
       ...(validLinkedTaskId && safeNonEmptyString(input.linkedStepId, 200) ? { linkedStepId: safeNonEmptyString(input.linkedStepId, 200) } : {}),
+      ...(agentBlockKey ? { agentBlockKey } : {}),
+      ...(allocatedMinutes ? { allocatedMinutes } : {}),
       userAdjusted: input.userAdjusted === true,
       dismissed: input.dismissed === true,
       createdAt,
       updatedAt,
     });
   }
-  dropped += Math.max(0, value.length - 2_000);
-  return { values, dropped, repaired };
+  const bounded = boundDailyTasks(values);
+  dropped += Math.max(0, value.length - bounded.length);
+  return { values: bounded, dropped, repaired };
 }
 
 function normalizeExtractionContext(value: unknown): DdlItem["extraction"] | undefined {
@@ -2233,11 +2359,71 @@ function normalizedDate(value: unknown): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
-function assertDailyTaskRange(startAt?: string, endAt?: string): void {
-  if (!startAt && !endAt) return;
-  if (!startAt || !endAt || Number.isNaN(new Date(startAt).getTime()) || Number.isNaN(new Date(endAt).getTime()) || new Date(endAt).getTime() <= new Date(startAt).getTime()) {
-    throw new Error("每日任务的结束时间必须晚于开始时间。");
+function assertDailyTaskSchedule(startAt: string | undefined, endAt: string | undefined, allDay: boolean, recurrence: DailyTask["recurrence"], recurrenceEndsAt?: string): void {
+  if (!startAt && !endAt) {
+    if (allDay || recurrence !== "none" || recurrenceEndsAt) throw new InputValidationError("daily task.scheduledStartAt is required for all-day or recurring tasks.");
+    return;
   }
+  if (!startAt || !endAt || !isRfc3339DateTime(startAt) || !isRfc3339DateTime(endAt)) {
+    throw new InputValidationError("daily task schedule must use complete RFC 3339 date-times.");
+  }
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  if (end.getTime() <= start.getTime()) throw new InputValidationError("daily task end must be after start.");
+  if (localDateKey(start) !== localDateKey(end)) throw new InputValidationError("daily task start and end must be on the same local date.");
+  if (recurrenceEndsAt) {
+    if (recurrence === "none" || !isRfc3339DateTime(recurrenceEndsAt)) throw new InputValidationError("daily task recurrenceEndsAt requires a recurring scheduled task.");
+    if (localDateKey(new Date(recurrenceEndsAt)) < localDateKey(start)) throw new InputValidationError("daily task recurrenceEndsAt must not be before the first occurrence.");
+  }
+}
+
+function isRfc3339DateTime(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(value)
+    && isCalendarDateKey(value.slice(0, 10))
+    && !Number.isNaN(new Date(value).getTime());
+}
+
+function dailyTaskEndAfter(startAt: string, durationMs: number): string {
+  const start = new Date(startAt);
+  const proposed = new Date(start.getTime() + Math.max(1, durationMs));
+  if (localDateKey(proposed) === localDateKey(start)) return proposed.toISOString();
+  const endOfDay = new Date(start);
+  endOfDay.setHours(23, 59, 59, 999);
+  if (endOfDay.getTime() <= start.getTime()) throw new InputValidationError("daily task start must leave room for an end time on the same date.");
+  return endOfDay.toISOString();
+}
+
+function defaultDailyTaskEnd(startAt: string): string {
+  return dailyTaskEndAfter(startAt, 30 * 60_000);
+}
+
+function dailyTaskAllocatedMinutes(task: DailyTask): number {
+  if (Number.isInteger(task.allocatedMinutes) && task.allocatedMinutes! > 0) return task.allocatedMinutes!;
+  if (!task.scheduledStartAt || !task.scheduledEndAt) return 0;
+  return Math.max(1, Math.round((new Date(task.scheduledEndAt).getTime() - new Date(task.scheduledStartAt).getTime()) / 60_000));
+}
+
+function stableAgentBlockKey(taskId: string, stepId: string | undefined, ordinal: number): string {
+  return `agent:${encodeURIComponent(taskId)}:${encodeURIComponent(stepId ?? "")}:${ordinal + 1}`;
+}
+
+function boundDailyTasks(tasks: DailyTask[]): DailyTask[] {
+  if (tasks.length <= 2_000) return tasks;
+  return [...tasks]
+    .sort((left, right) => Number(left.dismissed) - Number(right.dismissed)
+      || new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+      || new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+    .slice(0, 2_000);
+}
+
+function isCalendarDateKey(value: string): boolean {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
 
 function localDateKey(value: Date): string {

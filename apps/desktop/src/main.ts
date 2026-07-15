@@ -145,9 +145,24 @@ function installIpc(): void {
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
   });
-  ipcMain.handle("chroni:daily-task-create", (_event, input: DailyTaskCreateInput) => publishStoreSnapshot(store.createDailyTask(validateDailyTaskCreate(input))));
-  ipcMain.handle("chroni:daily-task-update", (_event, id: string, patch: DailyTaskPatch) => publishStoreSnapshot(store.updateDailyTask(validateIdentifier(id, "daily task id"), validateDailyTaskPatch(patch))));
-  ipcMain.handle("chroni:daily-task-delete", (_event, id: string) => publishStoreSnapshot(store.deleteDailyTask(validateIdentifier(id, "daily task id"))));
+  ipcMain.handle("chroni:daily-task-create", (_event, input: DailyTaskCreateInput) => {
+    const previousFingerprint = taskFingerprint(store.snapshot());
+    const snapshot = store.createDailyTask(validateDailyTaskCreate(input));
+    if (taskFingerprint(snapshot) !== previousFingerprint) scheduleAgentForTaskChange();
+    return publishStoreSnapshot(snapshot);
+  });
+  ipcMain.handle("chroni:daily-task-update", (_event, id: string, patch: DailyTaskPatch) => {
+    const previousFingerprint = taskFingerprint(store.snapshot());
+    const snapshot = store.updateDailyTask(validateIdentifier(id, "daily task id"), validateDailyTaskPatch(patch));
+    if (taskFingerprint(snapshot) !== previousFingerprint) scheduleAgentForTaskChange();
+    return publishStoreSnapshot(snapshot);
+  });
+  ipcMain.handle("chroni:daily-task-delete", (_event, id: string) => {
+    const previousFingerprint = taskFingerprint(store.snapshot());
+    const snapshot = store.deleteDailyTask(validateIdentifier(id, "daily task id"));
+    if (taskFingerprint(snapshot) !== previousFingerprint) scheduleAgentForTaskChange();
+    return publishStoreSnapshot(snapshot);
+  });
   ipcMain.handle("chroni:preferences-update", (_event, patch: ChroniPreferencesPatch) => {
     const previousHotkey = store.snapshot().preferences.hotkey;
     let snapshot = store.updatePreferences(validatePreferencesPatch(patch));

@@ -73,13 +73,14 @@ export function validateDailyTaskCreate(value: unknown): DailyTaskCreateInput {
   if (input.notes !== undefined) result.notes = boundedString(input.notes, "daily task.notes", 4_000);
   if (input.color !== undefined) result.color = dailyTaskColor(input.color, "daily task.color");
   if (input.allDay !== undefined) result.allDay = booleanValue(input.allDay, "daily task.allDay");
-  if (input.scheduledStartAt !== undefined) result.scheduledStartAt = dateString(input.scheduledStartAt, "daily task.scheduledStartAt");
-  if (input.scheduledEndAt !== undefined) result.scheduledEndAt = dateString(input.scheduledEndAt, "daily task.scheduledEndAt");
+  if (input.scheduledStartAt !== undefined) result.scheduledStartAt = dateTimeString(input.scheduledStartAt, "daily task.scheduledStartAt");
+  if (input.scheduledEndAt !== undefined) result.scheduledEndAt = dateTimeString(input.scheduledEndAt, "daily task.scheduledEndAt");
   if (input.recurrence !== undefined) result.recurrence = dailyTaskRecurrence(input.recurrence, "daily task.recurrence");
-  if (input.recurrenceEndsAt !== undefined) result.recurrenceEndsAt = dateString(input.recurrenceEndsAt, "daily task.recurrenceEndsAt");
+  if (input.recurrenceEndsAt !== undefined) result.recurrenceEndsAt = dateTimeString(input.recurrenceEndsAt, "daily task.recurrenceEndsAt");
   if (input.subtasks !== undefined) result.subtasks = dailyTaskSubtasks(input.subtasks, "daily task.subtasks");
   validateDailyTaskRange(result.scheduledStartAt, result.scheduledEndAt);
   if (result.scheduledEndAt && !result.scheduledStartAt) fail("daily task.scheduledStartAt is required when scheduledEndAt is set.");
+  validateDailyTaskScheduleCombination(result.scheduledStartAt, result.allDay, result.recurrence, result.recurrenceEndsAt);
   return result;
 }
 
@@ -92,13 +93,13 @@ export function validateDailyTaskPatch(value: unknown): DailyTaskPatch {
   if (input.notes !== undefined) result.notes = boundedString(input.notes, "daily task patch.notes", 4_000);
   if (input.color !== undefined) result.color = dailyTaskColor(input.color, "daily task patch.color");
   if (input.allDay !== undefined) result.allDay = booleanValue(input.allDay, "daily task patch.allDay");
-  if (Object.hasOwn(input, "scheduledStartAt")) result.scheduledStartAt = input.scheduledStartAt === null ? null : dateString(input.scheduledStartAt, "daily task patch.scheduledStartAt");
-  if (Object.hasOwn(input, "scheduledEndAt")) result.scheduledEndAt = input.scheduledEndAt === null ? null : dateString(input.scheduledEndAt, "daily task patch.scheduledEndAt");
+  if (Object.hasOwn(input, "scheduledStartAt")) result.scheduledStartAt = input.scheduledStartAt === null ? null : dateTimeString(input.scheduledStartAt, "daily task patch.scheduledStartAt");
+  if (Object.hasOwn(input, "scheduledEndAt")) result.scheduledEndAt = input.scheduledEndAt === null ? null : dateTimeString(input.scheduledEndAt, "daily task patch.scheduledEndAt");
   if (input.recurrence !== undefined) result.recurrence = dailyTaskRecurrence(input.recurrence, "daily task patch.recurrence");
-  if (Object.hasOwn(input, "recurrenceEndsAt")) result.recurrenceEndsAt = input.recurrenceEndsAt === null ? null : dateString(input.recurrenceEndsAt, "daily task patch.recurrenceEndsAt");
+  if (Object.hasOwn(input, "recurrenceEndsAt")) result.recurrenceEndsAt = input.recurrenceEndsAt === null ? null : dateTimeString(input.recurrenceEndsAt, "daily task patch.recurrenceEndsAt");
   if (input.subtasks !== undefined) result.subtasks = dailyTaskSubtasks(input.subtasks, "daily task patch.subtasks");
   if (input.completedDates !== undefined) {
-    if (!Array.isArray(input.completedDates) || input.completedDates.length > 1_000 || input.completedDates.some((date) => typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date))) {
+    if (!Array.isArray(input.completedDates) || input.completedDates.length > 1_000 || input.completedDates.some((date) => typeof date !== "string" || !isCalendarDateKey(date))) {
       fail("daily task patch.completedDates must contain valid YYYY-MM-DD dates.");
     }
     result.completedDates = [...new Set(input.completedDates as string[])];
@@ -333,6 +334,18 @@ function dailyTaskSubtasks(value: unknown, field: string): DailyTaskSubtask[] {
 function validateDailyTaskRange(startAt?: string, endAt?: string): void {
   if (!startAt || !endAt) return;
   if (new Date(endAt).getTime() <= new Date(startAt).getTime()) fail("daily task end must be after start.");
+  if (localDateKey(new Date(startAt)) !== localDateKey(new Date(endAt))) fail("daily task start and end must be on the same local date.");
+}
+
+function validateDailyTaskScheduleCombination(startAt: string | undefined, allDay: boolean | undefined, recurrence: DailyTaskCreateInput["recurrence"] | undefined, recurrenceEndsAt: string | undefined): void {
+  if (startAt) {
+    if (recurrenceEndsAt && (!recurrence || recurrence === "none")) fail("daily task.recurrence must be set when recurrenceEndsAt is set.");
+    if (recurrenceEndsAt && localDateKey(new Date(recurrenceEndsAt)) < localDateKey(new Date(startAt))) fail("daily task.recurrenceEndsAt must not be before scheduledStartAt.");
+    return;
+  }
+  if (allDay) fail("daily task.scheduledStartAt is required when allDay is true.");
+  if (recurrence && recurrence !== "none") fail("daily task.scheduledStartAt is required when recurrence is set.");
+  if (recurrenceEndsAt) fail("daily task.scheduledStartAt is required when recurrenceEndsAt is set.");
 }
 
 function stringArray(value: unknown, field: string, maxItems: number, maxLength: number): string[] {
@@ -392,6 +405,30 @@ function dateString(value: unknown, field: string): string {
   const result = nonEmptyString(value, field, 100);
   if (Number.isNaN(new Date(result).getTime())) fail(`${field} must be a valid date string.`);
   return result;
+}
+
+function dateTimeString(value: unknown, field: string): string {
+  const result = nonEmptyString(value, field, 100);
+  const pattern = /^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+  const match = result.match(pattern);
+  if (!match || !isCalendarDateKey(match[1]) || Number.isNaN(new Date(result).getTime())) {
+    fail(`${field} must be an RFC 3339 date-time with a timezone.`);
+  }
+  return new Date(result).toISOString();
+}
+
+function isCalendarDateKey(value: string): boolean {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+function localDateKey(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
 function clockTime(value: unknown, field: string): string {

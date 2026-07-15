@@ -6,7 +6,7 @@ import { attentionPetAction, basePetAction, isOneShotPetAction, petClickIntent, 
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import { hasCrossedDragThreshold } from "../../window-geometry";
 import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
-import type { AgentMemory, CompanionState, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
+import type { AgentMemory, CompanionState, DailyTask, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
 import { DailyPlanner } from "./components/DailyPlanner";
 import "./styles.css";
@@ -524,6 +524,10 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
   const [tab, setTab] = useState<ControlTab>("daily");
   const [navigation, setNavigation] = useState<{ route: ChroniControlRoute; sequence: number }>({ route: {}, sequence: 0 });
   const pendingCount = snapshot.items.filter((item) => !item.completed).length;
+  const today = new Date();
+  const todayKey = dailyDateKey(today);
+  const todayDailyCount = snapshot.dailyTasks.filter((task) => !task.dismissed && dailyTaskOccursOn(task, today) && !task.completedDates.includes(todayKey)).length;
+  const clarificationCount = snapshot.clarifications.filter((item) => item.status === "pending" && item.required).length;
   useEffect(() => api.onControlNavigate((route) => {
     if (route.tab) setTab(route.tab);
     else if (route.taskId || route.focus === "clarifications") setTab("schedule");
@@ -557,7 +561,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
           <button className={tab === "services" ? "active" : ""} aria-current={tab === "services" ? "page" : undefined} onClick={() => selectTab("services")}>运行状态</button>
         </nav>
         <div className="sidebar-foot">
-          <span>{pendingCount ? `还有 ${pendingCount} 件事` : "今天清清爽爽"}{snapshot.clarifications.some((item) => item.status === "pending" && item.required) ? ` · ${snapshot.clarifications.filter((item) => item.status === "pending" && item.required).length} 项待确认` : ""}</span>
+          <span>{todayDailyCount ? `今日 ${todayDailyCount} 项待完成` : "今日任务已清"}{pendingCount ? ` · ${pendingCount} 项 DDL` : ""}{clarificationCount ? ` · ${clarificationCount} 项待确认` : ""}</span>
         </div>
       </aside>
       <section className="content">
@@ -2096,6 +2100,27 @@ function isPersistentPetFeedback(state: CompanionState): boolean {
 
 function isTransientPetFeedback(state: CompanionState): boolean {
   return state === "clicked" || state === "success" || state === "confused" || state === "celebrating";
+}
+
+function dailyTaskOccursOn(task: DailyTask, date: Date): boolean {
+  if (!task.scheduledStartAt) return false;
+  const start = new Date(task.scheduledStartAt);
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const first = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  if (target < first) return false;
+  if (task.recurrenceEndsAt) {
+    const end = new Date(task.recurrenceEndsAt);
+    const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    if (target > last) return false;
+  }
+  if (task.recurrence === "daily") return true;
+  if (task.recurrence === "weekdays") return target.getDay() !== 0 && target.getDay() !== 6;
+  if (task.recurrence === "weekly") return target.getDay() === first.getDay();
+  return dailyDateKey(target) === dailyDateKey(first);
+}
+
+function dailyDateKey(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

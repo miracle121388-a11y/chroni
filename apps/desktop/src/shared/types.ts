@@ -199,6 +199,10 @@ export type DailyTask = {
   origin: "manual" | "agent";
   linkedTaskId?: string;
   linkedStepId?: string;
+  /** Stable identity of the Agent work block across replanning runs. */
+  agentBlockKey?: string;
+  /** Amount of the linked plan step represented by this work block. */
+  allocatedMinutes?: number;
   userAdjusted: boolean;
   dismissed: boolean;
   createdAt: string;

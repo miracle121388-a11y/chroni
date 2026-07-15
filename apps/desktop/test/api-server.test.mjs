@@ -348,6 +348,35 @@ test("daily task API supports create, list, update, and delete", async () => {
   });
 });
 
+test("daily task API distinguishes missing records from invalid schedules", async () => {
+  await withStore(async (store) => {
+    const server = await listenWithRandomPort(store);
+    try {
+      const token = await getApiToken(server);
+      const headers = { authorization: `Bearer ${token}` };
+      const missingPatch = await apiRequest(server, "PATCH", "/api/daily-tasks/missing", { title: "不存在" }, headers);
+      const missingDelete = await apiRequest(server, "DELETE", "/api/daily-tasks/missing", undefined, headers);
+      assert.equal(missingPatch.status, 404);
+      assert.equal(missingDelete.status, 404);
+
+      const dateOnly = await apiRequest(server, "POST", "/api/daily-tasks", { title: "错误时间", scheduledStartAt: "2026-07-15" }, headers);
+      const crossDay = await apiRequest(server, "POST", "/api/daily-tasks", {
+        title: "跨日任务",
+        scheduledStartAt: "2026-07-15T09:00:00Z",
+        scheduledEndAt: "2026-07-16T10:00:00Z",
+      }, headers);
+      const impossibleCompletion = await apiRequest(server, "POST", "/api/daily-tasks", { title: "收件箱" }, headers);
+      const taskId = impossibleCompletion.body.snapshot.dailyTasks[0].id;
+      const invalidCompletion = await apiRequest(server, "PATCH", `/api/daily-tasks/${taskId}`, { completedDates: ["2026-02-30"] }, headers);
+      assert.equal(dateOnly.status, 400);
+      assert.equal(crossDay.status, 400);
+      assert.equal(invalidCompletion.status, 400);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
 test("clarification and task plan APIs are authenticated, validated, and resumable", async () => {
   await withStore(async (store) => {
     const analysis = analyzeCompleteness({ sourceName: "直接文本", sourceType: "text", text: "下周完成机器学习作业。" }, new Date("2026-07-12T10:00:00+08:00"));

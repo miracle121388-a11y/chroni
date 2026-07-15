@@ -158,13 +158,17 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   const dailyTaskRoute = pathname.match(/^\/api\/daily-tasks\/([^/]+)$/);
   if (request.method === "PATCH" && dailyTaskRoute) {
-    const snapshot = store.updateDailyTask(validateIdentifier(decodeURIComponent(dailyTaskRoute[1]), "daily task id"), validateDailyTaskPatch(await readJson(request)));
+    const id = validateIdentifier(decodeURIComponent(dailyTaskRoute[1]), "daily task id");
+    if (!store.snapshot().dailyTasks.some((task) => task.id === id)) throw new HttpError(404, "找不到这条每日任务。");
+    const snapshot = store.updateDailyTask(id, validateDailyTaskPatch(await readJson(request)));
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "DELETE" && dailyTaskRoute) {
-    const snapshot = store.deleteDailyTask(validateIdentifier(decodeURIComponent(dailyTaskRoute[1]), "daily task id"));
+    const id = validateIdentifier(decodeURIComponent(dailyTaskRoute[1]), "daily task id");
+    if (!store.snapshot().dailyTasks.some((task) => task.id === id)) throw new HttpError(404, "找不到这条每日任务。");
+    const snapshot = store.deleteDailyTask(id);
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateExplicitPreference, validateIntakePayload, validateItemPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "../dist/validation.js";
+import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIntakePayload, validateItemPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "../dist/validation.js";
 
 test("validateIntakePayload accepts supported text and file shapes", () => {
   assert.deepEqual(validateIntakePayload({ kind: "text", text: "tomorrow 18:00 submit report" }), {
@@ -34,6 +34,27 @@ test("validateItemPatch enforces field types, enums, dates, and known keys", () 
   assert.throws(() => validateItemPatch({ injected: true }), /injected/);
   assert.throws(() => validateItemPatch({ estimatedMinutes: 5 }), /estimatedMinutes/);
   assert.throws(() => validateItemPatch({ progressPercent: 101 }), /progressPercent/);
+});
+
+test("daily task validation requires coherent local date-time schedules", () => {
+  assert.deepEqual(validateDailyTaskCreate({
+    title: "复习",
+    scheduledStartAt: "2026-07-15T09:00:00+08:00",
+    scheduledEndAt: "2026-07-15T10:00:00+08:00",
+    recurrence: "weekly",
+    recurrenceEndsAt: "2026-08-15T23:59:00+08:00",
+  }), {
+    title: "复习",
+    scheduledStartAt: "2026-07-15T01:00:00.000Z",
+    scheduledEndAt: "2026-07-15T02:00:00.000Z",
+    recurrence: "weekly",
+    recurrenceEndsAt: "2026-08-15T15:59:00.000Z",
+  });
+  assert.throws(() => validateDailyTaskCreate({ title: "日期不完整", scheduledStartAt: "2026-07-15" }), /RFC 3339/);
+  assert.throws(() => validateDailyTaskCreate({ title: "没有排期", recurrence: "daily" }), /scheduledStartAt/);
+  assert.throws(() => validateDailyTaskCreate({ title: "跨日", scheduledStartAt: "2026-07-15T09:00:00Z", scheduledEndAt: "2026-07-16T10:00:00Z" }), /same local date/);
+  assert.throws(() => validateDailyTaskCreate({ title: "重复结束过早", scheduledStartAt: "2026-07-15T09:00:00Z", recurrence: "daily", recurrenceEndsAt: "2026-07-13T23:00:00Z" }), /must not be before/);
+  assert.throws(() => validateDailyTaskPatch({ completedDates: ["2026-02-30"] }), /valid YYYY-MM-DD/);
 });
 
 test("validatePreferencesPatch rejects invalid nested settings", () => {
