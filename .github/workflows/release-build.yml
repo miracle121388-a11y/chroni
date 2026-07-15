@@ -47,7 +47,7 @@ jobs:
         run: node scripts/generate-checksums.mjs apps/desktop/dist-electron apps/desktop/dist-electron/SHA256SUMS-windows.txt
       - name: Attest Windows packages
         if: github.ref_type == 'tag'
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             apps/desktop/dist-electron/*.exe
@@ -111,7 +111,7 @@ jobs:
         run: node scripts/generate-checksums.mjs apps/desktop/dist-electron apps/desktop/dist-electron/SHA256SUMS-macos.txt
       - name: Attest macOS packages
         if: github.ref_type == 'tag'
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             apps/desktop/dist-electron/*.dmg
