@@ -239,7 +239,7 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
         </section>
       )}
       {!draft ? (
-        <section className="plan-empty"><h3>还没有行动计划</h3><p>先生成一份可编辑的步骤草案，确认后才会启用。</p><button type="button" disabled={!!busy} onClick={() => void generate()}>{busy ? "生成中..." : "生成规划草案"}</button></section>
+        <section className="plan-empty"><h3>还没有行动计划</h3><p>先生成一份可编辑的步骤草案，确认后才会启用。</p><button className="primary" type="button" disabled={!!busy} onClick={() => void generate()}>{busy ? "生成中..." : "生成规划草案"}</button></section>
       ) : (
         <>
           <section className="plan-overview">
@@ -272,7 +272,7 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
               </article>
             ))}
           </section>
-          <div className="plan-actions"><button type="button" disabled={!!busy} onClick={() => void save()}>{busy === "save" ? "保存中..." : "保存修改"}</button>{draft.status === "draft" && <button type="button" disabled={!!busy} onClick={() => void activate()}>{busy === "activate" ? "确认中..." : "确认并启用"}</button>}<button type="button" className="secondary" disabled={!!busy} onClick={() => void generate(true)}>{busy === "regenerate" ? "生成中..." : snapshot.agent.memory.useLlmPlanning && snapshot.services.model === "ready" ? "用大模型重新生成" : "重新生成本地草案"}</button></div>
+          <div className="plan-actions"><button className="secondary" type="button" disabled={!!busy} onClick={() => void save()}>{busy === "save" ? "保存中..." : "保存修改"}</button>{draft.status === "draft" && <button className="primary" type="button" disabled={!!busy} onClick={() => void activate()}>{busy === "activate" ? "确认中..." : "确认并启用"}</button>}<button type="button" className="secondary" disabled={!!busy} onClick={() => void generate(true)}>{busy === "regenerate" ? "生成中..." : snapshot.agent.memory.useLlmPlanning && snapshot.services.model === "ready" ? "用大模型重新生成" : "重新生成本地草案"}</button></div>
           {!!revisions.length && <details className="plan-revisions"><summary>版本记录 · {revisions.length}</summary>{revisions.map((revision) => <p key={revision.id}>v{revision.fromVersion} → v{revision.toVersion} · {revision.changes.length} 项修改</p>)}</details>}
         </>
       )}
@@ -297,17 +297,17 @@ export function BehaviorMemoryPane({ snapshot, setSnapshot, embedded = false }: 
     <section className="behavior-memory" aria-busy={busy} aria-labelledby={embedded ? undefined : "behavior-memory-heading"} aria-label={embedded ? "个性化规划偏好" : undefined}>
       {!embedded && <header><div><p>个性化规划</p><h3 id="behavior-memory-heading">Chroni 记住的规划习惯</h3></div><span>{memory.preferences.filter((item) => item.status === "active").length} 条生效</span></header>}
       <div className="memory-controls"><label><input type="checkbox" disabled={busy} checked={memory.learningEnabled} onChange={(event) => void run(() => api.updateBehaviorMemory({ learningEnabled: event.target.checked }), "学习设置已更新。" )} /> 从保存的规划修改中学习</label><label><input type="checkbox" disabled={busy} checked={memory.autoApplyEnabled} onChange={(event) => void run(() => api.updateBehaviorMemory({ autoApplyEnabled: event.target.checked }), "自动应用设置已更新。" )} /> 自动应用高置信度偏好</label></div>
-      <div className="explicit-preference"><label>默认步骤时长 <input type="number" min="15" max="180" step="5" value={stepMinutes} disabled={busy} onChange={(event) => setStepMinutes(event.target.value)} /> 分钟</label><button type="button" disabled={busy} onClick={() => void run(() => api.upsertPlanningPreference({ key: "preferredStepMinutes", value: Number(stepMinutes) }), "明确偏好已保存。")}>设为明确偏好</button></div>
+      <div className="explicit-preference"><label>默认步骤时长 <input type="number" min="15" max="180" step="5" value={stepMinutes} disabled={busy} onChange={(event) => setStepMinutes(event.target.value)} /> 分钟</label><button className="primary" type="button" disabled={busy} onClick={() => void run(() => api.upsertPlanningPreference({ key: "preferredStepMinutes", value: Number(stepMinutes) }), "明确偏好已保存。")}>设为明确偏好</button></div>
       <div className="preference-list">{memory.preferences.length ? memory.preferences.map((preference) => <PreferenceRow key={preference.id} preference={preference} disabled={busy} onStatus={(status) => run(() => api.setPlanningPreferenceStatus(preference.id, status), "偏好状态已更新。") } onDelete={() => run(() => api.deletePlanningPreference(preference.id), "偏好已删除。") } />) : <p className="empty">Chroni 还在了解你的习惯。保存的规划修改会慢慢沉淀在这里。</p>}</div>
       {!!snapshot.agent.recentPlanningFeedback.length && <details className="recent-learning"><summary>最近学习 · {snapshot.agent.recentPlanningFeedback.length}</summary>{snapshot.agent.recentPlanningFeedback.slice(0, 5).map((event) => <p key={event.id}>{taskTypeLabel(event.taskType)} · 规划 v{event.planVersion} · {event.changes.length} 项结构化修改</p>)}</details>}
-      <div className="memory-danger">{confirmClear ? <><span>确认清除全部行为偏好和学习记录？</span><button type="button" disabled={busy} onClick={() => void run(() => api.clearBehaviorMemory(), "规划偏好记忆已清除。").finally(() => setConfirmClear(false))}>确认清除</button><button type="button" className="secondary" disabled={busy} onClick={() => setConfirmClear(false)}>取消</button></> : <button type="button" className="text-action" disabled={busy} onClick={() => setConfirmClear(true)}>清除规划偏好记忆</button>}</div>
+      <div className="memory-danger">{confirmClear ? <><span>确认清除全部行为偏好和学习记录？</span><button type="button" className="danger" disabled={busy} onClick={() => void run(() => api.clearBehaviorMemory(), "规划偏好记忆已清除。").finally(() => setConfirmClear(false))}>确认清除</button><button type="button" className="secondary" disabled={busy} onClick={() => setConfirmClear(false)}>取消</button></> : <button type="button" className="text-action" disabled={busy} onClick={() => setConfirmClear(true)}>清除规划偏好记忆</button>}</div>
       {feedback && <p className="inline-feedback" role="status" aria-live="polite">{feedback}</p>}
     </section>
   );
 }
 
 function PreferenceRow({ preference, disabled, onStatus, onDelete }: { preference: PlanningPreference; disabled?: boolean; onStatus(status: "active" | "disabled"): Promise<void>; onDelete(): Promise<void> }) {
-  return <article className="preference-row"><div><b>{safeWorkspaceMessage(preference.explanation, "已学习一条规划偏好")}</b><p>{preference.source === "explicit" ? "明确设置" : `${Math.round(preference.confidence * 100)}% 置信度 · ${preference.evidenceCount} 次证据`} · {preference.status === "candidate" ? "正在学习" : preference.status === "disabled" ? "已停用" : "已生效"}</p></div><div>{preference.status === "disabled" ? <button type="button" disabled={disabled} onClick={() => void onStatus("active")}>启用</button> : <button type="button" className="secondary" disabled={disabled} onClick={() => void onStatus("disabled")}>停用</button>}<button type="button" className="text-action" disabled={disabled} onClick={() => void onDelete()}>删除</button></div></article>;
+  return <article className="preference-row"><div><b>{safeWorkspaceMessage(preference.explanation, "已学习一条规划偏好")}</b><p>{preference.source === "explicit" ? "明确设置" : `${Math.round(preference.confidence * 100)}% 置信度 · ${preference.evidenceCount} 次证据`} · {preference.status === "candidate" ? "正在学习" : preference.status === "disabled" ? "已停用" : "已生效"}</p></div><div>{preference.status === "disabled" ? <button type="button" className="primary" disabled={disabled} onClick={() => void onStatus("active")}>启用</button> : <button type="button" className="secondary" disabled={disabled} onClick={() => void onStatus("disabled")}>停用</button>}<button type="button" className="text-action" disabled={disabled} onClick={() => void onDelete()}>删除</button></div></article>;
 }
 
 function clarificationValue(item: PendingClarification, raw = ""): string | number {

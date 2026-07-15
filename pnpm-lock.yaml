@@ -36,12 +36,18 @@ importers:
         specifier: ^7.0.0
         version: 7.0.0
     devDependencies:
-      '@fontsource-variable/inter':
-        specifier: 5.2.8
-        version: 5.2.8
       '@fontsource-variable/noto-sans-sc':
         specifier: 5.2.10
         version: 5.2.10
+      '@fontsource-variable/noto-serif-sc':
+        specifier: 5.2.10
+        version: 5.2.10
+      '@fontsource-variable/source-sans-3':
+        specifier: 5.2.9
+        version: 5.2.9
+      '@fontsource-variable/source-serif-4':
+        specifier: 5.2.9
+        version: 5.2.9
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.4
@@ -134,11 +140,17 @@ packages:
   '@epic-web/invariant@1.0.0':
     resolution: {integrity: sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA==}
 
-  '@fontsource-variable/inter@5.2.8':
-    resolution: {integrity: sha512-kOfP2D+ykbcX/P3IFnokOhVRNoTozo5/JxhAIVYLpea/UBmCQ/YWPBfWIDuBImXX/15KH+eKh4xpEUyS2sQQGQ==}
-
   '@fontsource-variable/noto-sans-sc@5.2.10':
     resolution: {integrity: sha512-zdk10i5HrDQTXI7ldD61zToX1fsgig8vDTsu7zB48SXOitWfuX0e5viZAwnkHuhwh096PU6X6i1AyAsbBCISpA==}
+
+  '@fontsource-variable/noto-serif-sc@5.2.10':
+    resolution: {integrity: sha512-TRhuDxWAnqUUtRZFCy8aoJB3/7HsuCaW/4B3wBTE0hzE8QVapklTjE2aY7s/wXWFXHLdflYNroloZoXekoKClw==}
+
+  '@fontsource-variable/source-sans-3@5.2.9':
+    resolution: {integrity: sha512-K9fkQbb0BNnRmmaU+Gpr6U4IaYKpNzA8t07J6aam2i+6v84RT72MVpar8OBr3yYAEznj4riKivPQ2nAF2fPKsw==}
+
+  '@fontsource-variable/source-serif-4@5.2.9':
+    resolution: {integrity: sha512-PPcxjLFk/fS0WHg79pDM2YNvz61kC+oYZ5cWZZyCS0DHpJncmuYOuiZAsvj4tDxlWPBEvxxcRLQQNmSaRbPkqw==}
 
   '@hapi/address@5.1.1':
     resolution: {integrity: sha512-A+po2d/dVoY7cYajycYI43ZbYMXukuopIsqCjh5QzsBCipDtdofHntljDlpccMjIfTy6UOkg+5KPriwYch2bXA==}
@@ -1814,9 +1826,13 @@ snapshots:
 
   '@epic-web/invariant@1.0.0': {}
 
-  '@fontsource-variable/inter@5.2.8': {}
-
   '@fontsource-variable/noto-sans-sc@5.2.10': {}
+
+  '@fontsource-variable/noto-serif-sc@5.2.10': {}
+
+  '@fontsource-variable/source-sans-3@5.2.9': {}
+
+  '@fontsource-variable/source-serif-4@5.2.9': {}
 
   '@hapi/address@5.1.1':
     dependencies:

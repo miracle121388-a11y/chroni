@@ -9,8 +9,10 @@ import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
 import type { AgentMemory, CompanionState, DailyTask, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ChroniUpdateStatus, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
 import { DailyPlanner } from "./components/DailyPlanner";
-import "@fontsource-variable/inter/wght.css";
 import "@fontsource-variable/noto-sans-sc/wght.css";
+import "@fontsource-variable/noto-serif-sc/wght.css";
+import "@fontsource-variable/source-sans-3/wght.css";
+import "@fontsource-variable/source-serif-4/standard.css";
 import "./styles.css";
 
 const api = window.chroni;
@@ -658,12 +660,18 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
 
       {!latest ? (
         <section className="agent-welcome">
-          <span className="agent-welcome-mark">A</span>
+          <span className="agent-welcome-mark" aria-hidden="true">
+            <svg viewBox="0 0 36 36">
+              <path className="agent-welcome-rails" d="M7 5.5h22M7 30.5h22" />
+              <path className="agent-welcome-flow" d="M10 6c0 6.3 8 6.6 8 12s-8 5.7-8 12M26 6c0 6.3-8 6.6-8 12s8 5.7 8 12" />
+              <circle className="agent-welcome-point" cx="18" cy="18" r="2.15" />
+            </svg>
+          </span>
           <div>
             <h3>先看看今天最值得推进的事</h3>
             <p>Chroni 会检查现有 DDL，找出可能来不及的任务，再把行动安排进你的可用时间。</p>
           </div>
-          <button type="button" disabled={!!busyAction} onClick={() => void runInspection()}>{busyAction === "run" ? "正在检查..." : "帮我安排今天"}</button>
+          <button className="primary" type="button" disabled={!!busyAction} onClick={() => void runInspection()}>{busyAction === "run" ? "正在检查..." : "帮我安排今天"}</button>
         </section>
       ) : (
         <>
@@ -1175,7 +1183,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
           <h2>偏好</h2>
         </div>
       </header>
-      <section className="settings-group">
+      <section className="settings-group companion-settings-group">
         <div>
           <h3>桌宠</h3>
           <p>桌宠负责接收拖拽、短反馈和唤起日程。</p>
@@ -1204,7 +1212,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
           if (event.key === "Escape") { setHotkeyDraft(preferences.hotkey); setHotkeyDirty(false); setSettingsFeedback(null); }
         }} /></label>
         <div className="hotkey-actions">
-          <button type="button" disabled={hotkeyBusy || !hotkeyDirty} onClick={() => void saveHotkey()}>{hotkeyBusy ? "保存中..." : "保存快捷键"}</button>
+          <button className="primary" type="button" disabled={hotkeyBusy || !hotkeyDirty} onClick={() => void saveHotkey()}>{hotkeyBusy ? "保存中..." : "保存快捷键"}</button>
           {hotkeyDirty && <button className="secondary" type="button" disabled={hotkeyBusy} onClick={() => { setHotkeyDraft(preferences.hotkey); setHotkeyDirty(false); setSettingsFeedback(null); }}>取消修改</button>}
         </div>
       </section>
@@ -1228,7 +1236,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
           <label className="text-field">模型<input value={llmDraft.model} placeholder="model-name" onChange={(event) => updateLlmDraft("model", event.target.value)} /></label>
           <label className="text-field">API Key<input type="password" value={llmDraft.apiKey} placeholder={services.model === "ready" ? "已配置，输入新值可替换" : "sk-..."} autoComplete="off" onChange={(event) => updateLlmDraft("apiKey", event.target.value)} /></label>
           <div className="llm-settings-actions">
-            <button className="secondary" type="button" disabled={llmBusy} onClick={() => void saveAndTestLlm()}>
+            <button className="primary" type="button" disabled={llmBusy} onClick={() => void saveAndTestLlm()}>
               {llmBusy ? "正在连接..." : llmDirty ? "保存并测试" : "测试连接"}
             </button>
             {llmDirty && <span>有未保存的修改</span>}
@@ -1326,7 +1334,7 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
         <section className="update-panel" aria-live="polite">
           <div className="update-panel-head">
             <div>
-              <p>Chroni Desktop</p>
+              <p>Chroni 桌面端</p>
               <h3>版本 {updateStatus.currentVersion}</h3>
             </div>
             <span className={`update-phase ${updateStatus.phase}`}>{updatePhaseLabel(updateStatus)}</span>
@@ -1339,7 +1347,7 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
             <button className="secondary slim" type="button" disabled={updateStatus.phase === "checking" || updateStatus.phase === "downloading"} onClick={() => void checkForUpdates()}>
               {updateStatus.phase === "checking" ? "检查中" : updateStatus.phase === "downloading" ? "下载中" : "检查更新"}
             </button>
-            <button className="secondary slim" type="button" onClick={() => void api.openReleases()}>GitHub Releases</button>
+            <button className="secondary slim" type="button" onClick={() => void api.openReleases()}>查看 GitHub 发布页</button>
             {updateStatus.phase === "downloaded" && <button className="primary slim" type="button" onClick={() => void installUpdate()}>重启并安装</button>}
           </div>
         </section>

@@ -32,5 +32,8 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: "../../dist/renderer",
     emptyOutDir: true,
+    // Keep every font shard as a local file. The production CSP deliberately
+    // allows self-hosted fonts but not data: font URLs.
+    assetsInlineLimit: 0,
   },
 }));

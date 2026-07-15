@@ -38,6 +38,24 @@ const colors: Array<{ value: DailyTaskColor; label: string }> = [
   { value: "plum", label: "梅紫" },
 ];
 
+type PlannerIconName = "add" | "check" | "chevron-left" | "chevron-right" | "circle" | "close" | "inbox" | "minus" | "spark";
+
+function PlannerIcon({ name }: { name: PlannerIconName }) {
+  return (
+    <svg className="planner-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      {name === "add" && <path d="M8 3v10M3 8h10" />}
+      {name === "minus" && <path d="M3 8h10" />}
+      {name === "close" && <path d="m4 4 8 8m0-8-8 8" />}
+      {name === "chevron-left" && <path d="m10.5 3.5-4.5 4.5 4.5 4.5" />}
+      {name === "chevron-right" && <path d="m5.5 3.5 4.5 4.5-4.5 4.5" />}
+      {name === "check" && <path d="m3.5 8.2 2.8 2.8 6.2-6.2" />}
+      {name === "circle" && <circle cx="8" cy="8" r="5" />}
+      {name === "inbox" && <rect x="3" y="3" width="10" height="10" rx="1.8" />}
+      {name === "spark" && <path className="planner-icon-fill" d="M8 1.8c.45 3.55 2.15 5.25 5.7 5.7C10.15 7.95 8.45 9.65 8 13.2 7.55 9.65 5.85 7.95 2.3 7.5 5.85 7.05 7.55 5.35 8 1.8Z" />}
+    </svg>
+  );
+}
+
 export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
   const [mode, setMode] = useState<PlannerMode>("day");
@@ -194,8 +212,8 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
       <header className="daily-toolbar">
         <div className="daily-date-nav">
           <button className="daily-today-button" type="button" onClick={() => setSelectedDate(startOfDay(new Date()))}>今天</button>
-          <button className="daily-icon-button" type="button" title="上一段日期" aria-label="上一段日期" onClick={() => setSelectedDate(navigateDate(selectedDate, mode, -1))}>‹</button>
-          <button className="daily-icon-button" type="button" title="下一段日期" aria-label="下一段日期" onClick={() => setSelectedDate(navigateDate(selectedDate, mode, 1))}>›</button>
+          <button className="daily-icon-button" type="button" title="上一段日期" aria-label="上一段日期" onClick={() => setSelectedDate(navigateDate(selectedDate, mode, -1))}><PlannerIcon name="chevron-left" /></button>
+          <button className="daily-icon-button" type="button" title="下一段日期" aria-label="下一段日期" onClick={() => setSelectedDate(navigateDate(selectedDate, mode, 1))}><PlannerIcon name="chevron-right" /></button>
           <div><h2>{formatMonth(selectedDate)}</h2><p>{formatLongDate(selectedDate)}</p></div>
         </div>
         <div className="daily-toolbar-actions">
@@ -204,7 +222,7 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
               <button key={value} type="button" role="tab" aria-selected={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>{modeLabel(value)}</button>
             ))}
           </div>
-          <button className="daily-agent-button" type="button" disabled={!!busy} onClick={() => void runAgent()}><span aria-hidden="true">✦</span>{busy === "agent" ? "规划中" : "Agent 排今日"}</button>
+          <button className="daily-agent-button" type="button" disabled={!!busy} onClick={() => void runAgent()}><PlannerIcon name="spark" />{busy === "agent" ? "规划中" : "Agent 排今日"}</button>
         </div>
       </header>
 
@@ -256,7 +274,7 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
           />
         )}
         {mode === "month" && <MonthView date={selectedDate} tasks={snapshot.dailyTasks} onSelectDate={(date) => { setSelectedDate(date); setMode("day"); }} />}
-        <button className="daily-floating-add" type="button" title="新建已排期任务" aria-label="新建已排期任务" disabled={!!busy} onClick={createScheduled}>＋</button>
+        <button className="daily-floating-add" type="button" title="新建已排期任务" aria-label="新建已排期任务" disabled={!!busy} onClick={createScheduled}><PlannerIcon name="add" /></button>
       </div>
 
       {selectedTask && (
@@ -295,10 +313,10 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
 function InboxPanel({ tasks, text, busy, onText, onCreate, onOpen }: { tasks: DailyTask[]; text: string; busy: boolean; onText(value: string): void; onCreate(event: React.FormEvent): void; onOpen(id: string): void }) {
   return (
     <aside className="daily-inbox">
-      <header><div><span className="daily-inbox-icon" aria-hidden="true">□</span><h3>待安排</h3></div><b>{tasks.length}</b></header>
-      <form onSubmit={onCreate}><input value={text} disabled={busy} onChange={(event) => onText(event.target.value)} placeholder="记录一个还没决定时间的任务..." aria-label="添加待安排任务" /><button type="submit" disabled={busy || !text.trim()} title="添加到待安排" aria-label="添加到待安排">＋</button></form>
+      <header><div><span className="daily-inbox-icon" aria-hidden="true"><PlannerIcon name="inbox" /></span><h3>待安排</h3></div><b>{tasks.length}</b></header>
+      <form onSubmit={onCreate}><input value={text} disabled={busy} onChange={(event) => onText(event.target.value)} placeholder="记录一个还没决定时间的任务..." aria-label="添加待安排任务" /><button type="submit" disabled={busy || !text.trim()} title="添加到待安排" aria-label="添加到待安排"><PlannerIcon name="add" /></button></form>
       <div className="daily-inbox-list">
-        {tasks.map((task) => <button className={`daily-inbox-task color-${task.color}`} draggable={!busy} disabled={busy} key={task.id} type="button" onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)} onClick={() => onOpen(task.id)}><i aria-hidden="true" /><span><b>{task.title}</b><small>{task.origin === "agent" ? "Agent 规划" : "拖到时间轴排期"}</small></span><em aria-hidden="true">›</em></button>)}
+        {tasks.map((task) => <button className={`daily-inbox-task color-${task.color}`} draggable={!busy} disabled={busy} key={task.id} type="button" onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)} onClick={() => onOpen(task.id)}><i aria-hidden="true" /><span><b>{task.title}</b><small>{task.origin === "agent" ? "Agent 规划" : "拖到时间轴排期"}</small></span><em aria-hidden="true"><PlannerIcon name="chevron-right" /></em></button>)}
         {!tasks.length && <div className="daily-inbox-empty"><span aria-hidden="true"><svg className="inline-icon" viewBox="0 0 16 16" focusable="false"><path d="M2 8c2.1-3.4 3.8 3.4 6 0s3.9-3.4 6 0" /></svg></span><b>想法已经归位</b><p>新任务可以先留在这里，再拖到右侧安排。</p></div>}
       </div>
     </aside>
@@ -373,7 +391,7 @@ function DayTimeline({ date, tasks, timelineRef, zoom, disabled, onZoom, onDrop,
 
   return (
     <section className="daily-timeline-panel">
-      <header><div><p>{weekday(date)}</p><h3>{date.getDate()} 日的时间轴</h3></div><div className="daily-timeline-header-actions"><span>{tasks.length ? "拖动任务可重新排期" : "今天还没有安排"}</span><div className="daily-timeline-zoom" role="group" aria-label="时间轴缩放"><button type="button" title="缩小时间轴" aria-label="缩小时间轴" disabled={zoomIndex === 0} onClick={() => changeZoom(timelineZoomLevels[Math.max(0, zoomIndex - 1)])}>−</button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" title="放大时间轴" aria-label="放大时间轴" disabled={zoomIndex === timelineZoomLevels.length - 1} onClick={() => changeZoom(timelineZoomLevels[Math.min(timelineZoomLevels.length - 1, zoomIndex + 1)])}>＋</button></div></div></header>
+      <header><div><p>{weekday(date)}</p><h3><span className="daily-display-number">{date.getDate()}</span> 日的时间轴</h3></div><div className="daily-timeline-header-actions"><span>{tasks.length ? "拖动任务可重新排期" : "今天还没有安排"}</span><div className="daily-timeline-zoom" role="group" aria-label="时间轴缩放"><button type="button" title="缩小时间轴" aria-label="缩小时间轴" disabled={zoomIndex === 0} onClick={() => changeZoom(timelineZoomLevels[Math.max(0, zoomIndex - 1)])}><PlannerIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" title="放大时间轴" aria-label="放大时间轴" disabled={zoomIndex === timelineZoomLevels.length - 1} onClick={() => changeZoom(timelineZoomLevels[Math.min(timelineZoomLevels.length - 1, zoomIndex + 1)])}><PlannerIcon name="add" /></button></div></div></header>
       {allDay.length > 0 && <div className="daily-all-day"><b>全天</b>{allDay.map((task) => <TimelineTask key={task.id} task={task} date={date} compact disabled={disabled} onOpen={onOpen} onToggle={onToggle} />)}</div>}
       <div className="daily-timeline" ref={timelineRef} onDragOver={(event) => { if (!disabled) event.preventDefault(); }} onDrop={(event) => { if (!disabled) onDrop(event); }} style={{ height: timelineHeight }}>
         {Array.from({ length: 13 }, (_, index) => index * 2).map((hour) => <div className="daily-hour" key={hour} style={{ top: timelinePosition(hour * 60, timelineHeight) }}><time>{String(hour).padStart(2, "0")}:00</time><span /></div>)}
@@ -405,7 +423,7 @@ function DayTimeline({ date, tasks, timelineRef, zoom, disabled, onZoom, onDrop,
             );
           })}
         </div>
-        {!tasks.length && <div className="daily-timeline-empty"><span aria-hidden="true">✦</span><b>留一段专注时间给重要的事</b><p>运行 Agent，或从 Inbox 拖一项到时间轴。</p></div>}
+        {!tasks.length && <div className="daily-timeline-empty"><span aria-hidden="true"><PlannerIcon name="spark" /></span><b>留一段专注时间给重要的事</b><p>运行 Agent，或从 Inbox 拖一项到时间轴。</p></div>}
       </div>
     </section>
   );
@@ -424,7 +442,7 @@ function TimelineTask({ task, date, compact = false, density = "regular", displa
       draggable={interactive}
       onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)}
     >
-      <button type="button" className="daily-check" disabled={!interactive} aria-label={complete ? `恢复 ${task.title}` : `完成 ${task.title}`} onClick={() => { if (interactive) onToggle(task, date); }}>{complete ? "✓" : ""}</button>
+      <button type="button" className="daily-check" disabled={!interactive} aria-label={complete ? `恢复 ${task.title}` : `完成 ${task.title}`} onClick={() => { if (interactive) onToggle(task, date); }}>{complete ? <PlannerIcon name="check" /> : null}</button>
       <button type="button" className="daily-task-open" disabled={!interactive} aria-label={`${task.title}，${scheduleLabel}${interactive ? "，编辑任务" : "，历史保留"}`} onClick={() => { if (interactive) onOpen(task.id, date); }}>
         <span className="daily-task-copy"><time>{task.allDay ? "全天" : `${formatClock(start)} – ${formatClock(end)}`}</time><b>{task.title}</b><span>{archived ? "历史保留" : task.origin === "agent" ? "✦ Agent 规划" : task.recurrence !== "none" ? recurrenceLabel(task.recurrence) : formatDuration(taskDuration(task))}</span></span>
         <i aria-hidden="true" />
@@ -539,14 +557,14 @@ function TaskEditor({ task, occurrenceDate, isNew, linkedTitle, onClose, onSave,
     <div className="daily-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <aside className={`daily-editor color-${draft.color}`} role="dialog" aria-modal="true" aria-labelledby="daily-editor-title" aria-describedby={recurringSeries ? "daily-series-notice" : undefined}>
         <header>
-          <div className="daily-editor-mark" aria-hidden="true">{task.origin === "agent" ? "✦" : "○"}</div>
+          <div className="daily-editor-mark" aria-hidden="true"><PlannerIcon name={task.origin === "agent" ? "spark" : "circle"} /></div>
           <div>
             <p>{isNew ? "新建每日任务" : task.origin === "agent" ? "Agent 规划任务" : recurringSeries ? "重复任务 · 编辑整个系列" : "每日任务"}</p>
             <h2 id="daily-editor-title">{draft.title || "未命名任务"}</h2>
             {linkedTitle && <span>关联：{linkedTitle}</span>}
             {recurringSeries && <span id="daily-series-notice">正在查看 {formatLongDate(occurrenceDate)}，保存会更新整个系列</span>}
           </div>
-          <button className="daily-editor-close" type="button" disabled={!!busy} onClick={onClose} aria-label="关闭任务编辑" title="关闭">×</button>
+          <button className="daily-editor-close" type="button" disabled={!!busy} onClick={onClose} aria-label="关闭任务编辑" title="关闭"><PlannerIcon name="close" /></button>
         </header>
         <form onSubmit={(event) => void save(event)}>
           <label className="daily-editor-title-field">任务名称<input autoFocus value={draft.title} disabled={!!busy} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
@@ -558,7 +576,7 @@ function TaskEditor({ task, occurrenceDate, isNew, linkedTitle, onClose, onSave,
           {draft.scheduled && <div className="daily-editor-row"><label>重复<select value={draft.recurrence} disabled={!!busy} onChange={(event) => setDraft({ ...draft, recurrence: event.target.value as DailyTaskRecurrence })}><option value="none">不重复</option><option value="daily">每天</option><option value="weekdays">工作日</option><option value="weekly">每周</option></select></label><label className="daily-all-day-toggle"><span>全天</span><input type="checkbox" checked={draft.allDay} disabled={!!busy} onChange={(event) => setDraft({ ...draft, allDay: event.target.checked })} /></label></div>}
           {draft.scheduled && draft.recurrence !== "none" && <div className="daily-editor-row"><label>重复结束日期（可选）<input type="date" min={draft.date} value={draft.recurrenceEndsAt} disabled={!!busy} onChange={(event) => setDraft({ ...draft, recurrenceEndsAt: event.target.value })} /></label></div>}
           <div className="daily-editor-row"><fieldset disabled={!!busy}><legend>颜色</legend><div className="daily-color-picker">{colors.map((color) => <button key={color.value} className={`color-${color.value} ${draft.color === color.value ? "active" : ""}`} type="button" onClick={() => setDraft({ ...draft, color: color.value })} title={color.label} aria-label={color.label} aria-pressed={draft.color === color.value} />)}</div></fieldset></div>
-          <section className="daily-editor-subtasks"><h3>子任务 <span>{draft.subtasks.filter((item) => item.completed).length}/{draft.subtasks.length}</span></h3>{draft.subtasks.map((subtask) => <div key={subtask.id}><input type="checkbox" checked={subtask.completed} disabled={!!busy} aria-label={`完成 ${subtask.title}`} onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks.map((item) => item.id === subtask.id ? { ...item, completed: event.target.checked } : item) })} /><input value={subtask.title} disabled={!!busy} aria-label="子任务名称" onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks.map((item) => item.id === subtask.id ? { ...item, title: event.target.value } : item) })} /><button type="button" disabled={!!busy} aria-label={`删除 ${subtask.title}`} title="删除子任务" onClick={() => setDraft({ ...draft, subtasks: draft.subtasks.filter((item) => item.id !== subtask.id) })}>×</button></div>)}<div className="daily-subtask-add"><input value={subtaskText} disabled={!!busy} placeholder="添加子任务" onChange={(event) => setSubtaskText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addSubtask(); } }} /><button type="button" onClick={addSubtask} disabled={!!busy || !subtaskText.trim()} aria-label="添加子任务">＋</button></div></section>
+          <section className="daily-editor-subtasks"><h3>子任务 <span>{draft.subtasks.filter((item) => item.completed).length}/{draft.subtasks.length}</span></h3>{draft.subtasks.map((subtask) => <div key={subtask.id}><input type="checkbox" checked={subtask.completed} disabled={!!busy} aria-label={`完成 ${subtask.title}`} onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks.map((item) => item.id === subtask.id ? { ...item, completed: event.target.checked } : item) })} /><input value={subtask.title} disabled={!!busy} aria-label="子任务名称" onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks.map((item) => item.id === subtask.id ? { ...item, title: event.target.value } : item) })} /><button type="button" disabled={!!busy} aria-label={`删除 ${subtask.title}`} title="删除子任务" onClick={() => setDraft({ ...draft, subtasks: draft.subtasks.filter((item) => item.id !== subtask.id) })}><PlannerIcon name="close" /></button></div>)}<div className="daily-subtask-add"><input value={subtaskText} disabled={!!busy} placeholder="添加子任务" onChange={(event) => setSubtaskText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addSubtask(); } }} /><button type="button" onClick={addSubtask} disabled={!!busy || !subtaskText.trim()} aria-label="添加子任务"><PlannerIcon name="add" /></button></div></section>
           <label className="daily-editor-notes">备注<textarea rows={4} value={draft.notes} disabled={!!busy} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="补充上下文、链接或执行提示..." /></label>
           {error && <p className="daily-editor-error" role="alert">{error}</p>}
           <footer>
