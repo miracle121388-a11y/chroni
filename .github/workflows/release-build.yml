@@ -58,14 +58,14 @@ jobs:
         with:
           subject-path: |
             apps/desktop/dist-electron/*.exe
-            apps/desktop/dist-electron/*.yml
+            apps/desktop/dist-electron/latest.yml
             apps/desktop/dist-electron/*.blockmap
       - uses: actions/upload-artifact@v7
         with:
           name: chroni-windows-${{ github.ref_name }}
           path: |
             apps/desktop/dist-electron/*.exe
-            apps/desktop/dist-electron/*.yml
+            apps/desktop/dist-electron/latest.yml
             apps/desktop/dist-electron/*.blockmap
             apps/desktop/dist-electron/SHA256SUMS-windows.txt
           if-no-files-found: error
@@ -128,7 +128,7 @@ jobs:
           subject-path: |
             apps/desktop/dist-electron/*.dmg
             apps/desktop/dist-electron/*.zip
-            apps/desktop/dist-electron/*.yml
+            apps/desktop/dist-electron/latest-mac.yml
             apps/desktop/dist-electron/*.blockmap
       - uses: actions/upload-artifact@v7
         with:
@@ -136,7 +136,7 @@ jobs:
           path: |
             apps/desktop/dist-electron/*.dmg
             apps/desktop/dist-electron/*.zip
-            apps/desktop/dist-electron/*.yml
+            apps/desktop/dist-electron/latest-mac.yml
             apps/desktop/dist-electron/*.blockmap
             apps/desktop/dist-electron/SHA256SUMS-macos.txt
           if-no-files-found: error
