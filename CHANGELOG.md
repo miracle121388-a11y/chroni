@@ -4,6 +4,12 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-15
+
+### Fixed
+
+- 无代码签名证书时，CI 不再把空的 `CSC_LINK` 当成证书文件路径；macOS 测试发布正确使用 ad-hoc 签名。
+
 ## [0.1.2] - 2026-07-15
 
 ### Fixed
@@ -44,7 +50,8 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 发布标签现在必须与根工作区和桌面应用版本一致。
 - 生产包启用 Electron Fuses 和 ASAR 完整性校验。
 
-[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.3
 [0.1.2]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.2
 [0.1.1]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.1
 [0.1.0]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.0

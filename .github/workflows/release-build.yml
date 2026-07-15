@@ -42,7 +42,14 @@ jobs:
           }
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
-      - run: pnpm run package:windows
+      - name: Package Windows
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CSC_LINK)) {
+            Remove-Item Env:CSC_LINK -ErrorAction SilentlyContinue
+            Remove-Item Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
+          }
+          pnpm run package:windows
       - name: Generate Windows checksums
         run: node scripts/generate-checksums.mjs apps/desktop/dist-electron apps/desktop/dist-electron/SHA256SUMS-windows.txt
       - name: Attest Windows packages
@@ -106,7 +113,12 @@ jobs:
           echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
-      - run: pnpm run package:macos
+      - name: Package macOS
+        run: |
+          if [[ -z "${CSC_LINK:-}" ]]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+          fi
+          pnpm run package:macos
       - name: Generate macOS checksums
         run: node scripts/generate-checksums.mjs apps/desktop/dist-electron apps/desktop/dist-electron/SHA256SUMS-macos.txt
       - name: Attest macOS packages
