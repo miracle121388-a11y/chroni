@@ -31,7 +31,7 @@
   <a href="#开发与打包">开发</a>
 </p>
 
-![Chroni 每日任务时间轴，展示 Agent 自动规划的任务块](./docs/assets/chroni-daily-planner.png)
+![Chroni 每日任务时间轴，展示 Agent 自动规划的任务块](./docs/assets/chroni-daily-planner-v0.1.4.png)
 
 > [!IMPORTANT]
 > Chroni 是一个持续迭代的开源桌面 Agent。当前公开安装包可能尚未配置 Windows 代码签名或 macOS Developer ID 公证，因此系统可能显示 SmartScreen / Gatekeeper 提示；请只从本仓库 Releases 下载，并核对 SHA-256 校验和。
@@ -121,7 +121,7 @@ Deadline Agent 每次运行都会记录结构化 Trace，并把 `plannerSource` 
 
 Agent 会说明当前计划覆盖率、风险、今日优先级和下一步，而不是只返回一段无法执行的建议。所有模型输出都必须经过本地工具和约束校验。
 
-![Chroni Deadline Agent 工作台，展示覆盖率、风险和今日工作块](./docs/assets/chroni-agent-workspace.png)
+![Chroni Deadline Agent 工作台，展示覆盖率、风险和今日工作块](./docs/assets/chroni-agent-workspace-v0.1.4.png)
 
 ### 桌宠与控制中心
 
