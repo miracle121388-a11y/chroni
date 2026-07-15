@@ -4,6 +4,13 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-15
+
+### Added
+
+- 新增面向课程验收的三分钟演示路径、混合式 Agent 职责边界、完整架构图、质量证据与已知边界说明。
+- 在应用内完整保留 XIAOTONG Desktop Pet 原作版本、作者、联系方式、捐赠二维码、仓库与许可证入口。
+
 ### Changed
 
 - 恢复具有编辑感的标题字体层级，并统一控制中心、Agent、每日任务与日程弹窗的暖白浅绿设计语言。
@@ -11,6 +18,7 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 四套可变字体均作为本地资源内置，离线安装后仍能稳定呈现完整字体层级。
 - 将辅助文字统一提升到 13px、操作文字统一为 14px，并为按钮、表单、状态行与折叠栏建立一致的高度和视觉居中规则。
 - Windows 与 macOS 共用同一套下拉框、日期时间、复选框、数字输入和进度条外观；日期与时间固定按 `YYYY-MM-DD`、`HH:mm` 显示。
+- 安装版 API 配置说明统一指向控制中心，并明确源码 `.env`、模型数据发送范围和本地 API 的安全边界。
 
 ### Fixed
 
@@ -19,6 +27,7 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 修正 Agent 总览指标未命中数字排版规则，以及展示型三级标题误继承正文行高的问题。
 - 修正每日任务时间轴刻度和当前时间线偏移、任务编辑字段基线错位、周视图过宽，以及文本符号图标随字体变化而偏心的问题。
 - 消除 Windows 原生控件度量、历史页面缩放和字体冷启动造成的字号、换行与控件居中差异。
+- 安装包现在外置附带 Chroni MIT、XIAOTONG Apache-2.0 与附加条款、字体 SIL OFL 1.1 及对应 Notice，避免二进制分发缺少可读许可证副本。
 
 ## [0.1.3] - 2026-07-15
 
@@ -66,7 +75,8 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 发布标签现在必须与根工作区和桌面应用版本一致。
 - 生产包启用 Electron Fuses 和 ASAR 完整性校验。
 
-[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.3
 [0.1.2]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.2
 [0.1.1]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.1

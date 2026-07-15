@@ -54,8 +54,9 @@ CHRONI_REQUIRE_NOTARIZATION=1
 ## 创建发布
 
 ```bash
-git tag -a v0.1.3 -m "Chroni v0.1.3"
-git push origin v0.1.3
+VERSION=v0.1.4
+git tag -a "$VERSION" -m "Chroni $VERSION"
+git push origin "$VERSION"
 ```
 
 `Desktop Release` 工作流会：
@@ -68,6 +69,12 @@ git push origin v0.1.3
 
 带连字符的版本，例如 `v0.2.0-beta.1`，会自动创建为 prerelease。手动运行工作流只生成 30 天 artifact，不会创建正式 Release。
 
+工作流完成后，用对应版本的 `docs/releases/` 文档替换自动生成的简略说明，并保留完整 changelog 链接：
+
+```bash
+gh release edit v0.1.4 --notes-file docs/releases/v0.1.4.md
+```
+
 ## 发布后验证
 
 - 在一台没有开发环境的 Windows 电脑上测试安装、首次启动、卸载和保留数据。
@@ -76,10 +83,12 @@ git push origin v0.1.3
 - 下载全部 Release 产物，核对文件与 `SHA256SUMS.txt`。
 
 ```powershell
-Get-FileHash .\Chroni-0.1.3-win-x64-setup.exe -Algorithm SHA256
+$Version = "0.1.4"
+Get-FileHash ".\Chroni-$Version-win-x64-setup.exe" -Algorithm SHA256
 ```
 
 ```bash
+VERSION="0.1.4"
 shasum -a 256 -c SHA256SUMS.txt
-gh attestation verify Chroni-0.1.3-win-x64-setup.exe --repo miracle121388-a11y/chroni
+gh attestation verify "Chroni-${VERSION}-win-x64-setup.exe" --repo miracle121388-a11y/chroni
 ```
