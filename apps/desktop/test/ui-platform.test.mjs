@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { configureControlWindowChrome, controlCenterWindowOptions } from "../dist/window-options.js";
+import { configureControlWindowChrome, configureRendererZoom, controlCenterWindowOptions, rendererZoomFactor } from "../dist/window-options.js";
 
 const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const rendererRoot = resolve(desktopRoot, "dist", "renderer");
@@ -18,6 +18,9 @@ test("control center uses content sizing and removes the Windows menu only", () 
   assert.equal(windowsOptions.minWidth, undefined);
   assert.equal(windowsOptions.minHeight, undefined);
   assert.equal(macOptions.autoHideMenuBar, undefined);
+  const { autoHideMenuBar, ...windowsVisualOptions } = windowsOptions;
+  assert.equal(autoHideMenuBar, true);
+  assert.deepEqual(windowsVisualOptions, macOptions);
 
   let removals = 0;
   const fakeWindow = { removeMenu() { removals += 1; } };
@@ -27,12 +30,32 @@ test("control center uses content sizing and removes the Windows menu only", () 
   assert.equal(removals, 1);
 });
 
+test("every renderer starts and finishes loading at the shared 100% zoom", () => {
+  const factors = [];
+  let didFinishLoad;
+  configureRendererZoom({
+    setZoomFactor(factor) { factors.push(factor); },
+    on(event, listener) {
+      assert.equal(event, "did-finish-load");
+      didFinishLoad = listener;
+    },
+  });
+  assert.equal(rendererZoomFactor, 1);
+  assert.deepEqual(factors, [1]);
+  assert.ok(didFinishLoad);
+  didFinishLoad();
+  assert.deepEqual(factors, [1, 1]);
+});
+
 test("renderer bundles local cross-platform fonts under the production CSP", async () => {
   const packageJson = JSON.parse(await readFile(resolve(desktopRoot, "package.json"), "utf8"));
   const stylesSource = await readFile(resolve(desktopRoot, "src", "renderer", "src", "styles.css"), "utf8");
   const rendererSource = await readFile(resolve(desktopRoot, "src", "renderer", "src", "main.tsx"), "utf8");
   const viteSource = await readFile(resolve(desktopRoot, "vite.config.ts"), "utf8");
   const dailyPlannerSource = await readFile(resolve(desktopRoot, "src", "renderer", "src", "components", "DailyPlanner.tsx"), "utf8");
+  const agentWorkspaceSource = await readFile(resolve(desktopRoot, "src", "renderer", "src", "components", "AgentWorkspace.tsx"), "utf8");
+  const uiDateTimeSource = await readFile(resolve(desktopRoot, "src", "renderer", "src", "components", "UiDateTimeField.tsx"), "utf8");
+  const uiIconSource = await readFile(resolve(desktopRoot, "src", "renderer", "src", "components", "UiIcon.tsx"), "utf8");
   const windowsSource = await readFile(resolve(desktopRoot, "src", "windows.ts"), "utf8");
   const html = await readFile(resolve(rendererRoot, "index.html"), "utf8");
   const assetNames = await readdir(resolve(rendererRoot, "assets"));
@@ -47,6 +70,9 @@ test("renderer bundles local cross-platform fonts under the production CSP", asy
   assert.match(css, /font-family:\s*["']?Source Serif 4 Variable["']?/);
   assert.match(css, /font-family:\s*["']?Noto Sans SC Variable["']?/);
   assert.match(css, /font-family:\s*["']?Noto Serif SC Variable["']?/);
+  for (const family of ["Source Sans 3 Variable", "Source Serif 4 Variable", "Noto Sans SC Variable", "Noto Serif SC Variable"]) {
+    assert.match(css, new RegExp(`font-family:\\s*["']?${family.replaceAll(" ", "\\s+")}["']?`));
+  }
   assert.match(css, /font-display:\s*swap/);
   assert.doesNotMatch(css, /url\(["']?https?:/);
   assert.doesNotMatch(css, /url\(["']?data:font/i);
@@ -69,9 +95,24 @@ test("renderer bundles local cross-platform fonts under the production CSP", asy
   assert.match(stylesSource, /\.agent-overview-metrics b,[\s\S]*?font-variant-numeric:\s*lining-nums tabular-nums/);
   assert.doesNotMatch(stylesSource, /agent-overview-metrics strong/);
   assert.match(stylesSource, /:root\s*\{[\s\S]*?font-family:\s*var\(--font-ui\);/);
-  assert.match(stylesSource, /html\[data-platform="darwin"\] body\s*\{[\s\S]*?-webkit-font-smoothing:\s*antialiased/);
+  assert.match(stylesSource, /body\s*\{[\s\S]*?-webkit-font-smoothing:\s*antialiased;[\s\S]*?-moz-osx-font-smoothing:\s*grayscale/);
+  assert.doesNotMatch(stylesSource, /html\[data-platform=/);
+  assert.match(rendererSource, /document\.documentElement\.dataset\.platform = api\.platform/);
+  assert.match(rendererSource, /document\.fonts\.load\(font, sample\)/);
+  assert.match(rendererSource, /document\.documentElement\.dataset\.fonts = "ready"/);
+  assert.match(stylesSource, /select\s*\{[\s\S]*?appearance:\s*none[\s\S]*?background-image:\s*url\("data:image\/svg\+xml/);
+  assert.match(stylesSource, /input:is\(\[type="date"\], \[type="datetime-local"\], \[type="time"\]\)::-webkit-calendar-picker-indicator/);
+  assert.match(stylesSource, /\.ui-checkbox:checked\s*\{[\s\S]*?background-image:\s*url\("data:image\/svg\+xml/);
+  assert.match(stylesSource, /progress::-webkit-progress-value/);
+  assert.match(uiDateTimeSource, /className="ui-date-time-text"[\s\S]*?type="text"/);
+  assert.match(uiDateTimeSource, /picker\.showPicker\(\)/);
+  assert.match(uiDateTimeSource, /return "YYYY-MM-DD HH:mm"/);
+  assert.doesNotMatch(`${rendererSource}\n${dailyPlannerSource}\n${agentWorkspaceSource}`, /<input[^>]+type="(?:date|time|datetime-local)"/);
+  assert.match(stylesSource, /\.ui-date-time-field > \.ui-date-time-text\s*\{[^}]*font-variant-numeric:\s*lining-nums tabular-nums/);
   assert.match(viteSource, /assetsInlineLimit:\s*0/);
   assert.doesNotMatch(`${rendererSource}\n${dailyPlannerSource}`, /↶|⏱|⌁/);
+  assert.doesNotMatch(`${rendererSource}\n${agentWorkspaceSource}`, /<button[^>]*>\s*[×＋←↑↓‹›]\s*<\/button>/);
+  assert.match(uiIconSource, /export function UiIcon/);
   assert.doesNotMatch(dailyPlannerSource, />[‹›＋×]</);
   assert.match(dailyPlannerSource, /function PlannerIcon/);
   assert.match(dailyPlannerSource, /className="daily-display-number"/);
@@ -108,6 +149,8 @@ test("renderer bundles local cross-platform fonts under the production CSP", asy
   assert.match(windowsSource, /const companionNeedsPet = preferences\.companionEnabled && \(!windows\.pet \|\| windows\.pet\.isDestroyed\(\)\);/);
   assert.match(windowsSource, /autoUpdater\.once\("before-quit-for-update", markAppQuitting\);/);
   assert.match(windowsSource, /export function showControlCenter\(route\?: ControlCenterRoute\): void \{\s*if \(appQuitting\) return;/);
+  assert.match(windowsSource, /zoomFactor:\s*rendererZoomFactor/);
+  assert.match(windowsSource, /configureRendererZoom\(win\.webContents\)/);
 
   const fontUrls = [...css.matchAll(/url\(["']?([^"')]+\.woff2)["']?\)/g)].map((match) => match[1]);
   assert.ok(fontUrls.length >= 2, "expected both Latin and Simplified Chinese WOFF2 assets");

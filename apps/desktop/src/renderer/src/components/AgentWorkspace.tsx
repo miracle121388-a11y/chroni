@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import type { ChroniSnapshot, DdlItem, PendingClarification, PlanningPreference, TaskPlan, TaskPlanStep, TaskPlanUpdatePayload } from "../../../shared/types";
 import { formatOperationError, formatUserFacingMessage } from "../../../shared/errors";
+import { UiDateTimeField } from "./UiDateTimeField";
+import { UiIcon } from "./UiIcon";
 
 const api = window.chroni;
 
@@ -89,14 +91,25 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
             {!!item.options.length && <div className="clarification-options">{item.options.map((option) => <button type="button" key={option.id} disabled={!!busyId} onClick={() => void answer(item, option.id)}>{option.label}</button>)}</div>}
             {item.allowFreeText && (
               <div className="clarification-input">
-                <input
-                  type={item.field === "dueAt" || item.field === "dueTime" ? "datetime-local" : item.field === "estimatedMinutes" || item.field === "progressPercent" ? "number" : "text"}
-                  value={answers[item.id] ?? ""}
-                  aria-label={safeWorkspaceMessage(item.question, "补充任务信息")}
-                  placeholder={clarificationPlaceholder(item.field)}
-                  onChange={(event) => setAnswers((current) => ({ ...current, [item.id]: event.target.value }))}
-                  disabled={!!busyId}
-                />
+                {item.field === "dueAt" || item.field === "dueTime" ? (
+                  <UiDateTimeField
+                    required
+                    type="datetime-local"
+                    value={answers[item.id] ?? ""}
+                    ariaLabel={safeWorkspaceMessage(item.question, "补充任务信息")}
+                    onChange={(value) => setAnswers((current) => ({ ...current, [item.id]: value }))}
+                    disabled={!!busyId}
+                  />
+                ) : (
+                  <input
+                    type={item.field === "estimatedMinutes" || item.field === "progressPercent" ? "number" : "text"}
+                    value={answers[item.id] ?? ""}
+                    aria-label={safeWorkspaceMessage(item.question, "补充任务信息")}
+                    placeholder={clarificationPlaceholder(item.field)}
+                    onChange={(event) => setAnswers((current) => ({ ...current, [item.id]: event.target.value }))}
+                    disabled={!!busyId}
+                  />
+                )}
                 <button type="button" disabled={!!busyId || !answers[item.id]?.trim()} onClick={() => void answer(item)}>{busyId === item.id ? "保存中" : "确认"}</button>
               </div>
             )}
@@ -223,7 +236,7 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
   return (
     <div className="task-detail-pane">
       <header className="task-detail-head">
-        <button type="button" className="back-button" onClick={onBack} aria-label="返回日程列表">←</button>
+        <button type="button" className="back-button" onClick={onBack} aria-label="返回日程列表"><UiIcon name="arrow-left" /></button>
         <div><p>任务详情</p><h2>{task.title}</h2></div>
         <span className={`plan-status ${draft?.status ?? "missing"}`}>{planStatus(draft)}</span>
       </header>
@@ -262,13 +275,13 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => { if (draggedId) setDraft({ ...draft, steps: reorder(draft.steps, draggedId, index) }); setDraggedId(""); }}
               >
-                <div className="step-order"><b>{index + 1}</b><button type="button" title="上移" aria-label="上移步骤" disabled={index === 0} onClick={() => moveStep(step.id, -1)}>↑</button><button type="button" title="下移" aria-label="下移步骤" disabled={index === draft.steps.length - 1} onClick={() => moveStep(step.id, 1)}>↓</button></div>
+                <div className="step-order"><b>{index + 1}</b><button type="button" title="上移" aria-label="上移步骤" disabled={index === 0} onClick={() => moveStep(step.id, -1)}><UiIcon name="arrow-up" /></button><button type="button" title="下移" aria-label="下移步骤" disabled={index === draft.steps.length - 1} onClick={() => moveStep(step.id, 1)}><UiIcon name="arrow-down" /></button></div>
                 <div className="step-fields">
                   <input className="step-title" value={step.title} aria-label={`步骤 ${index + 1} 标题`} onChange={(event) => updateStep(step.id, { title: event.target.value })} />
                   <textarea value={step.description} aria-label={`步骤 ${index + 1} 说明`} onChange={(event) => updateStep(step.id, { description: event.target.value })} />
                   <div className="step-meta"><label>耗时 <input type="number" min="15" max="480" step="5" value={step.estimatedMinutes} onChange={(event) => updateStep(step.id, { estimatedMinutes: Number(event.target.value) })} /> 分钟</label><select value={step.status} aria-label={`步骤 ${index + 1} 状态`} onChange={(event) => updateStep(step.id, { status: event.target.value as TaskPlanStep["status"] })}><option value="pending">待开始</option><option value="in-progress">进行中</option><option value="blocked">受阻</option><option value="completed">已完成</option><option value="skipped">跳过</option></select><span>{step.origin === "user" ? "用户步骤" : step.userModifiedFields.length ? "已修改" : "Agent 建议"}</span></div>
                 </div>
-                <button type="button" className="remove-step" aria-label={`删除步骤 ${step.title}`} disabled={draft.steps.length === 1} onClick={() => removeStep(step.id)}>×</button>
+                <button type="button" className="remove-step" aria-label={`删除步骤 ${step.title}`} disabled={draft.steps.length === 1} onClick={() => removeStep(step.id)}><UiIcon name="close" /></button>
               </article>
             ))}
           </section>
@@ -296,7 +309,7 @@ export function BehaviorMemoryPane({ snapshot, setSnapshot, embedded = false }: 
   return (
     <section className="behavior-memory" aria-busy={busy} aria-labelledby={embedded ? undefined : "behavior-memory-heading"} aria-label={embedded ? "个性化规划偏好" : undefined}>
       {!embedded && <header><div><p>个性化规划</p><h3 id="behavior-memory-heading">Chroni 记住的规划习惯</h3></div><span>{memory.preferences.filter((item) => item.status === "active").length} 条生效</span></header>}
-      <div className="memory-controls"><label><input type="checkbox" disabled={busy} checked={memory.learningEnabled} onChange={(event) => void run(() => api.updateBehaviorMemory({ learningEnabled: event.target.checked }), "学习设置已更新。" )} /> 从保存的规划修改中学习</label><label><input type="checkbox" disabled={busy} checked={memory.autoApplyEnabled} onChange={(event) => void run(() => api.updateBehaviorMemory({ autoApplyEnabled: event.target.checked }), "自动应用设置已更新。" )} /> 自动应用高置信度偏好</label></div>
+      <div className="memory-controls"><label><input className="ui-checkbox" type="checkbox" disabled={busy} checked={memory.learningEnabled} onChange={(event) => void run(() => api.updateBehaviorMemory({ learningEnabled: event.target.checked }), "学习设置已更新。" )} /> 从保存的规划修改中学习</label><label><input className="ui-checkbox" type="checkbox" disabled={busy} checked={memory.autoApplyEnabled} onChange={(event) => void run(() => api.updateBehaviorMemory({ autoApplyEnabled: event.target.checked }), "自动应用设置已更新。" )} /> 自动应用高置信度偏好</label></div>
       <div className="explicit-preference"><label>默认步骤时长 <input type="number" min="15" max="180" step="5" value={stepMinutes} disabled={busy} onChange={(event) => setStepMinutes(event.target.value)} /> 分钟</label><button className="primary" type="button" disabled={busy} onClick={() => void run(() => api.upsertPlanningPreference({ key: "preferredStepMinutes", value: Number(stepMinutes) }), "明确偏好已保存。")}>设为明确偏好</button></div>
       <div className="preference-list">{memory.preferences.length ? memory.preferences.map((preference) => <PreferenceRow key={preference.id} preference={preference} disabled={busy} onStatus={(status) => run(() => api.setPlanningPreferenceStatus(preference.id, status), "偏好状态已更新。") } onDelete={() => run(() => api.deletePlanningPreference(preference.id), "偏好已删除。") } />) : <p className="empty">Chroni 还在了解你的习惯。保存的规划修改会慢慢沉淀在这里。</p>}</div>
       {!!snapshot.agent.recentPlanningFeedback.length && <details className="recent-learning"><summary>最近学习 · {snapshot.agent.recentPlanningFeedback.length}</summary>{snapshot.agent.recentPlanningFeedback.slice(0, 5).map((event) => <p key={event.id}>{taskTypeLabel(event.taskType)} · 规划 v{event.planVersion} · {event.changes.length} 项结构化修改</p>)}</details>}

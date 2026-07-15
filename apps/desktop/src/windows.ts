@@ -2,7 +2,7 @@ import { BrowserWindow, Menu, Tray, app, autoUpdater, ipcMain, nativeImage, scre
 import { join } from "node:path";
 import type { ChroniPreferences, ChroniView, PetAction, PetActionCommand, PetPlacement } from "./shared/types.js";
 import { draggedWindowPosition, draggedWindowPositionWithinArea, fitWindowSizeToWorkArea, normalizedWindowPlacement, restoredWindowPosition, schedulePopoverPosition, snappedWindowPosition, type WindowPosition } from "./window-geometry.js";
-import { configureControlWindowChrome, controlCenterWindowOptions, controlMinimumSize, controlPreferredSize } from "./window-options.js";
+import { configureControlWindowChrome, configureRendererZoom, controlCenterWindowOptions, controlMinimumSize, controlPreferredSize, rendererZoomFactor } from "./window-options.js";
 
 type WindowSet = {
   pet?: BrowserWindow;
@@ -413,9 +413,11 @@ function createViewWindow(
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      zoomFactor: rendererZoomFactor,
     },
     ...options,
   });
+  configureRendererZoom(win.webContents);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedExternalUrl(url)) void shell.openExternal(url);
     return { action: "deny" };

@@ -9,6 +9,8 @@ import type { ScheduleBucket, SnoozePreset } from "../../shared/schedule";
 import type { AgentMemory, CompanionState, DailyTask, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ChroniUpdateStatus, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
 import { DailyPlanner } from "./components/DailyPlanner";
+import { UiDateTimeField } from "./components/UiDateTimeField";
+import { UiIcon } from "./components/UiIcon";
 import "@fontsource-variable/noto-sans-sc/wght.css";
 import "@fontsource-variable/noto-serif-sc/wght.css";
 import "@fontsource-variable/source-sans-3/wght.css";
@@ -461,7 +463,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
           </div>
           <div className="panel-actions">
             <button className="schedule-manage" type="button" onClick={() => void api.openControlCenter({ tab: "schedule" }).catch((error) => showFeedback({ message: formatOperationError(error, "暂时无法打开控制中心"), tone: "warn" }))}>管理</button>
-            <button className="icon-btn quiet" type="button" onClick={() => void api.showSchedule(false).catch((error) => showFeedback({ message: formatOperationError(error, "暂时无法收起日程"), tone: "warn" }))} title="收起日程" aria-label="收起日程">×</button>
+            <button className="icon-btn quiet" type="button" onClick={() => void api.showSchedule(false).catch((error) => showFeedback({ message: formatOperationError(error, "暂时无法收起日程"), tone: "warn" }))} title="收起日程" aria-label="收起日程"><UiIcon name="close" /></button>
           </div>
         </header>
         <p className={`schedule-overview ${surface.counts.overdue ? "urgent" : ""}`} aria-label="日程概览">
@@ -477,11 +479,11 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
               onChange={(event) => setQuickText(event.target.value)}
               placeholder="例如：明晚 8 点交课程报告"
             />
-            <button className="quick-add-submit" type="submit" disabled={isBusy || !quickText.trim()} aria-label="添加日程">＋</button>
-            <button className="quick-add-cancel" type="button" disabled={isBusy} onClick={closeQuickAdd} aria-label="取消添加">×</button>
+            <button className="quick-add-submit" type="submit" disabled={isBusy || !quickText.trim()} aria-label="添加日程"><UiIcon name="add" /></button>
+            <button className="quick-add-cancel" type="button" disabled={isBusy} onClick={closeQuickAdd} aria-label="取消添加"><UiIcon name="close" /></button>
           </form>
         ) : (
-          <button className="schedule-add-trigger" type="button" onClick={() => setQuickAddOpen(true)}><span>＋</span>添加日程</button>
+          <button className="schedule-add-trigger" type="button" onClick={() => setQuickAddOpen(true)}><span><UiIcon name="add" /></span>添加日程</button>
         )}
         {busyMessage && <p className="inline-feedback info" role="status" aria-live="polite">{busyMessage}</p>}
         {feedback && (
@@ -790,8 +792,8 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
         <div className="agent-details-content">
         <div className="agent-memory-grid">
           <label>每天可安排（分钟）<input type="number" min="30" max="720" step="30" value={memoryDraft.maxDailyMinutes} onChange={(event) => patchMemory({ maxDailyMinutes: Number(event.target.value) })} /></label>
-          <label>开始时间<input type="time" value={memoryDraft.workdayStart} onChange={(event) => patchMemory({ workdayStart: event.target.value })} /></label>
-          <label>结束时间<input type="time" value={memoryDraft.workdayEnd} onChange={(event) => patchMemory({ workdayEnd: event.target.value })} /></label>
+          <label>开始时间<UiDateTimeField required type="time" value={memoryDraft.workdayStart} onChange={(workdayStart) => patchMemory({ workdayStart })} /></label>
+          <label>结束时间<UiDateTimeField required type="time" value={memoryDraft.workdayEnd} onChange={(workdayEnd) => patchMemory({ workdayEnd })} /></label>
           <label>提醒频率<select value={memoryDraft.reminderFrequency} onChange={(event) => patchMemory({ reminderFrequency: event.target.value as AgentMemory["reminderFrequency"] })}><option value="important-only">仅高风险</option><option value="daily">每日</option><option value="off">关闭</option></select></label>
         </div>
         <div className="agent-setting-toggles">
@@ -1198,8 +1200,8 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
         <Toggle label="开启提醒" checked={preferences.remindersEnabled} onChange={(value) => void patch({ remindersEnabled: value }, value ? "提醒已开启。" : "提醒已关闭。") } />
         <Toggle label="勿扰时间" checked={preferences.quietHoursEnabled} onChange={(value) => void patch({ quietHoursEnabled: value }, value ? "勿扰时间已开启。" : "勿扰时间已关闭。") } />
         <div className="field-grid">
-          <label>开始<input type="time" value={preferences.quietHoursStart} onChange={(event) => void patch({ quietHoursStart: event.target.value })} /></label>
-          <label>结束<input type="time" value={preferences.quietHoursEnd} onChange={(event) => void patch({ quietHoursEnd: event.target.value })} /></label>
+          <label>开始<UiDateTimeField required type="time" value={preferences.quietHoursStart} onChange={(quietHoursStart) => void patch({ quietHoursStart })} /></label>
+          <label>结束<UiDateTimeField required type="time" value={preferences.quietHoursEnd} onChange={(quietHoursEnd) => void patch({ quietHoursEnd })} /></label>
         </div>
       </section>
       <section className="settings-group">
@@ -1661,7 +1663,7 @@ function DdlRow({ item, source, plan, setSnapshot, editable, minimal = false, on
                 <path d="M6.3 3.2H2.8v3.5" />
                 <path d="M3.1 6.3a5.3 5.3 0 1 1 .8 4.9" />
               </svg>
-            ) : "✓"}
+            ) : <UiIcon name="check" />}
           </button>
           <div className="editor-copy">
             <div className="editor-title-line">
@@ -1698,8 +1700,8 @@ function DdlRow({ item, source, plan, setSnapshot, editable, minimal = false, on
                 <option value="medium">中</option>
                 <option value="low">低</option>
               </select></label>
-              <label className="edit-field date-field">截止时间<input type="datetime-local" value={toInputDate(draft.dueAt)} disabled={isBusy} onChange={(event) => {
-                const date = new Date(event.target.value);
+              <label className="edit-field date-field">截止时间<UiDateTimeField required type="datetime-local" value={toInputDate(draft.dueAt)} disabled={isBusy} onChange={(value) => {
+                const date = new Date(value);
                 setDraft({ ...draft, dueAt: Number.isNaN(date.getTime()) ? "" : date.toISOString() });
               }} /></label>
               <label className="edit-field">预计工时<input type="number" min="15" max="1440" step="15" value={draft.estimatedMinutes ?? ""} placeholder="自动" disabled={isBusy} onChange={(event) => setDraft({ ...draft, estimatedMinutes: event.target.value ? Number(event.target.value) : undefined })} /></label>
@@ -1732,7 +1734,7 @@ function DdlRow({ item, source, plan, setSnapshot, editable, minimal = false, on
 
   return (
     <article className={`ddl-row compact-row tone-${urgency} ${snoozeMenuOpen ? "menu-open" : ""} ${isBusy ? "busy" : ""}`} role="listitem" aria-busy={isBusy}>
-      <button className="check" type="button" title="完成" aria-label={`完成 ${item.title}`} disabled={isBusy} onClick={() => void completeItem()}>✓</button>
+      <button className="check" type="button" title="完成" aria-label={`完成 ${item.title}`} disabled={isBusy} onClick={() => void completeItem()}><UiIcon name="check" /></button>
       <button className={`row-main ${minimal ? "minimal" : ""} ${minimal && item.importance === "high" ? "has-priority" : ""}`} type="button" onClick={() => void api.openControlCenter({ tab: "schedule", taskId: item.id }).catch((error) => onAction?.({ message: formatOperationError(error, "暂时无法打开任务详情"), tone: "warn" }))}>
         <span className="title-line">
           <strong>{item.title}</strong>
@@ -2209,4 +2211,33 @@ function dailyDateKey(value: Date): string {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+async function waitForRendererFonts(): Promise<void> {
+  if (!document.fonts) return;
+  const faces = [
+    ["400 14px \"Source Sans 3 Variable\"", "Chroni 0123456789"],
+    ["500 26px \"Source Serif 4 Variable\"", "Chroni 0123456789"],
+    ["400 14px \"Noto Sans SC Variable\"", "日程任务偏好"],
+    ["500 21px \"Noto Serif SC Variable\"", "日程任务偏好"],
+  ] as const;
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = window.setTimeout(finish, 1_800);
+    void Promise.all(faces.map(([font, sample]) => document.fonts.load(font, sample))).then(finish, finish);
+  });
+}
+
+async function mountApp(): Promise<void> {
+  document.documentElement.dataset.fonts = "loading";
+  await waitForRendererFonts();
+  createRoot(document.getElementById("root")!).render(<App />);
+  document.documentElement.dataset.fonts = "ready";
+}
+
+void mountApp();

@@ -59,10 +59,8 @@ body {
   overflow: hidden;
   background: transparent;
   text-rendering: optimizeLegibility;
-}
-
-html[data-platform="darwin"] body {
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 html,
@@ -118,7 +116,9 @@ button:active {
 }
 
 button:disabled,
-input:disabled {
+input:disabled,
+select:disabled,
+textarea:disabled {
   cursor: not-allowed;
   opacity: 0.58;
 }
@@ -4090,15 +4090,16 @@ details.source-history[open] > summary::after {
 }
 
 .agent-details > summary::after {
-  content: "+";
+  content: "";
   flex: 0 0 auto;
   color: #52746d;
-  font-size: 18px;
-  font-weight: 500;
+  background:
+    linear-gradient(currentColor, currentColor) center / 10px 1.5px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1.5px 10px no-repeat;
 }
 
 .agent-details[open] > summary::after {
-  content: "−";
+  background: linear-gradient(currentColor, currentColor) center / 10px 1.5px no-repeat;
 }
 
 .agent-details[open] > summary {
@@ -6751,5 +6752,185 @@ kbd {
 @media (max-width: 560px) {
   .clarification-intro {
     margin-left: 0;
+  }
+}
+
+/* Shared control skin: avoid operating-system metrics changing the layout. */
+.ui-date-time-field {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.daily-editor .ui-date-time-field {
+  margin-top: 5px;
+}
+
+.ui-date-time-field > .ui-date-time-text {
+  width: 100%;
+  margin: 0 !important;
+  padding-inline-end: 40px !important;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.ui-date-time-button {
+  position: absolute;
+  z-index: 1;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 36px;
+  height: auto;
+  min-height: 0 !important;
+  display: grid;
+  place-items: center;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 7px 7px 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #556861;
+}
+
+.ui-date-time-button:hover {
+  background: rgba(49, 93, 82, 0.07) !important;
+  box-shadow: none !important;
+}
+
+.ui-date-time-button .inline-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.ui-date-time-field > .ui-date-time-picker {
+  position: absolute !important;
+  right: 0;
+  bottom: 0;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.clarification-input .ui-date-time-field {
+  min-width: min(280px, 100%);
+  flex: 1;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 32px !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23556861' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2 2 4 4 4-4'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  background-size: 12px 8px !important;
+}
+
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 36px !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  background-size: 16px 16px !important;
+}
+
+input[type="date"],
+input[type="datetime-local"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23556861' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='3.5' width='11' height='10' rx='2'/%3E%3Cpath d='M5 2v3m6-3v3M2.5 6.5h11'/%3E%3C/svg%3E") !important;
+}
+
+input[type="time"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23556861' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='8' cy='8' r='5.5'/%3E%3Cpath d='M8 4.75V8l2.4 1.45'/%3E%3C/svg%3E") !important;
+}
+
+input:is([type="date"], [type="datetime-local"], [type="time"])::-webkit-calendar-picker-indicator {
+  width: 20px;
+  height: 20px;
+  margin: 0 -4px 0 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.ui-checkbox {
+  width: 17px !important;
+  height: 17px !important;
+  min-height: 17px !important;
+  flex: 0 0 17px;
+  margin: 0;
+  padding: 0 !important;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(49, 93, 82, 0.42) !important;
+  border-radius: 5px !important;
+  background-color: #fffefb !important;
+  background-image: none !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: 12px 12px !important;
+  cursor: pointer;
+}
+
+.ui-checkbox:checked {
+  border-color: var(--primary-2) !important;
+  background-color: var(--primary-2) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3.2 8.2 3 3 6.6-6.5'/%3E%3C/svg%3E") !important;
+}
+
+progress {
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: #dfe8e4;
+}
+
+progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: #dfe8e4;
+}
+
+progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: #2f6b61;
+}
+
+@media (forced-colors: active) {
+  select,
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="time"],
+  input[type="number"],
+  .ui-checkbox,
+  progress {
+    appearance: auto;
+    -webkit-appearance: auto;
+    background-image: none !important;
+  }
+
+  input:is([type="date"], [type="datetime-local"], [type="time"])::-webkit-calendar-picker-indicator {
+    opacity: 1;
   }
 }
