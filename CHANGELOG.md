@@ -4,6 +4,12 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-15
+
+### Fixed
+
+- macOS Universal 构建正确保留 `@napi-rs/canvas` 的 Intel 与 Apple Silicon 原生二进制。
+
 ## [0.1.1] - 2026-07-15
 
 ### Added
@@ -38,6 +44,7 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 发布标签现在必须与根工作区和桌面应用版本一致。
 - 生产包启用 Electron Fuses 和 ASAR 完整性校验。
 
-[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.2
 [0.1.1]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.1
 [0.1.0]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.0

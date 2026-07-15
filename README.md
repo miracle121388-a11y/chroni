@@ -117,14 +117,14 @@ Chroni 会在后台检查 GitHub Releases。新版本下载完成后，“运行
 每个 Release 都包含 `SHA256SUMS.txt`。Windows PowerShell：
 
 ```powershell
-Get-FileHash .\Chroni-0.1.1-win-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Chroni-0.1.2-win-x64-setup.exe -Algorithm SHA256
 ```
 
 macOS：
 
 ```bash
-shasum -a 256 Chroni-0.1.1-mac-universal.dmg
-grep 'Chroni-0.1.1-mac-universal.dmg' SHA256SUMS.txt
+shasum -a 256 Chroni-0.1.2-mac-universal.dmg
+grep 'Chroni-0.1.2-mac-universal.dmg' SHA256SUMS.txt
 ```
 
 计算结果应与发布页完全一致。Release 还附带 GitHub build provenance attestation，可使用 GitHub CLI 验证构建来源。

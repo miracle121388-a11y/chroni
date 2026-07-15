@@ -59,6 +59,7 @@ module.exports = {
     category: "public.app-category.productivity",
     minimumSystemVersion: "12.0",
     target: ["dmg", "zip"],
+    x64ArchFiles: "**/node_modules/@napi-rs/canvas-darwin-*/**",
     identity: hasMacCertificate ? undefined : "-",
     hardenedRuntime: hasMacCertificate,
     gatekeeperAssess: false,
