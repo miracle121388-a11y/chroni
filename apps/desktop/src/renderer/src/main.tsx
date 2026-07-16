@@ -567,6 +567,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
           <button className={tab === "agent" ? "active" : ""} aria-current={tab === "agent" ? "page" : undefined} onClick={() => selectTab("agent")}>Agent</button>
           <button className={tab === "preferences" ? "active" : ""} aria-current={tab === "preferences" ? "page" : undefined} onClick={() => selectTab("preferences")}>偏好</button>
           <button className={tab === "services" ? "active" : ""} aria-current={tab === "services" ? "page" : undefined} onClick={() => selectTab("services")}>运行状态</button>
+          <button className={tab === "about" ? "active" : ""} aria-current={tab === "about" ? "page" : undefined} onClick={() => selectTab("about")}>关于</button>
         </nav>
         <div className="sidebar-foot">
           <span>{todayDailyCount ? `今日 ${todayDailyCount} 项待完成` : "今日任务已清"}{pendingCount ? ` · ${pendingCount} 项 DDL` : ""}{clarificationCount ? ` · ${clarificationCount} 项待确认` : ""}</span>
@@ -578,6 +579,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
         {tab === "agent" && <AgentPane snapshot={snapshot} setSnapshot={setSnapshot} />}
         {tab === "preferences" && <PreferencesPane preferences={snapshot.preferences} services={snapshot.services} setSnapshot={setSnapshot} />}
         {tab === "services" && <ServicesPane snapshot={snapshot} setSnapshot={setSnapshot} />}
+        {tab === "about" && <AboutPane />}
       </section>
     </main>
   );
@@ -1356,19 +1358,57 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
           </div>
         </section>
       )}
-      <section className="third-party-credit">
-        <h3>桌宠原作信息 · About</h3>
-        <p>Chroni 的桌宠形象基于 XIAOTONG Desktop Pet / 蓝色小嗵。以下信息按原项目附加条款完整保留。</p>
+      <details className="advanced-settings">
+        <summary>排错说明</summary>
+        <ul className="notes">{snapshot.services.notes.map((note) => <li key={note}>{safeUserMessage(note, "请检查相关服务配置。")}</li>)}</ul>
+      </details>
+      <button className="secondary" type="button" onClick={() => void api.openStorage().then(() => setFeedback({ message: "已在文件管理器中打开本地数据位置。", tone: "ok" })).catch((error) => setFeedback({ message: formatOperationError(error, "暂时无法打开本地数据位置"), tone: "warn" }))}>打开本地数据位置</button>
+    </div>
+  );
+}
+
+function AboutPane() {
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    let active = true;
+    void api.getUpdateStatus()
+      .then((status) => {
+        if (active) setVersion(status.currentVersion);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  return (
+    <div className="pane narrow about-pane">
+      <header className="pane-head">
+        <div>
+          <p>项目、许可与第三方来源</p>
+          <h2>关于 Chroni</h2>
+        </div>
+      </header>
+      <section className="about-project" aria-labelledby="about-project-heading">
+        <h3 id="about-project-heading">Chroni{version ? ` ${version}` : ""}</h3>
+        <p>本地优先的桌面日程与 Deadline Agent 助手。项目代码、发布记录与许可信息均可在 GitHub 查看。</p>
+        <div className="about-project-links">
+          <a href="https://github.com/miracle121388-a11y/chroni" target="_blank" rel="noreferrer">GitHub 项目仓库</a>
+          <a href="https://github.com/miracle121388-a11y/chroni/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a>
+        </div>
+      </section>
+      <section className="third-party-credit" aria-labelledby="xiaotong-credit-heading">
+        <h3 id="xiaotong-credit-heading">桌宠形象来源</h3>
+        <p>Chroni 的桌宠形象基于 XIAOTONG Desktop Pet / 蓝色小嗵。以下原作信息依照原项目附加条款保留。</p>
         <div className="xiaotong-about">
-          <figure className="xiaotong-donation">
-            <figcaption>☕ 请作者喝杯咖啡</figcaption>
-            <img src={xiaotongDonationQr} alt="XIAOTONG 原作者捐赠二维码" />
-          </figure>
           <dl className="xiaotong-details">
             <div><dt>原作版本</dt><dd>v1.0.1</dd></div>
             <div><dt>原作者</dt><dd>WWW.没有COM</dd></div>
             <div><dt>微信 / WeChat</dt><dd>xy12981118</dd></div>
           </dl>
+          <figure className="xiaotong-donation">
+            <figcaption>☕ 请作者喝杯咖啡</figcaption>
+            <img src={xiaotongDonationQr} alt="XIAOTONG 原作者捐赠二维码" />
+          </figure>
         </div>
         <div className="third-party-links">
           <a href="https://github.com/gildingmazzonimo621-design/XIAOTONG-Desktop-pet" target="_blank" rel="noreferrer">原始项目仓库</a>
@@ -1376,11 +1416,6 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
           <a href="https://github.com/weidaozhong/Tongluv/blob/main/ADDITIONAL_TERMS.md" target="_blank" rel="noreferrer">附加条款</a>
         </div>
       </section>
-      <details className="advanced-settings">
-        <summary>排错说明</summary>
-        <ul className="notes">{snapshot.services.notes.map((note) => <li key={note}>{safeUserMessage(note, "请检查相关服务配置。")}</li>)}</ul>
-      </details>
-      <button className="secondary" type="button" onClick={() => void api.openStorage().then(() => setFeedback({ message: "已在文件管理器中打开本地数据位置。", tone: "ok" })).catch((error) => setFeedback({ message: formatOperationError(error, "暂时无法打开本地数据位置"), tone: "warn" }))}>打开本地数据位置</button>
     </div>
   );
 }
@@ -1862,7 +1897,7 @@ type ControlScheduleGroup = {
   items: DdlItem[];
 };
 
-type ControlTab = "daily" | "schedule" | "agent" | "preferences" | "services";
+type ControlTab = "daily" | "schedule" | "agent" | "preferences" | "services" | "about";
 
 function agentStatusLabel(status: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["verification"]["status"]): string {
   return status === "healthy" ? "安排正常" : status === "critical" ? "需要立即处理" : "需要关注";

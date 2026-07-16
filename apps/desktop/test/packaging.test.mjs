@@ -6,6 +6,9 @@ import builderConfig from "../electron-builder.config.cjs";
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const releaseWorkflow = readFileSync(new URL("../../../.github/workflows/release-build.yml", import.meta.url), "utf8");
 const rendererSource = readFileSync(new URL("../src/renderer/src/main.tsx", import.meta.url), "utf8");
+const rendererTypes = readFileSync(new URL("../src/renderer/src/vite-env.d.ts", import.meta.url), "utf8");
+const mainSource = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+const windowsSource = readFileSync(new URL("../src/windows.ts", import.meta.url), "utf8");
 
 test("packaging commands never publish before release artifacts are verified", () => {
   for (const name of ["package", "package:win", "package:mac", "package:linux"]) {
@@ -39,4 +42,13 @@ test("XIAOTONG About view preserves attribution, contact, version, and donation 
   for (const requiredText of ["v1.0.1", "WWW.没有COM", "xy12981118", "请作者喝杯咖啡", "XIAOTONG-Desktop-pet"]) {
     assert.match(rendererSource, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+});
+
+test("About view is directly reachable from the control center and desktop menu", () => {
+  assert.match(rendererSource, /onClick=\{\(\) => selectTab\("about"\)\}>关于<\/button>/);
+  assert.match(rendererSource, /\{tab === "about" && <AboutPane \/>\}/);
+  assert.match(rendererSource, /api\.getUpdateStatus\(\)/);
+  assert.match(windowsSource, /label: "关于 Chroni", click: \(\) => showControlCenter\(\{ tab: "about" \}\)/);
+  assert.match(mainSource, /candidate\.tab === "about"/);
+  assert.match(rendererTypes, /"services" \| "about"/);
 });

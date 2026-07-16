@@ -1,0 +1,271 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
+  <title id="title">Chroni 混合式 Deadline Agent 架构</title>
+  <desc id="description">从真实材料输入、本地解析、模型候选与证据校验，到主动追问、任务规划、用户确认，再到 Deadline Agent 执行、提醒、调整与行为记忆的三层闭环。</desc>
+
+  <defs>
+    <linearGradient id="page" x1="72" y1="22" x2="1518" y2="880" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fbfaf6"/>
+      <stop offset="0.58" stop-color="#f8f7f1"/>
+      <stop offset="1" stop-color="#eef5f0"/>
+    </linearGradient>
+    <linearGradient id="principle" x1="1026" y1="30" x2="1544" y2="98" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#315f54"/>
+      <stop offset="1" stop-color="#244b43"/>
+    </linearGradient>
+    <linearGradient id="deadline" x1="74" y1="684" x2="708" y2="820" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f2f8f4"/>
+      <stop offset="1" stop-color="#e5f0eb"/>
+    </linearGradient>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4d7d70"/>
+    </marker>
+    <marker id="arrow-gold" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b77a30"/>
+    </marker>
+    <style>
+      .sans { font-family: "Source Sans 3", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
+      .serif { font-family: "Source Serif 4", "Noto Serif SC", "Songti SC", "SimSun", serif; }
+      .title { fill: #20312c; font-size: 35px; font-weight: 650; letter-spacing: 0.2px; }
+      .subtitle { fill: #66736d; font-size: 16px; font-weight: 450; }
+      .principle-kicker { fill: #d5e8e0; font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+      .principle-copy { fill: #fffdf8; font-size: 18px; font-weight: 650; }
+      .lane { fill: #fffdf9; stroke: #d9e4de; stroke-width: 1.5; }
+      .lane-rule { stroke: #e5e4dd; stroke-width: 1.25; }
+      .lane-index { fill: #f0f6f2; stroke: #c5dbd2; stroke-width: 1.2; }
+      .lane-index-text { fill: #35675b; font-size: 13px; font-weight: 750; }
+      .lane-title { fill: #29483f; font-size: 20px; font-weight: 700; }
+      .lane-note { fill: #75817b; font-size: 13px; }
+      .card { fill: #fffefb; stroke: #cfdcd6; stroke-width: 1.5; }
+      .card-green { fill: #eef6f1; stroke: #bad3c8; stroke-width: 1.5; }
+      .card-warm { fill: #fff8ec; stroke: #e8c994; stroke-width: 1.5; }
+      .card-blue { fill: #f1f5f6; stroke: #c9d8dc; stroke-width: 1.5; }
+      .card-title { fill: #273832; font-size: 18px; font-weight: 700; }
+      .card-copy { fill: #66736d; font-size: 13px; font-weight: 450; }
+      .card-kicker { fill: #4a756a; font-size: 11px; font-weight: 750; letter-spacing: 1.3px; }
+      .chip { fill: #f3f6f2; stroke: #d8e3dd; stroke-width: 1; }
+      .chip-text { fill: #49635b; font-size: 13px; font-weight: 600; }
+      .flow { fill: none; stroke: #4d7d70; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow-green); }
+      .flow-soft { fill: none; stroke: #77a094; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow-green); }
+      .flow-loop { fill: none; stroke: #4d7d70; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 7 7; marker-end: url(#arrow-green); }
+      .flow-warm { fill: none; stroke: #b77a30; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow-gold); }
+      .branch-green { fill: #edf6f1; stroke: #bcd3c9; stroke-width: 1; }
+      .branch-warm { fill: #fff5e5; stroke: #e5c58e; stroke-width: 1; }
+      .branch-text-green { fill: #35695d; font-size: 12px; font-weight: 700; }
+      .branch-text-warm { fill: #9a621f; font-size: 12px; font-weight: 700; }
+      .stage { fill: #fffefa; stroke: #bfd3ca; stroke-width: 1.2; }
+      .stage-label { fill: #315f54; font-size: 14px; font-weight: 750; }
+      .stage-copy { fill: #75817b; font-size: 10.5px; }
+      .micro { fill: #718079; font-size: 11px; font-weight: 550; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#page)"/>
+  <circle cx="1515" cy="132" r="172" fill="#e7f0eb" fill-opacity="0.5"/>
+  <circle cx="82" cy="828" r="132" fill="#f5e8cf" fill-opacity="0.38"/>
+
+  <g class="sans">
+    <text class="serif title" x="50" y="57">Chroni 混合式 Deadline Agent</text>
+    <text class="subtitle" x="52" y="87">把散落的信息变成可信任务，再变成今天能够执行的计划</text>
+
+    <g>
+      <rect x="1026" y="30" width="524" height="68" rx="20" fill="url(#principle)"/>
+      <circle cx="1060" cy="64" r="14" fill="#e9bd78" fill-opacity="0.2" stroke="#e9bd78"/>
+      <path d="M1054 64l4 4 8-9" fill="none" stroke="#f4d9aa" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="principle-kicker" x="1088" y="53">HYBRID AGENT PRINCIPLE</text>
+      <text class="principle-copy" x="1088" y="77">模型提出候选 · 本地系统掌握状态变更权</text>
+    </g>
+
+    <!-- 01 Understanding layer -->
+    <g>
+      <rect class="lane" x="48" y="122" width="1504" height="244" rx="26"/>
+      <circle class="lane-index" cx="80" cy="158" r="17"/>
+      <text class="lane-index-text" x="80" y="163" text-anchor="middle">01</text>
+      <text class="lane-title" x="108" y="164">理解层 · 从真实材料到可信任务事实</text>
+      <text class="lane-note" x="1518" y="162" text-anchor="end">所有候选写入前，都要经过本地确定性门禁</text>
+      <path class="lane-rule" d="M72 181H1528"/>
+
+      <g>
+        <rect class="card" x="78" y="206" width="226" height="126" rx="18"/>
+        <text class="card-kicker" x="98" y="230">REAL INPUT</text>
+        <text class="card-title" x="98" y="256">真实输入</text>
+        <rect class="chip" x="98" y="273" width="48" height="28" rx="9"/>
+        <rect class="chip" x="152" y="273" width="48" height="28" rx="9"/>
+        <rect class="chip" x="206" y="273" width="48" height="28" rx="9"/>
+        <rect class="chip" x="260" y="273" width="30" height="28" rx="9"/>
+        <text class="chip-text" x="122" y="292" text-anchor="middle">通知</text>
+        <text class="chip-text" x="176" y="292" text-anchor="middle">文档</text>
+        <text class="chip-text" x="230" y="292" text-anchor="middle">表格</text>
+        <text class="chip-text" x="275" y="292" text-anchor="middle">截图</text>
+        <text class="micro" x="98" y="319">拖放、快速添加或本地 API</text>
+      </g>
+
+      <path class="flow" d="M304 269H346"/>
+
+      <g>
+        <rect class="card-green" x="350" y="218" width="220" height="102" rx="18"/>
+        <circle cx="381" cy="249" r="15" fill="#d9eae3"/>
+        <path d="M374 249h14M381 242v14" stroke="#3f7467" stroke-width="2" stroke-linecap="round"/>
+        <text class="card-kicker" x="408" y="243">LOCAL FIRST</text>
+        <text class="card-title" x="378" y="279">本地解析 / OCR</text>
+        <text class="card-copy" x="378" y="302">先读文件，再提取可核验原文</text>
+      </g>
+
+      <path class="flow" d="M570 269H615"/>
+
+      <g>
+        <rect class="card" x="620" y="198" width="312" height="142" rx="18"/>
+        <text class="card-kicker" x="642" y="222">CANDIDATE GENERATION</text>
+        <text class="card-title" x="642" y="248">候选生成</text>
+        <rect class="card-warm" x="642" y="264" width="126" height="54" rx="12"/>
+        <circle cx="662" cy="285" r="6" fill="#b9792f"/>
+        <text class="chip-text" x="676" y="289">LLM 候选</text>
+        <text class="micro" x="655" y="308">复杂语义理解</text>
+        <rect class="card-blue" x="784" y="264" width="126" height="54" rx="12"/>
+        <circle cx="804" cy="285" r="6" fill="#577582"/>
+        <text class="chip-text" x="818" y="289">规则回退</text>
+        <text class="micro" x="797" y="308">离线仍可工作</text>
+      </g>
+
+      <path class="flow" d="M932 269H981"/>
+
+      <g>
+        <rect class="card-green" x="986" y="213" width="350" height="112" rx="20"/>
+        <circle cx="1020" cy="248" r="16" fill="#315f54"/>
+        <path d="M1012 248l5 5 10-12" fill="none" stroke="#fffdf8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <text class="card-kicker" x="1048" y="241">DETERMINISTIC GATE</text>
+        <text class="card-title" x="1048" y="269">证据 · 日期 · 字段校验</text>
+        <text class="card-copy" x="1048" y="294">模型不能改写截止时间、来源证据与完成状态</text>
+      </g>
+
+      <rect class="branch-warm" x="1060" y="337" width="78" height="22" rx="11"/>
+      <text class="branch-text-warm" x="1099" y="352" text-anchor="middle">缺字段</text>
+      <rect class="branch-green" x="1200" y="337" width="86" height="22" rx="11"/>
+      <text class="branch-text-green" x="1243" y="352" text-anchor="middle">字段完整</text>
+    </g>
+
+    <!-- 02 Planning layer -->
+    <g>
+      <rect class="lane" x="48" y="386" width="1504" height="232" rx="26"/>
+      <circle class="lane-index" cx="80" cy="422" r="17"/>
+      <text class="lane-index-text" x="80" y="427" text-anchor="middle">02</text>
+      <text class="lane-title" x="108" y="428">规划层 · 只追问必要信息，计划必须由用户确认</text>
+      <text class="lane-note" x="1518" y="426" text-anchor="end">Clarification 与 TaskPlan 均可在模型不可用时继续运行</text>
+      <path class="lane-rule" d="M72 445H1528"/>
+
+      <!-- complete branch -->
+      <path class="flow" d="M1243 359V376H62V454H222V468" fill="none"/>
+      <g>
+        <rect class="card-green" x="78" y="468" width="302" height="112" rx="18"/>
+        <text class="card-kicker" x="100" y="492">TASKPLAN AGENT</text>
+        <text class="card-title" x="100" y="520">生成可编辑任务计划</text>
+        <text class="card-copy" x="100" y="543">步骤 · 依赖 · 耗时 · 交付物 · 缓冲</text>
+        <rect class="branch-green" x="100" y="553" width="184" height="20" rx="10"/>
+        <text class="branch-text-green" x="192" y="567" text-anchor="middle">LLM 建议 / 本地规则回退</text>
+      </g>
+      <path class="flow" d="M380 524H422"/>
+      <g>
+        <rect class="card" x="426" y="478" width="214" height="92" rx="18"/>
+        <text class="card-kicker" x="448" y="502">HUMAN IN CONTROL</text>
+        <text class="card-title" x="448" y="531">用户检查与修改</text>
+        <text class="card-copy" x="448" y="553">确认前不进入执行队列</text>
+      </g>
+      <path class="flow" d="M640 524H681"/>
+      <g>
+        <rect x="686" y="485" width="174" height="78" rx="39" fill="#315f54"/>
+        <circle cx="720" cy="524" r="15" fill="#fffdf8" fill-opacity="0.16"/>
+        <path d="M713 524l5 5 10-12" fill="none" stroke="#fffdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="742" y="519" fill="#d8ebe3" font-size="11" font-weight="700" letter-spacing="1">CONFIRMED</text>
+        <text x="742" y="541" fill="#fffdf8" font-size="16" font-weight="700">确认并激活</text>
+      </g>
+
+      <!-- clarification branch -->
+      <path class="flow-warm" d="M1099 359V467"/>
+      <g>
+        <rect class="card-warm" x="944" y="468" width="300" height="112" rx="18"/>
+        <text class="card-kicker" x="966" y="492" fill="#996323">CLARIFICATION AGENT</text>
+        <text class="card-title" x="966" y="520">只追问真正缺失的字段</text>
+        <text class="card-copy" x="966" y="544">明确内容先落地，不让疑问阻塞整份材料</text>
+        <text class="micro" x="966" y="566">问题表达可由 LLM 润色，是否追问由本地决定</text>
+      </g>
+      <path class="flow-warm" d="M1244 524H1284"/>
+      <g>
+        <rect class="card" x="1288" y="478" width="214" height="92" rx="18"/>
+        <text class="card-kicker" x="1310" y="502">USER ANSWER</text>
+        <text class="card-title" x="1310" y="531">用户补充信息</text>
+        <text class="card-copy" x="1310" y="553">回到同一校验门禁</text>
+      </g>
+      <path class="flow-loop" d="M1496 478H1536V376H1370V269H1336" fill="none"/>
+    </g>
+
+    <!-- 03 Execution layer -->
+    <g>
+      <rect class="lane" x="48" y="638" width="1504" height="218" rx="26"/>
+      <circle class="lane-index" cx="80" cy="674" r="17"/>
+      <text class="lane-index-text" x="80" y="679" text-anchor="middle">03</text>
+      <text class="lane-title" x="108" y="680">执行层 · Observe → Plan → Act → Verify 持续闭环</text>
+      <text class="lane-note" x="1518" y="678" text-anchor="end">完成、调整与显式保存的偏好，都会回到下一轮规划</text>
+      <path class="lane-rule" d="M72 697H1528"/>
+
+      <path class="flow" d="M773 563V628H62V704H390V713" fill="none"/>
+
+      <g>
+        <rect x="78" y="713" width="626" height="116" rx="20" fill="url(#deadline)" stroke="#afcbbf" stroke-width="1.6"/>
+        <text class="card-kicker" x="100" y="738">DEADLINE AGENT</text>
+        <text class="card-title" x="100" y="763">本地工具驱动的执行循环</text>
+
+        <rect class="stage" x="100" y="778" width="126" height="39" rx="12"/>
+        <rect class="stage" x="248" y="778" width="126" height="39" rx="12"/>
+        <rect class="stage" x="396" y="778" width="126" height="39" rx="12"/>
+        <rect class="stage" x="544" y="778" width="126" height="39" rx="12"/>
+        <text class="stage-label" x="163" y="796" text-anchor="middle">Observe</text>
+        <text class="stage-copy" x="163" y="810" text-anchor="middle">任务 / 容量 / 状态</text>
+        <text class="stage-label" x="311" y="796" text-anchor="middle">Plan</text>
+        <text class="stage-copy" x="311" y="810" text-anchor="middle">风险 / 依赖 / slack</text>
+        <text class="stage-label" x="459" y="796" text-anchor="middle">Act</text>
+        <text class="stage-copy" x="459" y="810" text-anchor="middle">重排 / 持久化 / 提醒</text>
+        <text class="stage-label" x="607" y="796" text-anchor="middle">Verify</text>
+        <text class="stage-copy" x="607" y="810" text-anchor="middle">覆盖 / 冲突 / 缺口</text>
+        <path class="flow-soft" d="M226 798H242"/>
+        <path class="flow-soft" d="M374 798H390"/>
+        <path class="flow-soft" d="M522 798H538"/>
+      </g>
+
+      <path class="flow" d="M704 771H743"/>
+      <g>
+        <rect class="card" x="748" y="713" width="248" height="116" rx="18"/>
+        <text class="card-kicker" x="770" y="738">EXECUTION SURFACES</text>
+        <text class="card-title" x="770" y="762">变成今天的行动</text>
+        <rect class="chip" x="770" y="777" width="68" height="28" rx="9"/>
+        <rect class="chip" x="844" y="777" width="58" height="28" rx="9"/>
+        <rect class="chip" x="908" y="777" width="66" height="28" rx="9"/>
+        <text class="chip-text" x="804" y="796" text-anchor="middle">时间块</text>
+        <text class="chip-text" x="873" y="796" text-anchor="middle">桌宠</text>
+        <text class="chip-text" x="941" y="796" text-anchor="middle">系统提醒</text>
+        <text class="micro" x="770" y="820">免打扰、频率与去重由本地规则控制</text>
+      </g>
+
+      <path class="flow" d="M996 771H1034"/>
+      <g>
+        <rect class="card-green" x="1038" y="726" width="206" height="90" rx="18"/>
+        <text class="card-kicker" x="1060" y="750">USER ACTION</text>
+        <text class="card-title" x="1060" y="779">完成或调整计划</text>
+        <text class="card-copy" x="1060" y="801">进度同步 · 必要时重排</text>
+      </g>
+
+      <path class="flow" d="M1244 771H1282"/>
+      <g>
+        <rect class="card-warm" x="1286" y="713" width="238" height="116" rx="18"/>
+        <text class="card-kicker" x="1308" y="738">BEHAVIOR MEMORY</text>
+        <text class="card-title" x="1308" y="766">只学习显式保存</text>
+        <text class="card-copy" x="1308" y="790">按证据数与置信度门槛启用</text>
+        <rect class="branch-warm" x="1308" y="800" width="132" height="20" rx="10"/>
+        <text class="branch-text-warm" x="1374" y="814" text-anchor="middle">可停用 · 删除 · 清空</text>
+      </g>
+    </g>
+
+    <!-- Memory feedback loop -->
+    <path class="flow-loop" d="M1405 829V875H311V819"/>
+    <rect x="682" y="861" width="242" height="28" rx="14" fill="#f7f4e9" stroke="#dcc99e"/>
+    <text x="803" y="880" text-anchor="middle" fill="#86602c" font-size="12" font-weight="700">显式偏好回馈下一轮 Plan</text>
+  </g>
+</svg>

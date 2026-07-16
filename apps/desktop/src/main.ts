@@ -549,7 +549,7 @@ function controlCenterRoute(value: unknown): ControlCenterRoute | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const candidate = value as Record<string, unknown>;
   const route: ControlCenterRoute = {};
-  if (candidate.tab === "schedule" || candidate.tab === "daily" || candidate.tab === "agent" || candidate.tab === "preferences" || candidate.tab === "services") route.tab = candidate.tab;
+  if (candidate.tab === "schedule" || candidate.tab === "daily" || candidate.tab === "agent" || candidate.tab === "preferences" || candidate.tab === "services" || candidate.tab === "about") route.tab = candidate.tab;
   if (typeof candidate.taskId === "string" && candidate.taskId.trim()) route.taskId = candidate.taskId.trim().slice(0, 200);
   if (candidate.focus === "clarifications") route.focus = candidate.focus;
   return Object.keys(route).length ? route : undefined;

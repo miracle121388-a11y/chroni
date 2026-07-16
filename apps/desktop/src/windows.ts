@@ -12,7 +12,7 @@ type WindowSet = {
 };
 
 export type ControlCenterRoute = {
-  tab?: "schedule" | "daily" | "agent" | "preferences" | "services";
+  tab?: "schedule" | "daily" | "agent" | "preferences" | "services" | "about";
   taskId?: string;
   focus?: "clarifications";
 };
@@ -530,6 +530,7 @@ function appMenuTemplate(): MenuItemConstructorOptions[] {
   return [
     { label: "查看日程", click: () => showSchedule(true, true) },
     { label: "打开控制中心", click: () => showControlCenter() },
+    { label: "关于 Chroni", click: () => showControlCenter({ tab: "about" }) },
     { label: "检查更新", click: () => onCheckForUpdatesRequested?.() },
     { type: "separator" },
     { label: "显示桌宠", click: () => { if (onCompanionVisibilityRequested) onCompanionVisibilityRequested(true); else showPet(true); } },
