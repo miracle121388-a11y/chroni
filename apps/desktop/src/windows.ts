@@ -406,8 +406,10 @@ function createViewWindow(
   options: BrowserWindowConstructorOptions,
   onLoadFailed?: (error: unknown) => void,
 ): BrowserWindow {
+  const icon = windowsAppIconPath();
   const win = new BrowserWindow({
     backgroundColor: "#00000000",
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(app.getAppPath(), "preload.cjs"),
       contextIsolation: true,
@@ -433,6 +435,13 @@ function createViewWindow(
     if (!win.isDestroyed()) win.destroy();
   });
   return win;
+}
+
+function windowsAppIconPath(): string | undefined {
+  if (process.platform !== "win32") return undefined;
+  return app.isPackaged
+    ? join(process.resourcesPath, "icon.ico")
+    : join(app.getAppPath(), "build", "icon.ico");
 }
 
 function isAllowedExternalUrl(value: string): boolean {
@@ -522,6 +531,11 @@ function persistPetPlacement(win: BrowserWindow): void {
 }
 
 function createTrayIcon(): NativeImage {
+  const windowsIconPath = windowsAppIconPath();
+  if (windowsIconPath) {
+    const windowsIcon = nativeImage.createFromPath(windowsIconPath);
+    if (!windowsIcon.isEmpty()) return windowsIcon;
+  }
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="8" fill="#243b53"/><path d="M8 17h9l-2 7 9-11h-9l2-6z" fill="#f8d66d"/></svg>`;
   return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
 }

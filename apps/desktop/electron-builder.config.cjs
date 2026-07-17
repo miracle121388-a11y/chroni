@@ -85,7 +85,10 @@ module.exports = {
     ],
   },
   win: {
-    icon: "build/icon.png",
+    icon: "build/icon.ico",
+    extraResources: [
+      { from: "build/icon.ico", to: "icon.ico" },
+    ],
     target: ["nsis", "portable"],
     requestedExecutionLevel: "asInvoker",
     verifyUpdateCodeSignature: hasCodeSigningCertificate,
@@ -103,6 +106,8 @@ module.exports = {
     deleteAppDataOnUninstall: false,
     differentialPackage: true,
     license: "../../LICENSE",
+    installerIcon: "build/icon.ico",
+    uninstallerIcon: "build/icon.ico",
   },
   portable: {
     artifactName: "Chroni-${version}-win-${arch}-portable.${ext}",

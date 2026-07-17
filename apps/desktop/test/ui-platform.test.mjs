@@ -47,6 +47,28 @@ test("every renderer starts and finishes loading at the shared 100% zoom", () =>
   assert.deepEqual(factors, [1, 1]);
 });
 
+test("Windows executables and development windows use the macOS hourglass artwork", async () => {
+  const builderSource = await readFile(resolve(desktopRoot, "electron-builder.config.cjs"), "utf8");
+  const windowsSource = await readFile(resolve(desktopRoot, "src", "windows.ts"), "utf8");
+  const iconSource = await readFile(resolve(desktopRoot, "build", "icon-source.svg"), "utf8");
+  const ico = await readFile(resolve(desktopRoot, "build", "icon.ico"));
+
+  assert.match(iconSource, /M358 290C358 411 512 414 512 512/);
+  assert.match(builderSource, /win:\s*\{[\s\S]*?icon:\s*"build\/icon\.ico"/);
+  assert.match(builderSource, /\{ from: "build\/icon\.ico", to: "icon\.ico" \}/);
+  assert.match(builderSource, /installerIcon:\s*"build\/icon\.ico"/);
+  assert.match(builderSource, /uninstallerIcon:\s*"build\/icon\.ico"/);
+  assert.match(windowsSource, /const icon = windowsAppIconPath\(\);/);
+  assert.match(windowsSource, /app\.isPackaged[\s\S]*?process\.resourcesPath, "icon\.ico"/);
+  assert.match(windowsSource, /app\.getAppPath\(\), "build", "icon\.ico"/);
+  assert.match(windowsSource, /const windowsIconPath = windowsAppIconPath\(\);[\s\S]*?nativeImage\.createFromPath\(windowsIconPath\)/);
+
+  assert.deepEqual([...ico.subarray(0, 4)], [0, 0, 1, 0]);
+  const imageCount = ico.readUInt16LE(4);
+  const sizes = Array.from({ length: imageCount }, (_, index) => ico[6 + index * 16] || 256);
+  assert.deepEqual(sizes, [16, 24, 32, 48, 64, 128, 256]);
+});
+
 test("renderer bundles local cross-platform fonts under the production CSP", async () => {
   const packageJson = JSON.parse(await readFile(resolve(desktopRoot, "package.json"), "utf8"));
   const stylesSource = await readFile(resolve(desktopRoot, "src", "renderer", "src", "styles.css"), "utf8");
