@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f8f4">
+    <meta name="description" content="Chroni 是一款面向 Windows 与 macOS 的本地优先桌面截止日期 Agent，把文件、截图和通知整理成今天可执行的计划。">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Chroni - 把截止事项变成今天的计划">
+    <meta property="og:description" content="拖入文件，提取任务，自动安排今天。Windows 与 macOS 可直接安装。">
+    <meta property="og:image" content="https://miracle121388-a11y.github.io/chroni/assets/daily-planner.png">
+    <meta property="og:url" content="https://miracle121388-a11y.github.io/chroni/">
+    <link rel="canonical" href="https://miracle121388-a11y.github.io/chroni/">
+    <link rel="icon" href="./assets/chroni-icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+    <title>Chroni - 本地 DDL 日程助手</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Chroni",
+        "applicationCategory": "ProductivityApplication",
+        "operatingSystem": "Windows 10, Windows 11, macOS 12 and later",
+        "downloadUrl": "https://github.com/miracle121388-a11y/chroni/releases/latest",
+        "softwareVersion": "0.1.4",
+        "license": "https://opensource.org/license/mit",
+        "description": "Local-first desktop deadline agent for turning files, screenshots and notices into actionable daily plans."
+      }
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <header class="site-header" aria-label="主导航">
+      <a class="brand" href="#top" aria-label="Chroni 首页">
+        <img src="./assets/chroni-icon.svg" width="34" height="34" alt="">
+        <span>Chroni</span>
+      </a>
+      <nav>
+        <a href="#workflow">如何使用</a>
+        <a href="#companion">桌宠交互</a>
+        <a href="#download">下载</a>
+        <a class="nav-source" href="https://github.com/miracle121388-a11y/chroni">源代码</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <img class="hero-image" src="./assets/daily-planner.png" alt="Chroni 每日任务时间轴，展示由 Agent 自动安排的工作块">
+        <div class="hero-wash" aria-hidden="true"></div>
+        <div class="hero-content">
+          <p class="eyebrow">本地优先的桌面截止日期 Agent</p>
+          <h1 id="hero-title">Chroni</h1>
+          <p class="hero-lead">把课程通知、项目文档和截图拖进来，Chroni 会提取截止事项、拆解步骤，并安排进今天真正可用的时间。</p>
+          <div class="hero-actions">
+            <a class="button button-primary" id="primary-download" href="https://github.com/miracle121388-a11y/chroni/releases/latest" data-download-kind="primary">获取最新版</a>
+            <a class="button button-secondary" href="#workflow">看看怎样工作</a>
+          </div>
+          <p class="compatibility"><span id="release-version">正在获取最新版本</span> · Windows 10/11 · macOS 12+ · 基础体验无需 API Key</p>
+        </div>
+        <a class="hero-next" href="#workflow">从一份通知开始 <span aria-hidden="true">↓</span></a>
+      </section>
+
+      <section class="workflow section" id="workflow" aria-labelledby="workflow-title">
+        <div class="section-heading">
+          <p class="eyebrow">三分钟开始</p>
+          <h2 id="workflow-title">你只负责把材料交给它</h2>
+          <p>Chroni 将输入、理解和执行连在一起，避免任务留在文件夹里无人处理。</p>
+        </div>
+        <ol class="steps">
+          <li>
+            <span class="step-number">01</span>
+            <h3>拖入材料</h3>
+            <p>支持文本、PDF、Word、Excel、日历和图片。扫描件与截图会先经过本地 OCR。</p>
+          </li>
+          <li>
+            <span class="step-number">02</span>
+            <h3>检查计划</h3>
+            <p>Agent 提取截止时间、交付物和约束，再生成可编辑的步骤、耗时与依赖。</p>
+          </li>
+          <li>
+            <span class="step-number">03</span>
+            <h3>照着今天做</h3>
+            <p>任务进入真实时长的时间轴；有冲突、临期或延期时，Chroni 会重新安排并提醒。</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="product-showcase section" aria-labelledby="showcase-title">
+        <div class="showcase-copy">
+          <p class="eyebrow">不是一张静态清单</p>
+          <h2 id="showcase-title">先判断风险，再安排今天</h2>
+          <p>Deadline Agent 会综合截止时间、剩余工时、依赖关系和每天容量，告诉你现在最值得推进的下一步。</p>
+          <ul class="feature-list">
+            <li>按真实耗时生成时间块</li>
+            <li>计划可拖动、缩放和重新排期</li>
+            <li>每次调整保留来源与执行记录</li>
+          </ul>
+        </div>
+        <figure class="showcase-media">
+          <img src="./assets/agent-workspace.png" loading="lazy" alt="Chroni Deadline Agent 工作台，显示风险、今日安排和计划覆盖率">
+          <figcaption>Deadline Agent 工作台</figcaption>
+        </figure>
+      </section>
+
+      <section class="companion section" id="companion" aria-labelledby="companion-title">
+        <div class="section-heading companion-heading">
+          <p class="eyebrow">一直在桌面，但不过度打扰</p>
+          <h2 id="companion-title">桌宠就是 Agent 的轻量入口</h2>
+          <p>点击查看日程，拖入文件开始识别；阅读、规划、提醒和完成都有自然的动作反馈。</p>
+        </div>
+        <div class="pet-states">
+          <figure>
+            <img src="./assets/pet-idle.png" loading="lazy" alt="Chroni 桌宠待机状态">
+            <figcaption><strong>安静陪伴</strong><span>在桌面待机</span></figcaption>
+          </figure>
+          <figure>
+            <img src="./assets/pet-study.png" loading="lazy" alt="Chroni 桌宠阅读文件状态">
+            <figcaption><strong>读取材料</strong><span>反馈处理进度</span></figcaption>
+          </figure>
+          <figure>
+            <img src="./assets/pet-drag.png" loading="lazy" alt="Chroni 桌宠被拖动状态">
+            <figcaption><strong>随手放置</strong><span>吸附屏幕边缘</span></figcaption>
+          </figure>
+          <figure>
+            <img src="./assets/pet-response.png" loading="lazy" alt="Chroni 桌宠点击回应状态">
+            <figcaption><strong>点击回应</strong><span>立即打开日程</span></figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="download section" id="download" aria-labelledby="download-title">
+        <div class="section-heading">
+          <p class="eyebrow">下载安装包就能用</p>
+          <h2 id="download-title">选择你的电脑</h2>
+          <p id="release-status" role="status" aria-live="polite">正在检查最新公开版本。</p>
+        </div>
+        <div class="download-options">
+          <article class="download-card is-recommended" data-platform="windows">
+            <p class="recommendation">Windows 推荐</p>
+            <h3>Windows 安装版</h3>
+            <p>适用于 Windows 10/11 x64，包含开始菜单与卸载入口。</p>
+            <a class="button button-primary download-link" id="windows-setup" href="https://github.com/miracle121388-a11y/chroni/releases/latest">下载安装版</a>
+            <span class="asset-meta" id="windows-setup-meta">打开最新版发布页</span>
+          </article>
+          <article class="download-card" data-platform="windows">
+            <p class="recommendation">无需安装</p>
+            <h3>Windows 便携版</h3>
+            <p>下载后直接运行，适合临时使用或没有安装权限的电脑。</p>
+            <a class="button button-secondary download-link" id="windows-portable" href="https://github.com/miracle121388-a11y/chroni/releases/latest">下载便携版</a>
+            <span class="asset-meta" id="windows-portable-meta">打开最新版发布页</span>
+          </article>
+          <article class="download-card" data-platform="macos">
+            <p class="recommendation">Intel 与 Apple 芯片</p>
+            <h3>macOS 通用版</h3>
+            <p>适用于 macOS 12 及以上版本，打开 DMG 后拖入“应用程序”。</p>
+            <a class="button button-secondary download-link" id="macos-dmg" href="https://github.com/miracle121388-a11y/chroni/releases/latest">下载 macOS 版</a>
+            <span class="asset-meta" id="macos-dmg-meta">打开最新版发布页</span>
+          </article>
+        </div>
+        <p class="download-help">系统出现安全提示？查看 <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/install-faq.md">安装问题解答</a>。也可核对发布页中的 SHA-256 校验文件。</p>
+      </section>
+
+      <section class="trust section" aria-labelledby="trust-title">
+        <div class="trust-copy">
+          <p class="eyebrow">数据边界清清楚楚</p>
+          <h2 id="trust-title">你的日程先留在你的电脑上</h2>
+          <p>日程、计划、偏好和执行记录默认保存在本机。不开启大模型也能使用基础提取；连接 DeepSeek 等兼容服务时，只有当前处理所需的内容会按配置发送。</p>
+        </div>
+        <div class="trust-links">
+          <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/privacy.md"><strong>隐私说明</strong><span>了解本地数据与模型调用边界</span></a>
+          <a href="https://github.com/miracle121388-a11y/chroni"><strong>开源代码</strong><span>查看实现、测试与构建工作流</span></a>
+          <a href="https://github.com/miracle121388-a11y/chroni/issues/new/choose"><strong>反馈问题</strong><span>提交使用体验或功能建议</span></a>
+        </div>
+      </section>
+
+      <section class="faq section" aria-labelledby="faq-title">
+        <div class="section-heading">
+          <p class="eyebrow">常见问题</p>
+          <h2 id="faq-title">开始前可能关心的事</h2>
+        </div>
+        <div class="faq-list">
+          <details>
+            <summary>一定要配置大模型 API Key 吗？</summary>
+            <p>不需要。结构清楚的文本和日期可以由本地规则完成基础提取；需要理解长文档、复杂描述或图片语义时，再连接 DeepSeek 等兼容服务。</p>
+          </details>
+          <details>
+            <summary>安装包里需要另外安装 Node.js 吗？</summary>
+            <p>不需要。公开安装包已经包含运行环境，普通用户下载对应系统版本后即可启动。</p>
+          </details>
+          <details>
+            <summary>为什么下载仍然来自 GitHub？</summary>
+            <p>官网负责识别系统并把你直接带到正确文件，GitHub 只在后台提供可追溯的安装包、校验文件和构建来源。</p>
+          </details>
+        </div>
+      </section>
+
+      <section class="final-cta section" aria-labelledby="final-title">
+        <img src="./assets/pet-study.png" loading="lazy" alt="">
+        <div>
+          <p class="eyebrow">从下一项截止任务开始</p>
+          <h2 id="final-title">少记一件事，多完成一步</h2>
+        </div>
+        <a class="button button-primary" id="final-download" href="https://github.com/miracle121388-a11y/chroni/releases/latest">获取 Chroni</a>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-brand">
+        <strong>Chroni</strong>
+        <span>Local-first desktop deadline agent.</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/miracle121388-a11y/chroni/releases/latest">全部版本</a>
+        <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/quick-start.md">使用指南</a>
+        <a href="https://github.com/miracle121388-a11y/chroni/blob/main/LICENSE">MIT License</a>
+      </div>
+      <span>© <span id="current-year">2026</span> Chroni contributors</span>
+    </footer>
+    <script src="./app.js" defer></script>
+  </body>
+</html>

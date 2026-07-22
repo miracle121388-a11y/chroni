@@ -4,6 +4,7 @@ node_modules/
 package-lock.json
 dist/
 dist-electron/
+artifacts/
 apps/desktop/dist/
 apps/desktop/dist-electron/
 *.tsbuildinfo

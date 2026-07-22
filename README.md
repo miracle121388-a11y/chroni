@@ -22,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="https://miracle121388-a11y.github.io/chroni/"><strong>产品主页</strong></a> ·
   <a href="#3-分钟上手">快速上手</a> ·
   <a href="./docs/user/quick-start.md">用户指南</a> ·
   <a href="#核心能力">核心能力</a> ·
