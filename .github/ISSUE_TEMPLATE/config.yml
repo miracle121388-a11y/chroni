@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: 安装与使用帮助
+    url: https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/quick-start.md
+    about: 第一次安装、无 Key 体验、模型配置和常见问题请先查看用户指南。
   - name: 私密报告安全问题
     url: https://github.com/miracle121388-a11y/chroni/security/advisories/new
     about: API Key、数据泄露、鉴权绕过或代码执行问题请使用私密渠道。

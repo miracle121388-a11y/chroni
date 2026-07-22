@@ -1,0 +1,69 @@
+name: 使用体验反馈
+description: 分享首次上手、安装、演示闭环或日常使用中的体验
+title: "[体验] "
+labels: ["feedback", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢体验 Chroni。请不要粘贴 API Key、真实通知、私人文件或未脱敏的本地数据。
+  - type: input
+    id: version
+    attributes:
+      label: Chroni 版本
+      placeholder: 例如 0.1.4
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 操作系统
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS Apple Silicon
+        - macOS Intel
+        - 其他
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: 反馈发生在哪个阶段？
+      options:
+        - 下载与安装
+        - 第一次启动
+        - 拖入或上传材料
+        - DDL 抽取与确认
+        - TaskPlan
+        - 今日计划
+        - 桌宠与提醒
+        - 模型配置
+        - 更新与卸载
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: 你原本想完成什么？
+    validations:
+      required: true
+  - type: textarea
+    id: experience
+    attributes:
+      label: 哪一步顺畅，哪一步让你困惑？
+      description: 尽量按操作顺序描述，不要附真实材料。
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: 你希望 Chroni 如何改进？
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已经移除 API Key、Token、真实日程、个人信息和私人文件内容。
+          required: true
