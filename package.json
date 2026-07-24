@@ -22,6 +22,7 @@
     "release:verify": "node scripts/verify-release-version.mjs",
     "release:checksums": "node scripts/generate-checksums.mjs",
     "site:build": "node scripts/build-product-site.mjs",
+    "site:check": "node scripts/build-product-site.mjs && node scripts/check-product-site.mjs",
     "check": "pnpm run typecheck && pnpm run test && pnpm run build",
     "dev:mac": "pnpm --filter @chroni/desktop run dev",
     "open:mac": "open -n /Applications/Chroni.app",

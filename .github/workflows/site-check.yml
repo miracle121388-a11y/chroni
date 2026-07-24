@@ -1,0 +1,42 @@
+name: Product Site Check
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - "scripts/build-product-site.mjs"
+      - "scripts/check-product-site.mjs"
+      - "docs/assets/**"
+      - "apps/desktop/build/icon-source.svg"
+      - "apps/desktop/src/renderer/src/assets/tongluv/frames/**"
+      - "zbpack.json"
+      - "package.json"
+      - ".github/workflows/site-check.yml"
+  pull_request:
+    paths:
+      - "site/**"
+      - "scripts/build-product-site.mjs"
+      - "scripts/check-product-site.mjs"
+      - "docs/assets/**"
+      - "apps/desktop/build/icon-source.svg"
+      - "apps/desktop/src/renderer/src/assets/tongluv/frames/**"
+      - "zbpack.json"
+      - "package.json"
+      - ".github/workflows/site-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Build and verify download site
+        run: node scripts/build-product-site.mjs && node scripts/check-product-site.mjs

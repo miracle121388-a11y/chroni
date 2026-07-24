@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://miracle121388-a11y.github.io/chroni/sitemap.xml
+Sitemap: https://getchroni.zeabur.app/sitemap.xml

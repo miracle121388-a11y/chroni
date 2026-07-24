@@ -1,0 +1,6 @@
+{
+  "app_dir": "/",
+  "build_command": "node scripts/build-product-site.mjs",
+  "output_dir": "dist/site",
+  "cache_dependencies": false
+}
