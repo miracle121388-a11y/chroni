@@ -109,7 +109,7 @@ test("managed connections use beta-specific status messages", async () => {
   const managed = {
     ...settings,
     mode: "managed",
-    baseUrl: "https://api-chroni.zeabur.app/v1",
+    baseUrl: "https://api-getchroni.zeabur.app/v1",
     apiKey: "beta-code",
     model: "chroni-beta",
   };

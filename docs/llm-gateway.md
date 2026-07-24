@@ -69,7 +69,7 @@ $bytes = New-Object byte[] 32
 未配置密钥时，服务仍会启动，但健康检查返回 `503` 并只列出缺失变量名：
 
 ```powershell
-Invoke-RestMethod https://api-chroni.zeabur.app/healthz
+Invoke-RestMethod https://api-getchroni.zeabur.app/healthz
 ```
 
 配置完成后应返回 `status: ok`。然后使用一个真实内测访问码验证：
@@ -82,7 +82,7 @@ $body = @{
   max_tokens = 32
 } | ConvertTo-Json -Depth 5
 Invoke-RestMethod `
-  -Uri https://api-chroni.zeabur.app/v1/chat/completions `
+  -Uri https://api-getchroni.zeabur.app/v1/chat/completions `
   -Method Post `
   -Headers $headers `
   -ContentType "application/json" `
