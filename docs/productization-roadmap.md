@@ -1,13 +1,13 @@
 # Chroni 产品化审计与路线图
 
-更新时间：2026-07-22
+更新时间：2026-07-24
 审计基线：Chroni `v0.1.4`
 
 ## 1. 本轮边界
 
 本轮目标是在不修改 Chroni 产品功能的前提下，降低普通用户的下载、安装、首次体验、模型配置、排错和反馈门槛。
 
-本轮不会新增 Relay Server、官方试用额度、登录、云同步、订阅、移动端，也不会修改现有 Agent、planner、risk、OCR、parser、桌宠、日程或提醒逻辑。官方试用模式需要真实后端、额度存储、限流、隐私政策和持续运维，不能只在客户端放一个入口，更不能内置服务商 API Key。
+初始产品化轮次没有新增 Relay Server、登录、云同步、订阅或移动端。2026-07-24 的后续内测轮次已增加真实 LLM Gateway：服务端托管 DeepSeek Key，客户端只持有可撤销访问码，并具备限流、超时、参数白名单、脱敏日志与健康检查。
 
 ## 2. 当前用户链路
 
@@ -18,7 +18,7 @@ GitHub Releases 下载
 -> 左键桌宠打开日程抽屉
 -> 在控制中心快速输入，或拖入文件/图片
 -> 本地解析与 OCR
--> 本地规则抽取，或用户配置的 OpenAI-compatible 模型增强抽取
+-> 本地规则抽取、Chroni 内测网关，或用户配置的 OpenAI-compatible 模型增强抽取
 -> 核对 DDL 与待确认项
 -> 检查并启用 TaskPlan
 -> Agent 生成今日时间块
@@ -34,6 +34,7 @@ GitHub Releases 下载
 | 首次启动 | 直接进入桌宠和控制中心 | 无应用内 onboarding，用户不知道第一步做什么 | 提供 3 分钟指南和可拖入示例材料 |
 | 无 API Key | 本地规则可处理结构明确的 DDL | README 提到能力，但体验边界不够集中 | 明确 local-only 路径、适用范围和验证方法 |
 | 用户自带 Key | 偏好 -> 高级 -> 大模型 API | 需要理解 Base URL、模型、费用和数据发送范围 | 独立模型模式指南和 DeepSeek 配置步骤 |
+| Chroni 内测 | 偏好 -> 高级 -> 智能模型服务 | 测试者不应接触 DeepSeek 主密钥 | Zeabur 网关、独立访问码、限流与脱敏日志 |
 | 材料确认 | 支持抽取预览、直接填入、待确认项 | 用户可能混淆预览与保存 | 快速指南中先预览、再填入、再确认 |
 | 今日计划入口 | 控制中心默认打开“每日任务” | 已符合主要入口目标，但需要说明 DDL 与每日任务的关系 | 在快速指南中固定操作顺序 |
 | Demo Mode | 没有隔离式应用内 Demo Mode | 录屏或试用需要自己准备材料 | 新增仓库级示例材料，不写入或污染用户数据 |
@@ -50,6 +51,7 @@ GitHub Releases 下载
 | 用户自带 LLM 配置 UI | `apps/desktop/src/renderer/src/main.tsx` 的偏好页 |
 | LLM 设置合并与环境变量优先级 | `apps/desktop/src/llm-settings.ts` |
 | OpenAI-compatible 请求 | `apps/desktop/src/llm-client.ts` |
+| 内测 LLM 网关 | `apps/gateway/`、`zbpack.chroni-api.json` |
 | API Key 安全存储 | `apps/desktop/src/main.ts`、`apps/desktop/src/store.ts` |
 | 文件解析、OCR 与抽取 | `apps/desktop/src/intake.ts` |
 | 桌宠拖入与动作反馈 | `apps/desktop/src/renderer/src/main.tsx`、`apps/desktop/src/shared/pet-actions.ts` |
@@ -68,12 +70,13 @@ GitHub Releases 下载
 
 ## 6. 无 Key 与模型模式现状
 
-当前产品实际有两种工作方式：
+当前产品实际有三种工作方式：
 
 1. 本地规则：不填写 Key，或关闭“启用 LLM 抽取”。结构明确的标题、日期和时间可以本地处理；复杂跨段语义能力有限。
-2. 用户自带 Key：使用 OpenAI-compatible 服务。Key 在支持的系统上通过 Electron `safeStorage` 加密，模型失败时回退本地规则。
+2. Chroni 内测：使用可撤销访问码调用 Zeabur 网关，网关固定 DeepSeek 模型并实施受控额度。
+3. 用户自带 Key：使用 OpenAI-compatible 服务。Key 在支持的系统上通过 Electron `safeStorage` 加密，模型失败时回退本地规则。
 
-当前没有官方试用额度，也没有 Chroni Relay。任何文档和推广内容都不应声称“注册送次数”“每日免费额度”或“无需 Key 使用官方模型”。
+内测额度不是无条件的公开免费额度。推广内容应明确“受邀内测”和限流边界，不应声称注册送次数或永久免费。
 
 ## 7. 三分钟核心闭环验收
 

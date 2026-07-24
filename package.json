@@ -15,6 +15,9 @@
     "build": "pnpm --filter @chroni/desktop run build",
     "typecheck": "pnpm --filter @chroni/desktop run typecheck",
     "test": "pnpm --filter @chroni/desktop run test",
+    "gateway:build": "pnpm --filter @chroni/gateway run build",
+    "gateway:test": "pnpm --filter @chroni/gateway run test",
+    "gateway:start": "pnpm --filter @chroni/gateway run start",
     "package:desktop": "pnpm --filter @chroni/desktop run package",
     "package:windows": "pnpm --filter @chroni/desktop run package:win",
     "package:macos": "pnpm --filter @chroni/desktop run package:mac",
@@ -23,7 +26,7 @@
     "release:checksums": "node scripts/generate-checksums.mjs",
     "site:build": "node scripts/build-product-site.mjs",
     "site:check": "node scripts/build-product-site.mjs && node scripts/check-product-site.mjs",
-    "check": "pnpm run typecheck && pnpm run test && pnpm run build",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run gateway:test && pnpm run build",
     "dev:mac": "pnpm --filter @chroni/desktop run dev",
     "open:mac": "open -n /Applications/Chroni.app",
     "stop:mac": "osascript -e 'quit app \"Chroni\"' || pkill -x Chroni || true"

@@ -9,6 +9,10 @@ import { validateTaskPlan } from "./agent/task-plan-validator.js";
 import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveLlmSettings } from "./llm-settings.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
 import { localFilePathFromText } from "./shared/local-file-input.js";
+import {
+  CHRONI_MANAGED_LLM_BASE_URL,
+  CHRONI_MANAGED_LLM_MODEL,
+} from "./shared/types.js";
 import { InputValidationError } from "./validation.js";
 import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyTask, DailyTaskColor, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
 
@@ -988,6 +992,7 @@ export class ChroniStore {
     const resolvedLlm = resolveLlmSettings(llm);
     const modelEnabled = resolvedLlm.enabled;
     const modelReady = modelEnabled && !!resolvedLlm.apiKey;
+    const managedModel = resolvedLlm.mode === "managed";
     const environmentConfigured = hasLlmEnvironmentConfiguration();
     return {
       parser: "ready",
@@ -999,18 +1004,20 @@ export class ChroniStore {
       modelEnabledOverride: llmEnabledEnvironmentOverride(),
       storagePath: this.filePath,
       privacy: modelEnabled
-        ? "日程、追问、计划和行为偏好保存在本机；启用 LLM 时，会发送日程识别所需文本片段（长文档可能分块覆盖全文）和选中的结构化偏好。"
+        ? managedModel
+          ? "日程、追问、计划和行为偏好保存在本机；启用内测智能服务时，解析后的必要文本片段和选中的结构化偏好会经 Chroni 网关发送到 DeepSeek，二进制原文件不会直接上传。"
+          : "日程、追问、计划和行为偏好保存在本机；启用 LLM 时，会把日程识别所需文本片段（长文档可能分块覆盖全文）和选中的结构化偏好发送到自定义模型服务。"
         : "日程和来源保存在本机，未启用 LLM 时不会发送到模型服务。",
       notes: [
         ...(this.#storageDiagnostic ? [this.#storageDiagnostic] : []),
         ...(this.#unreadableApiKeyProtected ? ["已保留暂时无法解密的 LLM API Key 密文；在系统安全存储恢复前不会覆盖。"] : []),
         "已支持文本、PDF、DOCX、XLSX、CSV、网页/结构化文本和图片 OCR 的本地抽取。",
         modelReady
-          ? `LLM 智能抽取已启用，当前模型：${resolvedLlm.model || "未设置"}${environmentConfigured ? "（环境变量优先）" : ""}。`
-          : "未配置 LLM API Key 时会使用本地规则抽取；配置后优先使用大模型抽取并自动回退。",
+          ? `${managedModel ? "Chroni 内测智能服务" : "LLM 智能抽取"}已启用，当前模型：${resolvedLlm.model || "未设置"}${environmentConfigured ? "（环境变量优先）" : ""}。`
+          : `未配置${managedModel ? "内测访问码" : " LLM API Key"}时会使用本地规则抽取；配置后优先使用大模型抽取并自动回退。`,
         this.secretCodec
-          ? "LLM API Key 使用操作系统安全存储加密。"
-          : "当前系统安全存储不可用，界面填写的 LLM API Key 仅在本次运行有效；可改用 CHRONI_LLM_API_KEY。",
+          ? `${managedModel ? "内测访问码" : "LLM API Key"}使用操作系统安全存储加密。`
+          : `当前系统安全存储不可用，界面填写的${managedModel ? "内测访问码" : " LLM API Key"}仅在本次运行有效；可改用 CHRONI_LLM_API_KEY。`,
         `${this.#state.sources.length} 条输入来源保存在本机，可在控制中心重新识别。`,
         this.#state.preferences.remindersEnabled
           ? `提醒已开启${this.#state.preferences.quietHoursEnabled ? `，勿扰时间 ${this.#state.preferences.quietHoursStart}-${this.#state.preferences.quietHoursEnd}` : ""}。`
@@ -1230,10 +1237,11 @@ function createDefaultPreferences(): ChroniPreferences {
     hotkey: "Ctrl+Shift+C",
     llm: {
       enabled: false,
+      mode: "managed",
       provider: "openai-compatible",
-      baseUrl: "https://api.deepseek.com",
+      baseUrl: CHRONI_MANAGED_LLM_BASE_URL,
       apiKey: "",
-      model: "deepseek-v4-flash",
+      model: CHRONI_MANAGED_LLM_MODEL,
     },
   };
 }
@@ -1290,6 +1298,8 @@ function normalizeChroniPreferences(value: unknown, llmValue: PersistedLlmSettin
   if (llmBoolean !== undefined && typeof llmBoolean !== "boolean") repaired += 1;
   const llmProvider = llm?.provider;
   if (llmProvider !== undefined && llmProvider !== "openai-compatible") repaired += 1;
+  const llmMode = llm?.mode;
+  if (llmMode !== undefined && llmMode !== "managed" && llmMode !== "custom") repaired += 1;
   const llmString = (field: "baseUrl" | "model", fallback: string): string => {
     const candidate = llm?.[field];
     if (candidate === undefined) return fallback;
@@ -1312,6 +1322,7 @@ function normalizeChroniPreferences(value: unknown, llmValue: PersistedLlmSettin
       hotkey,
       llm: {
         enabled: typeof llmBoolean === "boolean" ? llmBoolean : defaults.llm.enabled,
+        mode: llmMode === "managed" || llmMode === "custom" ? llmMode : llm ? "custom" : defaults.llm.mode,
         provider: "openai-compatible",
         baseUrl: llmString("baseUrl", defaults.llm.baseUrl),
         apiKey,

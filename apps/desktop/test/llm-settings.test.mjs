@@ -5,6 +5,7 @@ import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveL
 
 const persisted = {
   enabled: false,
+  mode: "custom",
   provider: "openai-compatible",
   baseUrl: "https://persisted.example/v1",
   apiKey: "persisted-key",
@@ -14,6 +15,7 @@ const persisted = {
 test("LLM environment variables override persisted settings without mutating them", () => {
   const resolved = resolveLlmSettings(persisted, {
     CHRONI_LLM_ENABLED: "1",
+    CHRONI_LLM_MODE: " managed ",
     CHRONI_LLM_BASE_URL: " https://api.deepseek.com/ ",
     CHRONI_LLM_API_KEY: " env-key ",
     CHRONI_LLM_MODEL: " deepseek-v4-flash ",
@@ -21,6 +23,7 @@ test("LLM environment variables override persisted settings without mutating the
 
   assert.deepEqual(resolved, {
     enabled: true,
+    mode: "managed",
     provider: "openai-compatible",
     baseUrl: "https://api.deepseek.com/",
     apiKey: "env-key",
@@ -49,4 +52,9 @@ test("blank or unrelated environment values leave persisted settings intact", ()
   assert.deepEqual(resolveLlmSettings(persisted, environment), persisted);
   assert.equal(hasLlmEnvironmentConfiguration(environment), false);
   assert.equal(hasLlmEnvironmentConfiguration({}), false);
+});
+
+test("legacy settings without a mode remain custom connections", () => {
+  const { mode: _mode, ...legacy } = persisted;
+  assert.equal(resolveLlmSettings(legacy).mode, "custom");
 });

@@ -31,7 +31,7 @@ export async function requestChatCompletion(
 ): Promise<string> {
   assertCompleteSettings(settings);
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs ?? 25_000;
+  const timeoutMs = options.timeoutMs ?? 75_000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await (options.fetchImpl ?? fetch)(`${normalizeBaseUrl(settings.baseUrl)}/chat/completions`, {
@@ -77,18 +77,25 @@ export async function testLlmConnection(settings: ChroniLlmSettings, options: Om
       ...options,
       body: { temperature: 0, max_tokens: 32 },
     });
-    return { ok: true, message: `连接成功，模型 ${settings.model} 可以正常响应。` };
+    return {
+      ok: true,
+      message: settings.mode === "managed"
+        ? "Chroni 内测智能服务可以正常响应。"
+        : `连接成功，模型 ${settings.model} 可以正常响应。`,
+    };
   } catch (error) {
     const failure = error instanceof LlmRequestError
       ? error
       : new LlmRequestError("network", "无法连接模型服务，请检查 API 地址和网络。");
-    return { ok: false, kind: failure.kind, message: connectionMessage(failure) };
+    return { ok: false, kind: failure.kind, message: connectionMessage(failure, settings.mode ?? "custom") };
   }
 }
 
 function assertCompleteSettings(settings: ChroniLlmSettings): void {
   if (!settings.baseUrl.trim()) throw new LlmRequestError("configuration", "请先填写 API 地址。");
-  if (!settings.apiKey.trim()) throw new LlmRequestError("configuration", "请先填写 API Key。");
+  if (!settings.apiKey.trim()) {
+    throw new LlmRequestError("configuration", settings.mode === "managed" ? "请先填写内测访问码。" : "请先填写 API Key。");
+  }
   if (!settings.model.trim()) throw new LlmRequestError("configuration", "请先填写模型名称。");
 }
 
@@ -112,15 +119,19 @@ function kindForStatus(status: number): LlmRequestFailureKind {
 }
 
 function requestFailureMessage(kind: LlmRequestFailureKind): string {
-  if (kind === "authentication") return "API Key 无效或没有模型访问权限。";
+  if (kind === "authentication") return "访问凭据无效或没有模型访问权限。";
   if (kind === "model") return "API 地址或模型名称不可用，请检查配置。";
   if (kind === "rate_limit") return "模型服务正忙或额度不足，请稍后重试。";
   return "模型服务响应异常，请稍后重试。";
 }
 
-function connectionMessage(error: LlmRequestError): string {
+function connectionMessage(error: LlmRequestError, mode: ChroniLlmSettings["mode"]): string {
   if (error.kind === "configuration") return error.message;
-  if (error.kind === "authentication") return "API Key 无效或没有模型访问权限，请检查后重试。";
+  if (error.kind === "authentication") {
+    return mode === "managed"
+      ? "内测访问码无效或已失效，请检查后重试。"
+      : "API Key 无效或没有模型访问权限，请检查后重试。";
+  }
   if (error.kind === "model") return "API 地址或模型名称不可用，请检查后重试。";
   if (error.kind === "rate_limit") return "模型服务正忙或额度不足，请稍后重试。";
   if (error.kind === "timeout") return "连接模型服务超时，请稍后重试。";

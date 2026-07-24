@@ -121,9 +121,13 @@ export function validatePreferencesPatch(value: unknown): ChroniPreferencesPatch
   if (patch.hotkey !== undefined) result.hotkey = boundedString(patch.hotkey, "hotkey", 100);
   if (patch.llm !== undefined) {
     const llm = record(patch.llm, "llm");
-    knownKeys(llm, ["enabled", "provider", "baseUrl", "apiKey", "model"], "llm");
+    knownKeys(llm, ["enabled", "mode", "provider", "baseUrl", "apiKey", "model"], "llm");
     result.llm = {};
     if (llm.enabled !== undefined) result.llm.enabled = booleanValue(llm.enabled, "llm.enabled");
+    if (llm.mode !== undefined) {
+      if (llm.mode !== "managed" && llm.mode !== "custom") fail("llm.mode must be managed or custom.");
+      result.llm.mode = llm.mode;
+    }
     if (llm.provider !== undefined) {
       if (llm.provider !== "openai-compatible") fail("llm.provider must be openai-compatible.");
       result.llm.provider = llm.provider;
@@ -137,9 +141,9 @@ export function validatePreferencesPatch(value: unknown): ChroniPreferencesPatch
 
 export function validateLlmSettings(value: unknown): ChroniLlmSettings {
   const llm = validatePreferencesPatch({ llm: value }).llm;
-  if (!llm || typeof llm.enabled !== "boolean" || llm.provider !== "openai-compatible"
+  if (!llm || typeof llm.enabled !== "boolean" || (llm.mode !== "managed" && llm.mode !== "custom") || llm.provider !== "openai-compatible"
     || typeof llm.baseUrl !== "string" || typeof llm.apiKey !== "string" || typeof llm.model !== "string") {
-    fail("llm settings must include enabled, provider, baseUrl, apiKey, and model.");
+    fail("llm settings must include enabled, mode, provider, baseUrl, apiKey, and model.");
   }
   return llm as ChroniLlmSettings;
 }

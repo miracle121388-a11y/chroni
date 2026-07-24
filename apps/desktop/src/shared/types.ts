@@ -495,9 +495,16 @@ export type ChroniPreferencesPatch = Partial<Omit<ChroniPreferences, "llm">> & {
 };
 
 export type ChroniLlmProvider = "openai-compatible";
+export type ChroniLlmMode = "managed" | "custom";
+
+export const CHRONI_MANAGED_LLM_BASE_URL = "https://api-chroni.zeabur.app/v1";
+export const CHRONI_MANAGED_LLM_MODEL = "chroni-beta";
+export const CHRONI_CUSTOM_LLM_BASE_URL = "https://api.deepseek.com";
+export const CHRONI_CUSTOM_LLM_MODEL = "deepseek-v4-flash";
 
 export type ChroniLlmSettings = {
   enabled: boolean;
+  mode: ChroniLlmMode;
   provider: ChroniLlmProvider;
   baseUrl: string;
   apiKey: string;

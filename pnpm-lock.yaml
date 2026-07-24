@@ -82,6 +82,15 @@ importers:
         specifier: ^9.0.10
         version: 9.0.10
 
+  apps/gateway:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.2
+        version: 25.9.4
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
 packages:
 
   '@electron-internal/extract-zip@1.0.4':

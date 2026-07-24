@@ -76,11 +76,11 @@ type TesseractModule = {
   };
 };
 
-export async function processIntake(payload: IntakePayload, store: ChroniStore): Promise<IntakeResult> {
+export async function processIntake(payload: IntakePayload, store: ChroniStore, options: Pick<ExtractOptions, "referenceNow"> = {}): Promise<IntakeResult> {
   const pastedFilePath = payload.kind === "text" ? localFilePathFromText(payload.text) : undefined;
   if (pastedFilePath) store.discardPathOnlyTextIntake(pastedFilePath);
   store.setCompanion("processing", "正在识别 DDL...");
-  const result = await extractPayload(payload, { llm: store.llmSettings() });
+  const result = await extractPayload(payload, { ...options, llm: store.llmSettings() });
   if (!result.ok) {
     let clarificationSnapshot;
     let firstQuestion = "";

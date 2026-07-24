@@ -1027,7 +1027,11 @@ test("intake persists model tasks, detailed plans, and pending clarifications to
       return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }), { status: 200 });
     };
     try {
-      const result = await processIntake({ kind: "text", text: "7月20日 23:59 提交课程报告，提交课程报告 PDF 到课程平台。\n英语展示日期：7月22日下午第二节课，需要英文 PPT。" }, store);
+      const result = await processIntake(
+        { kind: "text", text: "7月20日 23:59 提交课程报告，提交课程报告 PDF 到课程平台。\n英语展示日期：7月22日下午第二节课，需要英文 PPT。" },
+        store,
+        { referenceNow: new Date(2026, 6, 12, 12, 0) },
+      );
 
       assert.equal(result.ok, true);
       assert.equal(result.snapshot.items.length, 1);
@@ -1275,6 +1279,7 @@ test("DeepSeek extraction processes every source independently", async () => {
       ],
     }, {
       llm: { enabled: true, provider: "openai-compatible", baseUrl: "https://api.deepseek.com", apiKey: "sk-test-only", model: "deepseek-v4-flash" },
+      referenceNow: new Date(2026, 6, 12, 12, 0),
     });
 
     assert.equal(result.ok, true);
@@ -1312,6 +1317,7 @@ test("local rules fill deadlines that the model missed within the same source", 
       }],
     }, {
       llm: { enabled: true, provider: "openai-compatible", baseUrl: "https://api.deepseek.com", apiKey: "sk-test-only", model: "deepseek-v4-flash" },
+      referenceNow: new Date(2026, 6, 12, 12, 0),
     });
 
     assert.equal(result.ok, true);

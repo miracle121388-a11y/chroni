@@ -42,16 +42,15 @@
 
 这条路径使用本地规则，不会调用模型服务。示例中的“明天”按电脑当前时区计算；如果临近午夜，请核对最终日期。
 
-## 可选：连接 DeepSeek
+## 可选：连接智能模型
 
 复杂通知、跨段要求和图片 OCR 文本更适合使用大模型增强。
 
-1. 在 DeepSeek 平台创建自己的 API Key。
-2. 打开“偏好 -> 高级 -> 大模型 API”。
-3. Base URL 填写 `https://api.deepseek.com`。
-4. 模型填写 DeepSeek 当前官方支持的模型 ID。
-5. 填写 Key，点击“保存并测试”。
-6. 测试成功后开启“启用 LLM 抽取”。
+1. 打开“偏好 -> 高级 -> 智能模型服务”。
+2. 受邀内测者选择“Chroni 内测”，填写邀请中提供的访问码。
+3. 自带 DeepSeek Key 的用户选择“自定义 API”，Base URL 填写 `https://api.deepseek.com`，模型填写 `deepseek-v4-flash`。
+4. 点击“保存并测试”。
+5. 测试成功后开启“启用 LLM 抽取”。
 
 详细边界见[模型使用方式](./model-modes.md)和[隐私说明](./privacy.md)。
 
