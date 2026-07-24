@@ -3,16 +3,18 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f5f6f2">
-    <meta name="description" content="下载 Chroni。把课程通知、项目文档和截图交给桌面上的 Deadline Agent，自动整理截止事项并安排今天。">
+    <meta name="theme-color" content="#f7f7f3">
+    <meta name="description" content="下载 Chroni。把课程通知、项目文档和截图交给桌面上的 Deadline Agent，自动提取截止事项、拆解任务并安排今天。">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Chroni">
-    <meta property="og:title" content="下载 Chroni - 桌面截止日期 Agent">
-    <meta property="og:description" content="拖入材料，提取任务，安排今天。支持 Windows 与 macOS。">
+    <meta property="og:title" content="下载 Chroni - 把截止事项变成今天的计划">
+    <meta property="og:description" content="拖入材料，Chroni 会读懂要求、拆解任务并排进今天。支持 Windows 与 macOS。">
     <meta property="og:image" content="https://getchroni.zeabur.app/assets/daily-planner.png">
     <meta property="og:url" content="https://getchroni.zeabur.app/">
     <link rel="canonical" href="https://getchroni.zeabur.app/">
     <link rel="icon" href="./assets/chroni-icon.svg" type="image/svg+xml">
+    <link rel="preload" href="./assets/pet-idle.png" as="image">
+    <link rel="preload" href="./assets/pet-study.png" as="image">
     <link rel="stylesheet" href="./styles.css">
     <title>下载 Chroni - 桌面截止日期 Agent</title>
     <script type="application/ld+json">
@@ -34,150 +36,318 @@
 
     <header class="site-header">
       <a class="brand" href="#top" aria-label="Chroni 首页">
-        <img src="./assets/chroni-icon.svg" width="32" height="32" alt="">
+        <img src="./assets/chroni-icon.svg" width="30" height="30" alt="">
         <span>Chroni</span>
       </a>
       <nav aria-label="主导航">
-        <a href="#experience">产品</a>
-        <a href="#agent">Agent</a>
+        <a href="#story">工作方式</a>
+        <a href="#planner">每日计划</a>
+        <a href="#companion">桌宠</a>
         <a href="#download">下载</a>
         <a class="nav-source" href="https://github.com/miracle121388-a11y/chroni">GitHub</a>
       </nav>
     </header>
 
     <main id="main">
-      <section class="hero" id="top" aria-labelledby="hero-title">
-        <img class="hero-background" src="./assets/daily-planner.png" alt="Chroni 每日任务时间轴，展示 Agent 自动规划的工作块">
-        <div class="hero-overlay" aria-hidden="true"></div>
-        <div class="hero-content">
-          <p class="overline">Chroni for desktop</p>
-          <h1 id="hero-title">把截止事项，<br>变成今天的计划。</h1>
-          <p class="hero-lead">文件、截图和通知拖进来，桌面上的 Deadline Agent 会提取任务、拆解步骤，并安排进真正可用的时间。</p>
-          <div class="detected-platform">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span id="detected-platform">正在识别你的设备</span>
+      <section class="hero-story" id="top" aria-labelledby="hero-title">
+        <div class="hero-stage">
+          <div class="hero-copy">
+            <p class="overline">Chroni for desktop</p>
+            <h1 id="hero-title">把截止事项，<br>变成今天的计划。</h1>
+            <p class="hero-lead">文件、截图和通知拖进来。Chroni 会读懂要求、拆解步骤，再把真正能执行的工作排进今天。</p>
+            <div class="hero-actions">
+              <a class="download-button primary-download" id="primary-download" href="#download">
+                <span id="primary-download-label">获取 Chroni</span>
+                <span class="button-icon" aria-hidden="true">↓</span>
+              </a>
+              <div>
+                <p class="download-meta" id="primary-download-meta">v0.1.4 · Windows 与 macOS</p>
+                <span class="detected-platform" id="detected-platform">正在识别你的设备</span>
+              </div>
+            </div>
+            <p class="mobile-desktop-note">Chroni 是桌面应用，请在 Windows 或 macOS 电脑上下载。</p>
           </div>
-          <a class="download-button primary-download" id="primary-download" href="#download">
-            <span id="primary-download-label">获取 Chroni</span>
-            <span class="download-arrow" aria-hidden="true">↓</span>
-          </a>
-          <p class="download-meta" id="primary-download-meta">v0.1.4 · Windows 与 macOS</p>
-          <a class="text-link" href="#download">查看其他版本与系统要求</a>
+
+          <div class="hero-product-stage" aria-label="Chroni 将课程通知转化为每日计划的过程">
+            <article class="notice-card" id="hero-notice">
+              <div class="notice-source">
+                <span class="source-mark" aria-hidden="true">课</span>
+                <div><strong>软件工程课程群</strong><span>项目验收通知</span></div>
+                <time>09:42</time>
+              </div>
+              <p>请各组在 <mark data-field="deadline">7 月 30 日 23:59 前</mark>完成最终提交。</p>
+              <p>材料包括 <mark data-field="deliverables">源码、README PDF</mark>，统一上传至<mark data-field="method">课程平台</mark>。</p>
+              <p class="notice-risk"><mark data-field="risk">请提前完成最终测试</mark>，逾期不再开放入口。</p>
+            </article>
+
+            <div class="hero-mascot" aria-hidden="true">
+              <div class="mascot-bubble" id="hero-bubble">把通知拖给我就好。</div>
+              <div class="mascot-images">
+                <img class="mascot-frame mascot-idle" src="./assets/pet-idle.png" alt="">
+                <img class="mascot-frame mascot-reading" src="./assets/pet-study.png" alt="">
+                <img class="mascot-frame mascot-reminding" src="./assets/pet-response.png" alt="">
+              </div>
+            </div>
+
+            <aside class="extraction-panel" id="hero-extraction" aria-label="Chroni 提取的任务信息">
+              <div class="panel-status"><span aria-hidden="true">✓</span> 已找到可执行任务</div>
+              <dl>
+                <div><dt>截止时间</dt><dd>7 月 30 日 23:59</dd></div>
+                <div><dt>提交物</dt><dd>源码 / README PDF</dd></div>
+                <div><dt>提交方式</dt><dd>课程平台</dd></div>
+                <div><dt>风险</dt><dd>需要提前完成最终测试</dd></div>
+              </dl>
+            </aside>
+
+            <figure class="hero-window" id="hero-window">
+              <div class="window-bar">
+                <span class="window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
+                <strong>Chroni · 每日任务</strong>
+                <span class="window-state">Agent 已排程</span>
+              </div>
+              <div class="window-viewport">
+                <img src="./assets/daily-planner.png" alt="Chroni 每日任务界面，任务按照真实时长排列">
+                <div class="planner-insight">今天先完成核心功能，明晚进行最终测试。</div>
+              </div>
+            </figure>
+          </div>
+
+          <div class="hero-progress" aria-hidden="true">
+            <span>通知</span><i></i><span>理解</span><i></i><span>计划</span><i></i><span>提醒</span>
+          </div>
+          <a class="hero-next" href="#story">滚动，看它怎样工作 <span aria-hidden="true">↓</span></a>
         </div>
-        <div class="hero-companion" aria-label="Chroni 桌宠">
-          <img src="./assets/pet-study.png" alt="Chroni 桌宠正在阅读材料">
-          <span>文件交给我，计划留给你。</span>
-        </div>
-        <a class="hero-next" href="#experience">看看它怎样工作 <span aria-hidden="true">↓</span></a>
       </section>
 
       <section class="release-bar" aria-label="发布信息">
-        <div>
-          <span class="release-label">当前版本</span>
-          <strong id="release-version">v0.1.4</strong>
-        </div>
-        <div>
-          <span class="release-label">支持平台</span>
-          <strong>Windows · macOS</strong>
-        </div>
-        <div>
-          <span class="release-label">数据方式</span>
-          <strong>Local-first</strong>
-        </div>
+        <div><span>当前版本</span><strong id="release-version">v0.1.4</strong></div>
+        <div><span>支持平台</span><strong>Windows · macOS</strong></div>
+        <div><span>数据方式</span><strong>Local-first</strong></div>
         <a href="#download">全部下载选项 <span aria-hidden="true">→</span></a>
       </section>
 
-      <section class="experience section" id="experience" aria-labelledby="experience-title">
-        <div class="section-intro">
-          <p class="overline">From notice to action</p>
-          <h2 id="experience-title">不只是记住截止时间，<br>而是知道现在做什么。</h2>
-          <p>Chroni 把信息提取、任务拆解、每日排程和桌面提醒连在同一个闭环里。</p>
-        </div>
-        <figure class="product-frame">
-          <div class="frame-toolbar" aria-hidden="true">
-            <span></span><span></span><span></span>
-            <strong>每日任务</strong>
+      <section class="clarity-story" id="story" aria-labelledby="story-title">
+        <div class="clarity-stage">
+          <div class="section-heading clarity-heading">
+            <p class="overline">From notice to action</p>
+            <h2 id="story-title">不是把文字搬进日历。<br>是先理解，再行动。</h2>
           </div>
-          <img src="./assets/daily-planner.png" alt="Chroni 每日任务界面，时间块按照真实时长排列">
-          <figcaption>每日任务 · 真实时长时间轴</figcaption>
-        </figure>
-        <div class="experience-points">
-          <article>
-            <span>01</span>
-            <h3>材料直接拖入</h3>
-            <p>文本、PDF、Word、Excel、日历和图片进入同一条处理流程。</p>
-          </article>
-          <article>
-            <span>02</span>
-            <h3>Agent 先做判断</h3>
-            <p>提取截止时间、交付物与约束，明确的信息不会反复追问。</p>
-          </article>
-          <article>
-            <span>03</span>
-            <h3>计划落到今天</h3>
-            <p>按耗时与风险安排时间块，冲突和延期发生后可重新规划。</p>
-          </article>
+
+          <div class="clarity-scene" aria-label="多种材料被整理为结构化任务">
+            <div class="source-stack" aria-label="输入材料">
+              <article class="source-sheet source-chat">
+                <span>课程群</span>
+                <strong>周五前提交选题与分工</strong>
+                <p>别忘记附上成员名单。</p>
+              </article>
+              <article class="source-sheet source-pdf">
+                <span>project-brief.pdf</span>
+                <strong>最终验收要求</strong>
+                <p>演示视频 · README · 源码</p>
+              </article>
+              <article class="source-sheet source-mail">
+                <span>新邮件</span>
+                <strong>实习申请材料</strong>
+                <p>7 月 28 日 18:00 截止</p>
+              </article>
+              <article class="source-sheet source-shot">
+                <span>截图</span>
+                <strong>组会时间调整</strong>
+                <p>周四 14:00–16:00</p>
+              </article>
+            </div>
+
+            <div class="clarity-mascot" aria-hidden="true">
+              <img src="./assets/pet-study.png" alt="">
+              <span>我先找出真正需要行动的部分。</span>
+            </div>
+
+            <div class="evidence-flow" aria-hidden="true">
+              <span>7 月 28 日 18:00</span>
+              <span>README · 源码</span>
+              <span>课程平台</span>
+            </div>
+
+            <div class="structured-result">
+              <header><span>提取结果</span><strong>3 项任务</strong></header>
+              <article>
+                <time>7 月 28 日 · 18:00</time>
+                <strong>提交实习申请材料</strong>
+                <span>来源：邮件</span>
+              </article>
+              <article>
+                <time>7 月 30 日 · 23:59</time>
+                <strong>完成项目最终提交</strong>
+                <span>源码 / README / 演示视频</span>
+              </article>
+              <article class="fixed-event">
+                <time>周四 · 14:00</time>
+                <strong>参加项目组会</strong>
+                <span>固定时间 · 2 小时</span>
+              </article>
+            </div>
+          </div>
+          <p class="scene-caption">来源证据会被保留。明确任务先进入计划，次要缺失信息稍后再确认。</p>
         </div>
       </section>
 
-      <section class="agent-band" id="agent" aria-labelledby="agent-title">
+      <section class="planner-section section" id="planner" aria-labelledby="planner-title">
+        <div class="section-heading planner-heading">
+          <p class="overline">Daily planner</p>
+          <h2 id="planner-title">空闲时间不会自己出现。<br>Chroni 会把任务放进去。</h2>
+          <p>固定事件先占位，Agent 再按截止时间、依赖和预计耗时安排任务。发生冲突时，同一个任务会被移动，而不是重新创建。</p>
+        </div>
+
+        <div class="planner-build-scene" data-reveal>
+          <aside class="task-pool">
+            <header><span>待安排</span><strong>3</strong></header>
+            <article class="pool-task task-database"><i></i><div><strong>数据库作业</strong><span>90 分钟 · 明天截止</span></div></article>
+            <article class="pool-task task-readme"><i></i><div><strong>整理 README</strong><span>45 分钟 · 后天截止</span></div></article>
+            <article class="pool-task task-review"><i></i><div><strong>最终测试</strong><span>60 分钟 · 高风险</span></div></article>
+          </aside>
+
+          <div class="day-timeline">
+            <header>
+              <div><span>周四</span><strong>7 月 16 日</strong></div>
+              <span class="schedule-health"><i></i>计划健康</span>
+            </header>
+            <div class="timeline-grid">
+              <span class="time-label time-14">14:00</span>
+              <span class="time-label time-16">16:00</span>
+              <span class="time-label time-18">18:00</span>
+              <span class="time-label time-20">20:00</span>
+              <span class="time-label time-22">22:00</span>
+              <i class="grid-line line-14"></i><i class="grid-line line-16"></i><i class="grid-line line-18"></i><i class="grid-line line-20"></i><i class="grid-line line-22"></i>
+              <article class="timeline-block fixed-block"><time>14:00–16:00</time><strong>项目组会</strong><span>固定事件</span></article>
+              <article class="timeline-block database-block"><time>19:00–20:30</time><strong>数据库作业</strong><span>Agent 规划</span></article>
+              <article class="timeline-block readme-block"><time>20:45–21:30</time><strong>整理 README</strong><span>Agent 规划</span></article>
+              <article class="timeline-block review-block"><time>21:30–22:30</time><strong>最终测试</strong><span>预留风险时间</span></article>
+              <span class="now-line"><i></i>18:24</span>
+            </div>
+          </div>
+
+          <aside class="planner-reason">
+            <span class="reason-label">Agent 决策</span>
+            <p>数据库作业更早截止，因此优先占用今晚完整的专注时段。</p>
+            <div><span>可用时间</span><strong>4 小时 30 分</strong></div>
+            <div><span>已安排</span><strong>3 小时 15 分</strong></div>
+          </aside>
+        </div>
+
+        <figure class="product-proof" data-reveal>
+          <div class="window-bar">
+            <span class="window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
+            <strong>真实产品界面</strong>
+            <span>每日任务</span>
+          </div>
+          <img src="./assets/daily-planner.png" alt="Chroni 桌面端每日任务完整界面">
+        </figure>
+      </section>
+
+      <section class="agent-band" aria-labelledby="agent-title">
         <div class="agent-inner">
-          <div class="agent-copy">
+          <div class="agent-copy" data-reveal>
             <p class="overline">Deadline Agent</p>
-            <h2 id="agent-title">它先替你看一遍。</h2>
-            <p>剩余工时够不够、哪个任务风险最高、今天还能安排多少，Agent 会在计划进入日程前完成一次复查。</p>
+            <h2 id="agent-title">计划不是一句建议。<br>它有依据，也能重排。</h2>
+            <p>剩余工时够不够、哪个任务风险最高、今天还能安排多少，Agent 会在日程生成前完成一次复查。</p>
             <ul>
-              <li>综合截止时间、依赖和每日容量</li>
-              <li>保留规划来源与结构化执行记录</li>
-              <li>模型不可用时仍有本地规则回退</li>
+              <li><span>01</span>综合截止时间、依赖和每日容量</li>
+              <li><span>02</span>保留规划来源与结构化执行记录</li>
+              <li><span>03</span>模型不可用时仍有本地规则回退</li>
             </ul>
           </div>
-          <figure class="agent-frame">
+          <figure class="agent-frame" data-reveal>
+            <div class="window-bar">
+              <span class="window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
+              <strong>Chroni · Agent</strong>
+              <span>计划覆盖率 100%</span>
+            </div>
             <img src="./assets/agent-workspace.png" alt="Chroni Deadline Agent 工作台，展示今日安排、计划覆盖率与高风险任务">
-            <figcaption>Deadline Agent 工作台</figcaption>
           </figure>
         </div>
       </section>
 
-      <section class="companion section" aria-labelledby="companion-title">
-        <div class="section-intro companion-intro">
+      <section class="companion-section section" id="companion" aria-labelledby="companion-title">
+        <div class="section-heading companion-heading">
           <p class="overline">Desktop companion</p>
-          <h2 id="companion-title">一直在桌面，<br>但不过度打扰。</h2>
-          <p>桌宠不是装饰，而是 Agent 留在桌面上的入口。点击查看日程，拖入文件开始识别，动作自然反馈当前状态。</p>
+          <h2 id="companion-title">它安静地待在桌面，<br>在需要的时候动一下。</h2>
+          <p>桌宠是 Agent 留在桌面上的入口。它的动作对应真实系统状态，不持续走动，也不会用夸张动画打断你。</p>
         </div>
-        <div class="companion-states">
-          <figure>
-            <img src="./assets/pet-idle.png" alt="Chroni 桌宠待机状态">
-            <figcaption><strong>安静待机</strong><span>需要时再出现</span></figcaption>
-          </figure>
-          <figure>
-            <img src="./assets/pet-study.png" alt="Chroni 桌宠阅读文件状态">
-            <figcaption><strong>读取材料</strong><span>动作反馈进度</span></figcaption>
-          </figure>
-          <figure>
-            <img src="./assets/pet-drag.png" alt="Chroni 桌宠拖动状态">
-            <figcaption><strong>随手放置</strong><span>记住屏幕位置</span></figcaption>
-          </figure>
-          <figure>
-            <img src="./assets/pet-response.png" alt="Chroni 桌宠点击回应状态">
-            <figcaption><strong>点击回应</strong><span>立即打开日程</span></figcaption>
-          </figure>
+
+        <div class="mascot-state-stage" data-mascot-stage>
+          <div class="state-events" role="tablist" aria-label="桌宠状态">
+            <button type="button" role="tab" aria-selected="true" data-state="idle">待机<span>今日计划已就绪</span></button>
+            <button type="button" role="tab" aria-selected="false" data-state="reading">阅读<span>收到课程通知</span></button>
+            <button type="button" role="tab" aria-selected="false" data-state="planning">规划<span>发现完整专注时段</span></button>
+            <button type="button" role="tab" aria-selected="false" data-state="reminder">提醒<span>距离任务开始 10 分钟</span></button>
+            <button type="button" role="tab" aria-selected="false" data-state="done">完成<span>今日完成 3 项任务</span></button>
+            <button type="button" role="tab" aria-selected="false" data-state="rest">休息<span>今天辛苦了</span></button>
+          </div>
+
+          <div class="state-mascot">
+            <span class="state-name">待机</span>
+            <img id="state-mascot-image" src="./assets/pet-idle.png" alt="Chroni 桌宠待机状态">
+            <div class="state-timeline" aria-hidden="true"><i></i></div>
+          </div>
+
+          <div class="state-response" aria-live="polite">
+            <span>Chroni</span>
+            <p id="state-message">今天的安排已经准备好，需要时点我就可以打开日程。</p>
+            <div class="response-preview">
+              <i aria-hidden="true"></i>
+              <div><strong id="state-preview-title">今日 3 项安排</strong><span id="state-preview-meta">19:00 开始第一项</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="journal-band" aria-labelledby="journal-title">
+        <div class="journal-inner">
+          <div class="journal-copy" data-reveal>
+            <p class="overline">Daily review</p>
+            <h2 id="journal-title">一天结束，计划变成记录。</h2>
+            <p>完成的时间块不会消失。Chroni 将任务进度、延后原因和明日安排收拢成可回顾的日终手账。</p>
+          </div>
+          <div class="journal-transform" data-reveal>
+            <div class="completed-stack" aria-label="今日完成记录">
+              <article><span>09:00</span><strong>发布说明终稿</strong><i>✓</i></article>
+              <article><span>10:45</span><strong>客户方案校对</strong><i>✓</i></article>
+              <article><span>19:00</span><strong>数据库作业</strong><i>✓</i></article>
+            </div>
+            <article class="journal-page">
+              <header><span>7 月 16 日 · 周四</span><strong>今日手账</strong></header>
+              <div class="journal-score"><strong>3 / 4</strong><span>今日任务已完成</span></div>
+              <p>完整专注时段利用得很好。最终测试延后到明晚，已保留 30 分钟缓冲。</p>
+              <footer><span>专注 4h 10m</span><span>明日 2 项</span></footer>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="trust-band" aria-labelledby="trust-title">
+        <div class="trust-inner">
+          <div>
+            <p class="overline">Local-first by design</p>
+            <h2 id="trust-title">日程先留在你的电脑上。</h2>
+          </div>
+          <p>原始文件、日程、计划、偏好和执行记录默认保存在本机。开启智能模型后，仅当前处理所需的文本会按配置发送，原始文件不会进入 Chroni 网关。</p>
+          <div class="trust-links">
+            <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/privacy.md">隐私说明 <span aria-hidden="true">→</span></a>
+            <a href="https://github.com/miracle121388-a11y/chroni">查看源代码 <span aria-hidden="true">→</span></a>
+          </div>
         </div>
       </section>
 
       <section class="download-section section" id="download" aria-labelledby="download-title">
-        <div class="section-intro download-intro">
+        <div class="section-heading download-heading">
           <p class="overline">Download Chroni</p>
-          <h2 id="download-title">选择你的电脑。</h2>
+          <h2 id="download-title">把下一项重要的事，<br>交给 Chroni。</h2>
           <p id="release-status" role="status" aria-live="polite">v0.1.4 已发布，页面正在检查是否有更新。</p>
         </div>
 
         <div class="download-options">
           <article class="download-card recommended" id="windows-setup-card">
-            <div class="card-topline">
-              <span>Windows</span>
-              <span class="recommended-label">推荐</span>
-            </div>
+            <div class="card-topline"><span>Windows</span><span class="recommended-label">推荐</span></div>
             <h3>Windows 安装版</h3>
             <p>适用于 Windows 10/11 x64。包含开始菜单、桌面快捷方式与标准卸载入口。</p>
             <dl>
@@ -191,10 +361,7 @@
           </article>
 
           <article class="download-card" id="macos-card">
-            <div class="card-topline">
-              <span>macOS</span>
-              <span>Universal</span>
-            </div>
+            <div class="card-topline"><span>macOS</span><span>Universal</span></div>
             <h3>macOS 通用版</h3>
             <p>适用于 macOS 12 及以上版本，同时兼容 Apple Silicon 与 Intel Mac。</p>
             <dl>
@@ -208,12 +375,8 @@
           </article>
 
           <article class="download-card compact-card" id="windows-portable-card">
-            <div class="card-topline">
-              <span>Windows</span>
-              <span>Portable</span>
-            </div>
-            <h3>Windows 便携版</h3>
-            <p>无需安装，适合没有安装权限或希望放在独立目录中使用的电脑。</p>
+            <div class="card-topline"><span>Windows</span><span>Portable</span></div>
+            <div><h3>Windows 便携版</h3><p>无需安装，适合没有安装权限或希望放在独立目录中使用的电脑。</p></div>
             <a class="text-download" id="windows-portable" href="https://github.com/miracle121388-a11y/chroni/releases/download/v0.1.4/Chroni-0.1.4-win-x64-portable.exe">
               下载便携版 <span aria-hidden="true">↓</span>
             </a>
@@ -222,59 +385,39 @@
         </div>
 
         <div class="install-note">
-          <div>
-            <strong>安装包由 GitHub Release 提供</strong>
-            <p>官网只负责匹配正确文件；每个公开版本保留构建来源、SHA-256 校验文件和完整版本记录。</p>
-          </div>
-          <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/install-faq.md">查看安装与安全提示 <span aria-hidden="true">→</span></a>
-        </div>
-      </section>
-
-      <section class="trust-band" aria-labelledby="trust-title">
-        <div class="trust-inner">
-          <div>
-            <p class="overline">Local-first by design</p>
-            <h2 id="trust-title">日程先留在你的电脑上。</h2>
-          </div>
-          <p>日程、计划、偏好和执行记录默认保存在本机。不开启大模型也能完成基础提取；连接 DeepSeek 等兼容服务时，只有当前处理所需的内容会按你的配置发送。</p>
-          <div class="trust-links">
-            <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/privacy.md">隐私说明 <span aria-hidden="true">→</span></a>
-            <a href="https://github.com/miracle121388-a11y/chroni">查看源代码 <span aria-hidden="true">→</span></a>
-          </div>
+          <div><strong>安装包由 GitHub Release 提供</strong><p>官网自动同步最新公开版本，并保留构建来源、SHA-256 校验文件和完整版本记录。</p></div>
+          <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/install-faq.md">安装与安全提示 <span aria-hidden="true">→</span></a>
         </div>
       </section>
 
       <section class="faq section" aria-labelledby="faq-title">
-        <div class="section-intro faq-intro">
+        <div class="section-heading faq-heading">
           <p class="overline">Before you install</p>
           <h2 id="faq-title">开始前可能关心的事。</h2>
         </div>
         <div class="faq-list">
           <details>
-            <summary>一定要配置大模型 API Key 吗？</summary>
-            <p>不需要。结构清楚的文本和日期可由本地规则完成基础提取；需要理解长文档、复杂描述或图片语义时，再连接 DeepSeek 等兼容服务。</p>
+            <summary>一定要配置自己的大模型 API Key 吗？</summary>
+            <p>不需要。内测期间可使用 Chroni 内测访问码连接托管模型服务；也可以切换到自定义 API，使用自己的 DeepSeek 等兼容服务。</p>
           </details>
           <details>
-            <summary>需要另外安装 Node.js 或 pnpm 吗？</summary>
-            <p>不需要。公开安装包已经包含运行环境，普通用户下载对应系统版本后即可启动。</p>
+            <summary>文件会上传到 Chroni 服务器吗？</summary>
+            <p>文件解析、PDF 文本提取和图片 OCR 在桌面端完成。开启智能模型时，当前任务所需的提取文本会发送给所选模型服务，原始文件不会进入 Chroni 网关。</p>
           </details>
           <details>
-            <summary>为什么下载文件仍来自 GitHub？</summary>
-            <p>GitHub Release 提供公开可追溯的安装包、校验文件与构建来源；这个网站负责识别系统并把你直接带到正确文件。</p>
+            <summary>Windows 和 macOS 的功能一致吗？</summary>
+            <p>两端共享日程、Agent、每日计划和文件提取能力，并分别适配窗口、桌宠拖动、托盘与系统通知交互。</p>
           </details>
           <details>
-            <summary>系统拦截未签名安装包怎么办？</summary>
-            <p>当前公开版本可能触发 SmartScreen 或 Gatekeeper。只从本页下载，并按照安装 FAQ 核对文件名和 SHA-256；不要关闭系统全局安全机制。</p>
+            <summary>新版本怎样更新？</summary>
+            <p>本页会通过 GitHub Releases 自动读取最新正式版本。发布完成后，下载按钮会自动指向新的安装包。</p>
           </details>
         </div>
       </section>
 
       <section class="closing section" aria-labelledby="closing-title">
-        <img src="./assets/pet-study.png" alt="">
-        <div>
-          <p class="overline">Ready when you are</p>
-          <h2 id="closing-title">少记一件事，<br>多完成一步。</h2>
-        </div>
+        <img src="./assets/pet-wake.png" alt="Chroni 桌宠">
+        <div><p class="overline">Ready when you are</p><h2 id="closing-title">下一份通知，直接拖给我。</h2></div>
         <a class="download-button final-download" id="final-download" href="#download">
           <span id="final-download-label">获取 Chroni</span><span aria-hidden="true">↓</span>
         </a>
@@ -282,18 +425,15 @@
     </main>
 
     <footer>
-      <div class="footer-brand">
-        <strong>Chroni</strong>
-        <span>Local-first desktop deadline agent.</span>
-      </div>
+      <div class="footer-brand"><strong>Chroni</strong><span>Local-first Deadline Agent</span></div>
       <div class="footer-links">
-        <a href="https://github.com/miracle121388-a11y/chroni/releases/latest">全部版本</a>
-        <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/quick-start.md">使用指南</a>
-        <a href="https://github.com/miracle121388-a11y/chroni/issues/new/choose">反馈</a>
+        <a href="https://github.com/miracle121388-a11y/chroni">GitHub</a>
+        <a href="https://github.com/miracle121388-a11y/chroni/releases">Releases</a>
         <a href="https://github.com/miracle121388-a11y/chroni/blob/main/LICENSE">MIT License</a>
       </div>
-      <span>© <span id="current-year">2026</span> Chroni contributors</span>
+      <span>© <span id="current-year">2026</span> Chroni</span>
     </footer>
+
     <script src="./app.js" defer></script>
   </body>
 </html>

@@ -14,6 +14,9 @@ const assets = [
   ["apps/desktop/src/renderer/src/assets/tongluv/frames/study/0016.png", "assets/pet-study.png"],
   ["apps/desktop/src/renderer/src/assets/tongluv/frames/drag/0000.png", "assets/pet-drag.png"],
   ["apps/desktop/src/renderer/src/assets/tongluv/frames/pet/0016.png", "assets/pet-response.png"],
+  ["apps/desktop/src/renderer/src/assets/tongluv/frames/play/0016.png", "assets/pet-play.png"],
+  ["apps/desktop/src/renderer/src/assets/tongluv/frames/sleep/0013.png", "assets/pet-sleep.png"],
+  ["apps/desktop/src/renderer/src/assets/tongluv/frames/wake/0016.png", "assets/pet-wake.png"],
 ];
 
 if (!existsSync(source)) {
