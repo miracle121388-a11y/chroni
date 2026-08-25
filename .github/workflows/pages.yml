@@ -1,17 +1,8 @@
 name: Product Site
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "site/**"
-      - "scripts/build-product-site.mjs"
-      - "docs/assets/**"
-      - "apps/desktop/build/icon-source.svg"
-      - "apps/desktop/src/renderer/src/assets/tongluv/frames/**"
-      - "package.json"
-      - ".github/workflows/pages.yml"
+  # Zeabur is the primary deployment target. Enable GitHub Pages in the
+  # repository settings before manually running this optional backup deploy.
   workflow_dispatch:
 
 permissions:
