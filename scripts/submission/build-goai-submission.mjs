@@ -122,7 +122,8 @@ const fileCount = walk(packageDirectory).length;
 createZip();
 const zipHash = sha256(zipPath);
 writeFileSync(checksumPath, `${zipHash}  ${basename(zipPath)}\n`, "utf8");
-rmSync(stagingRoot, { recursive: true, force: true });
+verifyArtifactRoot();
+removePath(stagingRoot);
 
 console.log(`Created ${zipPath}`);
 console.log(`Files: ${fileCount}; ZIP bytes: ${statSync(zipPath).size}; SHA-256: ${zipHash}`);
@@ -202,7 +203,7 @@ function cleanObsoleteArtifacts() {
 
 function removeArtifact(target) {
   assertInside(target, artifactRoot);
-  rmSync(target, { recursive: true, force: true });
+  removePath(target);
 }
 
 function cleanStagingBase() {
@@ -210,7 +211,36 @@ function cleanStagingBase() {
   for (const entry of readdirSync(stagingBase, { withFileTypes: true })) {
     const target = resolve(stagingBase, entry.name);
     assertInside(target, stagingBase);
-    rmSync(target, { recursive: true, force: true });
+    removePath(target);
+  }
+}
+
+function removePath(target) {
+  if (!existsSync(target)) return;
+  const directory = statSync(target).isDirectory();
+  rmSync(target, { recursive: true, force: true });
+  if (existsSync(target) && process.platform === "win32") {
+    const command = directory
+      ? `[System.IO.Directory]::Delete('${powerShellQuote(target)}', $true)`
+      : `[System.IO.File]::Delete('${powerShellQuote(target)}')`;
+    const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
+      cwd: root,
+      stdio: "inherit",
+    });
+    if (result.status !== 0) throw new Error(`Windows artifact cleanup failed with exit code ${result.status}: ${target}`);
+  }
+  if (existsSync(target)) throw new Error(`Artifact cleanup did not persist: ${target}`);
+}
+
+function verifyArtifactRoot() {
+  const expected = new Set([basename(zipPath), basename(checksumPath)]);
+  const actual = readdirSync(artifactRoot).sort();
+  const extras = actual.filter((name) => !expected.has(name));
+  const missing = [...expected].filter((name) => !actual.includes(name));
+  if (extras.length || missing.length) {
+    throw new Error(
+      `Artifact directory is not canonical. Missing: ${missing.join(", ") || "none"}; extras: ${extras.join(", ") || "none"}`,
+    );
   }
 }
 
