@@ -48,6 +48,7 @@ Ground → Plan → Act → Verify → Adapt
 | 路线图与行业需求 | [09-roadmap-and-industry-needs.md](./09-roadmap-and-industry-needs.md) |
 | 一页纸 | [10-one-pager.md](./10-one-pager.md) |
 | 复赛评分审计 | [11-semifinal-judge-scorecard.md](./11-semifinal-judge-scorecard.md) |
+| v0.2.0 复赛更新说明 | [12-semifinal-update.md](./12-semifinal-update.md) |
 | Agent 能力契约 | [agent-capability-contracts.md](./agent-capability-contracts.md) |
 | 基线审计 | [audit-baseline.md](./audit-baseline.md) |
 | 威胁模型 | [../security/threat-model.md](../security/threat-model.md) |
@@ -61,13 +62,14 @@ pnpm run eval:goai
 pnpm run build:goai
 pnpm run goai:assets:check
 pnpm run notices:generate
+pnpm run submission:goai
 ```
 
 带真实模型的评测是显式 opt-in：`pnpm run eval:goai:model` 在没有凭据时不会访问网络。GOAI 安装包使用 `pnpm run package:goai:windows` 或 `pnpm run package:goai:macos` 构建。
 
 ## 当前事实边界
 
-- 仓库版本为 `0.1.4`。
+- 仓库版本为 `0.2.0`，本轮正式附件为 `Chroni_GOAI_2026_复赛提交.zip`。
 - 无 Key演示、Learning Mission、证据与检查点、60 条离线评测、脱敏证据导出和原始自研图标 GOAI 构建已经实现。
 - 项目不声称拥有自研基础模型、真实生产用户数、学校合作、学习成绩提升、收入、融资、已签名 Windows 安装包或已公证 macOS 安装包。
 - OCR 与真实模型的质量必须通过后续真实、获授权数据集继续验证；当前结果与未测项以评测报告和完成报告为准。

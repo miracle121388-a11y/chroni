@@ -14,8 +14,8 @@ The page therefore explained the feature list but did not visually demonstrate C
 
 ## Reusable product material
 
-- `chroni-daily-planner-v0.1.4.png`: real Daily Planner UI and time-duration blocks.
-- `chroni-agent-workspace-v0.1.4.png`: real Agent workspace and risk summary.
+- `chroni-daily-planner-v0.2.0.png`: real Daily Planner UI and time-duration blocks.
+- `chroni-agent-workspace-v0.2.0.png`: real Agent workspace and risk summary.
 - Tongluv PNG frames: idle, study, response, wake, play, and sleep states.
 - Existing release API integration: live GitHub Release metadata and installer URLs.
 - Existing static deployment: zero framework runtime and direct Zeabur static output.
@@ -67,4 +67,3 @@ The original page only disabled button transitions. The revised page fully handl
 - Cross-screen object travel is removed.
 - Timeline blocks and source evidence appear in final positions.
 - Every conclusion remains available as ordinary DOM text.
-

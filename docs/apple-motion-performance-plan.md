@@ -15,7 +15,7 @@ The build should continue to keep first-screen image transfer below the agreed p
 - The JavaScript bundle is deferred.
 - Non-Hero mascot state images are requested after first render.
 - Product sections use stable dimensions to prevent layout shift.
-- Release metadata loads asynchronously and falls back to bundled v0.1.4 data.
+- Release metadata loads asynchronously and falls back to bundled v0.2.0 data.
 
 ## Component boundaries
 
@@ -60,7 +60,7 @@ Before each public release:
 - JavaScript disabled: core product explanation and download links remain usable.
 - `prefers-reduced-motion: reduce`.
 - Slow 4G and 4x CPU throttling.
-- GitHub API unavailable: bundled release fallback still downloads v0.1.4.
+- GitHub API unavailable: bundled release fallback still downloads v0.2.0.
 
 ## Degradation
 
@@ -69,4 +69,3 @@ Before each public release:
 - Unsupported `IntersectionObserver` displays all content immediately.
 - Failed GitHub metadata requests keep direct fallback installer links.
 - Failed mascot preload affects only the selected optional state; idle remains available.
-

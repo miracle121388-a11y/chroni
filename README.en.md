@@ -6,7 +6,7 @@
 
 Chroni does not complete coursework for students. It turns course requirements into grounded goals, deliverables, success criteria, milestones, daily actions, output evidence, and checkpoints. Optional OpenAI-compatible models such as DeepSeek improve semantic understanding, while local validation, persistence, tools, and fallback retain authority.
 
-![Chroni Learning Mission workspace](./docs/assets/chroni-learning-mission-v0.1.4.png)
+![Chroni Learning Mission workspace](./docs/assets/chroni-learning-mission-v0.2.0.png)
 
 _Actual product UI with isolated synthetic demo data._
 
@@ -14,7 +14,7 @@ _Actual product UI with isolated synthetic demo data._
 
 ## Current version and three-minute path
 
-The repository package version is `0.1.4`. Public installer availability, signatures, and notarization status must be checked on [GitHub Releases](https://github.com/miracle121388-a11y/chroni/releases).
+The repository package version is `0.2.0`. Public installer availability, signatures, and notarization status must be checked on [GitHub Releases](https://github.com/miracle121388-a11y/chroni/releases).
 
 1. Install and start Chroni, then open **GOAI Demo** in the control center.
 2. Run scenario A to create a grounded database-course Learning Mission, TaskPlan, output evidence, checkpoint, daily blocks, and Agent trace without an API key.

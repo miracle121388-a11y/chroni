@@ -4,11 +4,30 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 
 ## [Unreleased]
 
+暂无未发布的用户可见变更。
+
+## [0.2.0] - 2026-08-25
+
 ### Added
 
-- 新增产品化审计、普通用户三分钟快速开始、安装 FAQ、模型模式、隐私、故障排查与帮助反馈文档。
-- 新增三组不含个人信息的 Demo 材料和小红书录屏发布计划，便于无 API Key 首次体验与公开演示。
-- 新增结构化体验反馈 Issue 模板，并在 README 集中用户帮助入口。
+- 新增 Learning Mission，将来源、目标、交付物、完成标准、里程碑、进度、风险、证据和阶段检查点统一建档。
+- 新增本地文件 SHA-256 产出证据、变更检测、阶段检查点、里程碑回写、风险重算和下一步调整。
+- 新增无 API Key、无网络依赖的隔离 GOAI Demo，覆盖明确材料、缺失截止时间和来源冲突三种路径。
+- 新增 60 条固定时钟合成评测、能力契约、脱敏证据导出、评测 runner/schema 与关键闭环测试。
+- 新增普通用户快速开始、安装 FAQ、模型模式、隐私、故障排查、帮助反馈与复赛更新说明。
+
+### Changed
+
+- 产品定位从桌宠 DDL 管理器升级为面向大学项目制学习的本地学习执行 Agent，形成 `Ground → Plan → Act → Verify → Adapt` 闭环。
+- 主动追问改为基础计划优先：先提取并规划可确定任务，仅在必需字段缺失或来源冲突时阻断。
+- 今日执行时间轴按真实时长布局，支持缩放、重叠分栏、相邻颜色区分、拖动调整和跨日回顾。
+- Windows 桌宠、日程抽屉和控制中心交互与 macOS 行为对齐，并加强跨屏移动边界与窗口定位。
+- README、产品下载页、安装包、Release Notes、真实截图和复赛材料统一到 `v0.2.0`。
+
+### Security
+
+- 强化压缩文档解析配额、路径穿越防护、密钥安全存储、本地 API 鉴权、日志脱敏和公开证据导出边界。
+- 正式复赛 ZIP 在生成前要求干净工作区，并写入提交 SHA、环境信息、安装包校验值和逐文件 SHA-256 清单。
 
 ## [0.1.4] - 2026-07-15
 
@@ -81,7 +100,8 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 发布标签现在必须与根工作区和桌面应用版本一致。
 - 生产包启用 Electron Fuses 和 ASAR 完整性校验。
 
-[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.3
 [0.1.2]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.2

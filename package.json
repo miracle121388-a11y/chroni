@@ -1,6 +1,6 @@
 {
   "name": "chroni-workspace",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "private": true,
   "description": "Chroni local-first learning execution agent workspace.",
   "license": "MIT",
@@ -38,8 +38,7 @@
     "marketing:xiaohongshu:verify": "node scripts/marketing/verify-xiaohongshu-launch.mjs",
     "marketing:xiaohongshu:package": "pnpm run check && node scripts/marketing/package-xiaohongshu-launch.mjs",
     "marketing:xiaohongshu": "pnpm run marketing:xiaohongshu:build && pnpm run marketing:xiaohongshu:verify && pnpm run marketing:xiaohongshu:package",
-    "submission:goai": "python scripts/submission/build_evidence_pdf.py && node scripts/submission/build-goai-judge-package.mjs",
-    "submission:goai:archive": "python scripts/submission/build_evidence_pdf.py && node scripts/submission/build-goai-attachment.mjs",
+    "submission:goai": "python scripts/submission/build_evidence_pdf.py && node scripts/submission/build-goai-submission.mjs",
     "check": "pnpm run typecheck && pnpm run test && pnpm run gateway:test && pnpm run build",
     "dev:mac": "pnpm --filter @chroni/desktop run dev",
     "open:mac": "open -n /Applications/Chroni.app",

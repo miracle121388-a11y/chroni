@@ -15,7 +15,7 @@
 
 ## 版本准备
 
-1. 同时更新根目录和 `apps/desktop/package.json` 中的版本。
+1. 同时更新根目录、`apps/desktop/package.json` 和 `apps/gateway/package.json` 中的版本。
 2. 将 `CHANGELOG.md` 的 `Unreleased` 内容移动到新版本标题下。
 3. 运行完整检查、版本校验和本机打包。
 
@@ -54,7 +54,7 @@ CHRONI_REQUIRE_NOTARIZATION=1
 ## 创建发布
 
 ```bash
-VERSION=v0.1.4
+VERSION=v0.2.0
 git tag -a "$VERSION" -m "Chroni $VERSION"
 git push origin "$VERSION"
 ```
@@ -69,10 +69,10 @@ git push origin "$VERSION"
 
 带连字符的版本，例如 `v0.2.0-beta.1`，会自动创建为 prerelease。手动运行工作流只生成 30 天 artifact，不会创建正式 Release。
 
-工作流完成后，用对应版本的 `docs/releases/` 文档替换自动生成的简略说明，并保留完整 changelog 链接：
+工作流会优先读取对应版本的 `docs/releases/<tag>.md` 作为正式说明；如文件不存在，才回退到 GitHub 自动生成说明。必要时可再次同步：
 
 ```bash
-gh release edit v0.1.4 --notes-file docs/releases/v0.1.4.md
+gh release edit v0.2.0 --notes-file docs/releases/v0.2.0.md
 ```
 
 ## 发布后验证
@@ -83,12 +83,12 @@ gh release edit v0.1.4 --notes-file docs/releases/v0.1.4.md
 - 下载全部 Release 产物，核对文件与 `SHA256SUMS.txt`。
 
 ```powershell
-$Version = "0.1.4"
+$Version = "0.2.0"
 Get-FileHash ".\Chroni-$Version-win-x64-setup.exe" -Algorithm SHA256
 ```
 
 ```bash
-VERSION="0.1.4"
+VERSION="0.2.0"
 shasum -a 256 -c SHA256SUMS.txt
 gh attestation verify "Chroni-${VERSION}-win-x64-setup.exe" --repo miracle121388-a11y/chroni
 ```

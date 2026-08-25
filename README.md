@@ -35,11 +35,11 @@
   <a href="#开发与验证">开发</a>
 </p>
 
-> **当前版本与评审路径：** 仓库版本为 `0.1.4`。打开控制中心的 **GOAI 演示**，无需 API Key 即可运行课程项目 Learning Mission、必要追问与多来源冲突三个隔离场景；三分钟操作、技术架构、机器生成评测和安全/IP 边界见 [GOAI 2026 评审索引](./docs/goai/00-submission-index.md)。安装包实际发布、签名与公证状态以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
+> **当前版本与评审路径：** 仓库版本为 `0.2.0`。打开控制中心的 **GOAI 演示**，无需 API Key 即可运行课程项目 Learning Mission、必要追问与多来源冲突三个隔离场景；三分钟操作、技术架构、机器生成评测和安全/IP 边界见 [GOAI 2026 评审索引](./docs/goai/00-submission-index.md)。安装包实际发布、签名与公证状态以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
 
 > **资产许可提示：** MIT 许可覆盖 Chroni 自研代码，并不自动覆盖仓库内全部字体、依赖和可选桌宠素材。GOAI 构建使用 `CHRONI_PET_ASSET_MODE=original`，不包含 XIAOTONG 帧或捐赠码；完整边界见 [第三方声明](./THIRD_PARTY_NOTICES.md) 与 [开源/IP 清单](./docs/goai/05-open-source-and-ip.md)。
 
-![Chroni 学习任务控制台，展示目标、交付物、完成标准、里程碑与产出证据](./docs/assets/chroni-learning-mission-v0.1.4.png)
+![Chroni 学习任务控制台，展示目标、交付物、完成标准、里程碑与产出证据](./docs/assets/chroni-learning-mission-v0.2.0.png)
 
 _真实产品界面，使用隔离演示数据：一条课程任务被组织为目标、交付物、完成标准、执行里程碑、产出证据与检查点。_
 
@@ -96,13 +96,13 @@ Chroni 不生成可冒充学生完成的作业，不把原始材料当成学习�
 
 任务不再只剩标题和截止时间。控制台将来源、目标、交付物、完成标准、执行里程碑、产出证据和阶段反馈放在同一条任务档案里。
 
-![Chroni Learning Mission 控制台](./docs/assets/chroni-learning-mission-v0.1.4.png)
+![Chroni Learning Mission 控制台](./docs/assets/chroni-learning-mission-v0.2.0.png)
 
 _产出文件只登记元数据和 SHA-256，不在状态文件中保存本地路径；原始课程材料也不会被计入成果证据。_
 
 ### 每日执行时间轴
 
-![Chroni 今日执行时间轴，展示 Agent 自动规划的学习行动块](./docs/assets/chroni-daily-planner-v0.1.4.png)
+![Chroni 今日执行时间轴，展示 Agent 自动规划的学习行动块](./docs/assets/chroni-daily-planner-v0.2.0.png)
 
 _任务按真实时长呈现，并支持拖拽重排、重叠任务分栏、时间轴缩放，以及日、多日、周、月回顾。_
 
@@ -110,7 +110,7 @@ _任务按真实时长呈现，并支持拖拽重排、重叠任务分栏、时�
 
 Agent 工作台聚焦三个问题：今天先做什么、哪些任务有风险、当前计划覆盖了多少。模型输出不会直接改写用户数据，必须先通过本地工具和约束校验。
 
-![Chroni 学习执行 Agent 工作台，展示覆盖率、风险和今日工作块](./docs/assets/chroni-agent-workspace-v0.1.4.png)
+![Chroni 学习执行 Agent 工作台，展示覆盖率、风险和今日工作块](./docs/assets/chroni-agent-workspace-v0.2.0.png)
 
 _学习执行 Agent 工作台：给出下一步、今日工作块、高风险任务和可审计的执行结果。_
 
@@ -394,7 +394,7 @@ Chroni
 | [本地 HTTP API](./docs/local-api.md) | 鉴权、端点、上传示例和安全边界。 |
 | [发布指南](./docs/releasing.md) | 版本、签名、公证、标签发布与发布后验证。 |
 | [小红书发布计划](./docs/marketing/xiaohongshu-launch-plan.md) | 15/30/60 秒脚本、截图清单、隐私检查和发布模板。 |
-| [v0.1.4 发布说明](./docs/releases/v0.1.4.md) | 当前公开版本的功能与交付内容。 |
+| [v0.2.0 发布说明](./docs/releases/v0.2.0.md) | 当前公开版本的功能、升级内容与交付边界。 |
 | [贡献指南](./CONTRIBUTING.md) | 开发约定、提交检查与 Pull Request 流程。 |
 | [安全策略](./SECURITY.md) | 漏洞报告方式与支持范围。 |
 | [更新记录](./CHANGELOG.md) | 用户可见的版本变化。 |

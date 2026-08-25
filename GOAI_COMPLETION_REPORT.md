@@ -4,7 +4,7 @@
 
 ## 1. 结论
 
-Chroni 0.1.4 已从“桌宠 DDL 管理器”升级为**面向大学项目制学习的本地学习执行 Agent**：
+Chroni 0.2.0 已从“桌宠 DDL 管理器”升级为**面向大学项目制学习的本地学习执行 Agent**：
 
 > 不替学生完成作业，而是把课程要求转化为可执行、可验证、可调整的学习过程。
 
@@ -31,7 +31,7 @@ GOAI SEMIFINAL BUILD: READY FOR SUBMISSION
 
 ## 3. 评测与工程结果
 
-评测生成时间：`2026-08-25T08:06:00.239Z`。数据集为 60 条固定时钟合成案例，时区 `Asia/Shanghai`，每例运行一次，不调用模型或网络。
+评测生成时间：`2026-08-25T09:55:29.559Z`。数据集为 60 条固定时钟合成案例，时区 `Asia/Shanghai`，每例运行一次，不调用模型或网络。
 
 | 指标 | 结果 |
 | --- | ---: |
@@ -45,10 +45,10 @@ GOAI SEMIFINAL BUILD: READY FOR SUBMISSION
 | Mission 创建 / 来源关联 | 100.0% / 100.0% |
 | Mission 交付物 / 完成标准 / 里程碑对齐 | 100.0% / 100.0% / 100.0% |
 | 证据 / 检查点持久化 / 里程碑回写 | 100.0% / 100.0% / 100.0% |
-| intake p50 / p95 | 28.34 ms / 55.42 ms |
-| Mission 生命周期 p50 / p95 | 46.06 ms / 53.89 ms |
-| 完整离线案例 p50 / p95 | 64.42 ms / 97.42 ms |
-| 抽样峰值 RSS | 77 MiB |
+| intake p50 / p95 | 27.97 ms / 57.47 ms |
+| Mission 生命周期 p50 / p95 | 42.79 ms / 55.01 ms |
+| 完整离线案例 p50 / p95 | 51.60 ms / 97.80 ms |
+| 抽样峰值 RSS | 76.6 MiB |
 | 离线成功率 | 100.0% |
 
 这些指标证明的是**合成数据上的确定性状态闭环**，不是 DeepSeek 准确率，也不代表真实学生学习成效、学术质量或真实 OCR 总体性能。原始逐例结果、数据集哈希、失败表和环境信息位于 `benchmarks/goai-v1/reports/latest.json`。
@@ -65,16 +65,13 @@ GOAI SEMIFINAL BUILD: READY FOR SUBMISSION
 | `pnpm run build:goai` | 扫描 219 个 renderer 文件，无受限 XIAOTONG 路径或栅格素材 |
 | `pnpm run notices:generate` | 66 个生产依赖及许可证条目 |
 | Windows package | NSIS 安装版与 portable 均在本机生成 |
-| PDF 视觉检查 | 8 页全部渲染检查，字体、表格、截图和分页无截断 |
+| PDF 视觉检查 | 9 页全部渲染检查，字体、表格、截图和分页无截断 |
 
 ## 5. 可运行产品
 
-| 文件 | 大小 | SHA-256 |
-| --- | ---: | --- |
-| `Chroni-0.1.4-win-x64-setup.exe` | 149,076,957 bytes | `21ca10e79fc6350a1f522cb7cd115e43b3c2cd1d84396c03249af602bdd6f1c2` |
-| `Chroni-0.1.4-win-x64-portable.exe` | 148,748,762 bytes | `afea6827d3c5efaf09400513454536f7d50d87b56c4567bc4f562299b5935c15` |
+正式复赛附件只携带推荐的 `Chroni-0.2.0-win-x64-setup.exe`，避免 Setup、Portable 与旧版本重复占用提交空间。安装包的实时大小与 SHA-256 写入附件内的 `06_可运行产品/安装与校验.md`，ZIP 自身校验值写入同级 `Chroni_GOAI_2026_复赛提交_SHA256.txt`。
 
-产物位于 `apps/desktop/dist-electron/`，校验清单为 `SHA256SUMS.txt`。两个 EXE 的 Authenticode 状态均为 `NotSigned`，Windows 可能显示 SmartScreen；材料没有把它描述为已签名产品。macOS universal 构建工作流已经配置，但本 Windows 主机没有伪造 macOS 产物。
+完整 Release 仍由原生 Windows 与 macOS runner 生成 Setup、Portable、Universal DMG/ZIP、更新元数据、综合校验和与 build provenance。当前本机 Windows 构建没有 Authenticode 签名，可能显示 SmartScreen；材料没有把它描述为已签名产品。macOS 工作流已经配置，但本 Windows 主机不会伪造 macOS 产物。
 
 ## 6. 三分钟演示
 
@@ -120,12 +117,12 @@ GOAI SEMIFINAL BUILD: READY FOR SUBMISSION
 
 ## 10. 版本状态
 
-- Branch：`feat/goai-2026`
-- Base HEAD：`68cd9a713f706437ce0c1a42dd47274478d0ae95`
-- Node.js：`v24.12.0`
-- pnpm：`11.19.0`
-- 工作区：dirty；当前附件包含经过校验的选定源文件与产物，不冒充已经推送的 GitHub Release。
-- 未收到 commit/push 指令，因此本轮没有擅自改写 Git 历史或发布远端版本。
+- Release 版本：`v0.2.0`。
+- 维护分支：`main`，正式材料在代码提交后生成，要求工作区为 clean。
+- 正式附件：`Chroni_GOAI_2026_复赛提交.zip`，不再保留旧版重复附件目录与 ZIP。
+- 精确 commit SHA、Node/pnpm 版本、平台和评测摘要由生成器写入附件根目录 `PROJECT_VERIFICATION.json`。
+- 附件内每个文件的 SHA-256 位于 `FILE_MANIFEST_SHA256.txt`，ZIP 自身校验值位于外部同名 `_SHA256.txt`。
+- Release Notes、README、下载页、安装包和截图统一到 `v0.2.0`；历史 `v0.1.4` 说明保持原样。
 
 ```text
 GOAI SEMIFINAL BUILD: READY FOR SUBMISSION

@@ -76,14 +76,14 @@ const assetDefinitions = [
   },
   {
     key: "daily-planner",
-    source: "docs/assets/chroni-daily-planner-v0.1.4.png",
-    target: "chroni-daily-planner-v0.1.4.png",
+    source: "docs/assets/chroni-daily-planner-v0.2.0.png",
+    target: "chroni-daily-planner-v0.2.0.png",
     type: "screenshot",
   },
   {
     key: "agent-workspace",
-    source: "docs/assets/chroni-agent-workspace-v0.1.4.png",
-    target: "chroni-agent-workspace-v0.1.4.png",
+    source: "docs/assets/chroni-agent-workspace-v0.2.0.png",
+    target: "chroni-agent-workspace-v0.2.0.png",
     type: "screenshot",
   },
 ];
@@ -1030,7 +1030,7 @@ function buildAssetManifest(copied) {
       `- 处理：${entry.treatment}`,
       `- 原文件 SHA-256：\`${asset.hash}\``,
       `- 备份 SHA-256：\`${hashFile(asset.targetPath)}\``,
-      `- 来源说明：${asset.type === "pet" ? "XIAOTONG Desktop Pet 原始帧；Apache-2.0 + Additional Terms。" : "Chroni v0.1.4 仓库真实产品截图；Chroni 项目素材。"}`,
+      `- 来源说明：${asset.type === "pet" ? "XIAOTONG Desktop Pet 原始帧；Apache-2.0 + Additional Terms。" : "Chroni v0.2.0 仓库真实产品截图；Chroni 项目素材。"}`,
       "",
     );
   }
@@ -1070,7 +1070,7 @@ function buildReadme() {
 
 桌宠：\`idle/0000.png\`、\`study/0016.png\`、\`wake/0016.png\`、\`play/0016.png\`、\`pet/0016.png\`。
 
-产品截图：\`chroni-daily-planner-v0.1.4.png\`、\`chroni-agent-workspace-v0.1.4.png\`。
+产品截图：\`chroni-daily-planner-v0.2.0.png\`、\`chroni-agent-workspace-v0.2.0.png\`。
 
 逐项路径、使用页面、处理方式、许可证和 SHA-256 见 \`source/asset-manifest.md\`。
 

@@ -11,7 +11,7 @@ body:
     id: version
     attributes:
       label: Chroni 版本
-      placeholder: 例如 0.1.4
+      placeholder: 例如 0.2.0
     validations:
       required: true
   - type: dropdown

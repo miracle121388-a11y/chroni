@@ -22,12 +22,14 @@ from reportlab.platypus import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = ROOT / "output" / "pdf" / "Chroni_GOAI_2026_参赛作品说明.pdf"
-DAILY_SCREENSHOT = ROOT / "docs" / "assets" / "chroni-daily-planner-v0.1.4.png"
-AGENT_SCREENSHOT = ROOT / "docs" / "assets" / "chroni-agent-workspace-v0.1.4.png"
-MISSION_SCREENSHOT = ROOT / "docs" / "assets" / "chroni-learning-mission-v0.1.4.png"
+PACKAGE = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+VERSION = PACKAGE["version"]
+OUTPUT = ROOT / "output" / "pdf" / "Chroni_GOAI_2026_更新版项目方案.pdf"
+DAILY_SCREENSHOT = ROOT / "docs" / "assets" / "chroni-daily-planner-v0.2.0.png"
+AGENT_SCREENSHOT = ROOT / "docs" / "assets" / "chroni-agent-workspace-v0.2.0.png"
+MISSION_SCREENSHOT = ROOT / "docs" / "assets" / "chroni-learning-mission-v0.2.0.png"
 EVALUATION = json.loads((ROOT / "benchmarks" / "goai-v1" / "reports" / "latest.json").read_text(encoding="utf-8"))
-INSTALLER = ROOT / "apps" / "desktop" / "dist-electron" / "Chroni-0.1.4-win-x64-setup.exe"
+INSTALLER = ROOT / "apps" / "desktop" / "dist-electron" / f"Chroni-{VERSION}-win-x64-setup.exe"
 
 INK = colors.HexColor("#20312C")
 MUTED = colors.HexColor("#66736D")
@@ -123,6 +125,16 @@ def styles():
             spaceBefore=8,
             spaceAfter=6,
         ),
+        "h2_compact": ParagraphStyle(
+            "h2_compact",
+            parent=base["Heading2"],
+            fontName="ChroniSansBold",
+            fontSize=12.5,
+            leading=16,
+            textColor=GREEN_DARK,
+            spaceBefore=3,
+            spaceAfter=4,
+        ),
         "body": ParagraphStyle(
             "body",
             parent=base["BodyText"],
@@ -131,6 +143,15 @@ def styles():
             leading=15.5,
             textColor=INK,
             spaceAfter=7,
+        ),
+        "body_compact": ParagraphStyle(
+            "body_compact",
+            parent=base["BodyText"],
+            fontName="ChroniSans",
+            fontSize=8.7,
+            leading=13,
+            textColor=INK,
+            spaceAfter=4,
         ),
         "small": ParagraphStyle(
             "small",
@@ -209,15 +230,28 @@ def info_box(text, style, background=GREEN_PALE, border=GREEN):
     return table
 
 
-def styled_table(data, widths, header=True, row_backgrounds=None):
+def styled_table(data, widths, header=True, row_backgrounds=None, cell_padding=6):
+    if header:
+        data = [list(row) for row in data]
+        rendered_header = []
+        for index, cell in enumerate(data[0]):
+            if isinstance(cell, Paragraph):
+                header_style = ParagraphStyle(
+                    f"table_header_{id(data)}_{index}",
+                    parent=cell.style,
+                    textColor=WHITE,
+                )
+                cell = Paragraph(cell.text, header_style)
+            rendered_header.append(cell)
+        data[0] = rendered_header
     table = Table(data, colWidths=widths, repeatRows=1 if header else 0, hAlign="LEFT")
     commands = [
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("GRID", (0, 0), (-1, -1), 0.55, LINE),
         ("LEFTPADDING", (0, 0), (-1, -1), 7),
         ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), cell_padding),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), cell_padding),
     ]
     if header:
         commands.extend([
@@ -252,7 +286,7 @@ def draw_page(canvas, doc):
     canvas.line(18 * mm, 15 * mm, width - 18 * mm, 15 * mm)
     canvas.setFillColor(MUTED)
     canvas.setFont("ChroniSans", 7.5)
-    canvas.drawString(18 * mm, 9.5 * mm, "Chroni GOAI 2026 参赛作品说明")
+    canvas.drawString(18 * mm, 9.5 * mm, "Chroni GOAI 2026 更新版项目方案")
     canvas.drawRightString(width - 18 * mm, 9.5 * mm, f"{page}")
     canvas.restoreState()
 
@@ -283,7 +317,7 @@ def build_story(s):
     ])
     cover_meta = [
         [para("项目版本", s["metric_label"]), para("验证状态", s["metric_label"]), para("材料日期", s["metric_label"])],
-        [para("0.1.4", s["metric"]), para("复赛就绪", s["metric"]), para("2026-08-25", s["metric"])],
+        [para(VERSION, s["metric"]), para("复赛就绪", s["metric"]), para("2026-08-25", s["metric"])],
     ]
     meta = Table(cover_meta, colWidths=[58 * mm] * 3)
     meta.setStyle(TableStyle([
@@ -297,6 +331,50 @@ def build_story(s):
         meta,
         Spacer(1, 20 * mm),
         para("本材料只使用仓库中的真实截图、真实源码、真实测试与可复现评测。未测量项和发布限制在正文中明确标注。", s["small"]),
+        PageBreak(),
+    ])
+
+    story.extend([
+        section_title("00", "复赛更新摘要", s["h1"]),
+        para(
+            "本轮将 Chroni 从桌面 Deadline Agent 升级为面向大学项目制学习的本地学习执行 Agent。DDL 仍是可靠触发器，产品中心已转向持续维护学习目标、交付物、完成标准、里程碑、今日行动、产出证据与阶段反馈。",
+            s["body"],
+        ),
+        info_box(
+            "<b>v0.2.0 核心闭环：</b>材料输入 → 来源与意图确认 → Learning Mission → TaskPlan → 今日执行 → 证据/检查点 → 风险重算与下一步调整。",
+            s["body"],
+        ),
+        Spacer(1, 5 * mm),
+        para("从 v0.1.4 到 v0.2.0", s["h2"]),
+    ])
+    update_rows = [
+        [para("维度", s["table_bold"]), para("v0.1.4", s["table_bold"]), para("v0.2.0 复赛版", s["table_bold"])],
+        [para("产品中心", s["table_bold"]), para("DDL、TaskPlan 与提醒", s["table"]), para("Learning Mission 与学习执行闭环", s["table"])],
+        [para("验证方式", s["table_bold"]), para("用户勾选完成", s["table"]), para("SHA-256 产出证据、阶段检查点与人工确认", s["table"])],
+        [para("Agent 行为", s["table_bold"]), para("抽取、追问、拆解、排程", s["table"]), para("Ground → Plan → Act → Verify → Adapt", s["table"])],
+        [para("演示与评测", s["table_bold"]), para("用户准备材料、通用回归", s["table"]), para("无 Key 隔离 Demo、三种路径、60 条固定时钟评测", s["table"])],
+    ]
+    story.extend([
+        styled_table(update_rows, [31 * mm, 54 * mm, 89 * mm], row_backgrounds=[WHITE, PAPER, WHITE, PAPER]),
+        Spacer(1, 5 * mm),
+        para("复赛手册交付映射", s["h2"]),
+    ])
+    requirement_rows = [
+        [para("手册要求", s["table_bold"]), para("本项目可核验交付", s["table_bold"])],
+        [para("更新项目方案", s["table_bold"]), para("本 PDF：更新摘要、价值、Agent 闭环、技术、评测、安全和后续边界。", s["table"])],
+        [para("可运行 Demo", s["table_bold"]), para("Windows 安装包 + 应用内无 Key 隔离 Demo + 180/60 秒脚本 + 三组输入。", s["table"])],
+        [para("工程与复现", s["table_bold"]), para("启动/测试/构建命令、核心源码、评测 runner/schema、关键测试、提交 SHA 与哈希。", s["table"])],
+        [para("数据与合规", s["table_bold"]), para("合成数据边界、隐私/IP、威胁模型、MIT License 与第三方许可证。", s["table"])],
+    ]
+    story.extend([
+        styled_table(requirement_rows, [42 * mm, 132 * mm], row_backgrounds=[WHITE, PAPER, WHITE, PAPER]),
+        Spacer(1, 5 * mm),
+        info_box(
+            "<b>事实边界：</b>合成评测证明确定性系统闭环可复现，不代表真实学生学习成效、DeepSeek 总体准确率或真实图片 OCR 总体性能。项目不声称已有学校合作、生产用户或比赛结果。",
+            s["body"],
+            CORAL_PALE,
+            CORAL,
+        ),
         PageBreak(),
     ])
 
@@ -359,7 +437,7 @@ def build_story(s):
 
     story.extend([
         section_title("02", "真实产品界面", s["h1"]),
-        para("下列截图来自 Chroni 0.1.4 的真实控制中心，使用明确标注的隔离合成演示数据，不是概念效果图。", s["body"]),
+        para(f"下列截图来自 Chroni {VERSION} 的真实控制中心，使用明确标注的隔离合成演示数据，不是概念效果图。", s["body"]),
         scaled_image(MISSION_SCREENSHOT, 166 * mm),
         para("Learning Mission 控制台：来源、目标、交付物、完成标准、里程碑、证据覆盖和阶段反馈处于同一任务档案。", s["caption"]),
         info_box(
@@ -369,10 +447,11 @@ def build_story(s):
             GOLD,
         ),
         PageBreak(),
+        Spacer(1, 3 * mm),
         section_title("02", "真实产品界面（执行层）", s["h1"]),
-        scaled_image(DAILY_SCREENSHOT, 128 * mm),
+        scaled_image(DAILY_SCREENSHOT, 116 * mm),
         para("今日执行：任务按真实时长占据时间轴，可缩放、拖拽、重排并查看多日计划。", s["caption"]),
-        scaled_image(AGENT_SCREENSHOT, 128 * mm),
+        scaled_image(AGENT_SCREENSHOT, 116 * mm),
         para("学习执行 Agent 工作台：展示下一步、今日工作块、高风险任务、覆盖率、规划来源和结构化 Trace。", s["caption"]),
         PageBreak(),
     ])
@@ -484,7 +563,7 @@ def build_story(s):
         styled_table(timeline_rows, [31 * mm, 143 * mm], header=False, row_backgrounds=[WHITE, PAPER, WHITE, PAPER, WHITE, PAPER]),
         Spacer(1, 7 * mm),
         info_box(
-            "附件的 02_演示材料 含完整 180/60 秒脚本和三个原始合成输入文件。现场优先使用场景 A 的离线路径，避免网络或模型额度影响。",
+            "附件的 02_产品与Demo 含完整 180/60 秒脚本和三个原始合成输入文件。现场优先使用场景 A 的离线路径，避免网络或模型额度影响。",
             s["body"],
         ),
         PageBreak(),
@@ -503,29 +582,34 @@ def build_story(s):
         [para("第三方素材", s["table_bold"]), para("GOAI/公开 Release 强制 original 模式，不打包 XIAOTONG 帧或捐赠码；字体与依赖声明随包。", s["table"])],
     ]
     story.extend([
-        styled_table(security_rows, [42 * mm, 132 * mm], row_backgrounds=[WHITE, PAPER, WHITE, PAPER, WHITE]),
-        Spacer(1, 7 * mm),
-        para("可运行产品", s["h2"]),
+        styled_table(
+            security_rows,
+            [42 * mm, 132 * mm],
+            row_backgrounds=[WHITE, PAPER, WHITE, PAPER, WHITE],
+            cell_padding=4,
+        ),
+        Spacer(1, 1 * mm),
+        para("可运行产品", s["h2_compact"]),
         info_box(
             installer_summary(),
-            s["body"],
+            s["body_compact"],
             PAPER,
             LINE,
         ),
-        Spacer(1, 4 * mm),
+        Spacer(1, 1 * mm),
         para(
-            "安装包已完成安全素材扫描、ASAR 路径检查、许可证随包检查和解包冷启动。当前 Authenticode 状态为 NotSigned，Windows 可能显示 SmartScreen；macOS universal workflow 已配置，但本 Windows 主机没有伪造 macOS 产物。",
-            s["body"],
+            "本机包已完成素材、ASAR、许可证和解包冷启动检查；当前 Authenticode 状态为 NotSigned，Windows 可能显示 SmartScreen。macOS 产物只由 macOS runner 构建。",
+            s["body_compact"],
         ),
-        para("复现与核验", s["h2"]),
+        para("复现与核验", s["h2_compact"]),
         para(
-            "附件的 03_技术与评测 提供技术方案、评测报告和原始逐例结果。完整源码、测试、评测 runner、数据 schema、CI 与 Release 工作流均在开源仓库中，可运行 pnpm run eval:goai 与 pnpm run check 复现。",
-            s["body"],
+            "附件的 03_工程与复现、04_评测与运行证据 提供方案、命令、核心源码、脱敏逐例结果、runner 与关键测试；完整源码、CI 和 Release 工作流在开源仓库中。",
+            s["body_compact"],
         ),
-        Spacer(1, 5 * mm),
+        Spacer(1, 1 * mm),
         info_box(
             "<b>结论：</b>Chroni 已形成可运行、可演示、可复现、可回退并能解释教育边界的学习执行 Agent。真实授权用户研究、正式签名/公证、模型基准和真实 OCR 大样本仍属于后续工作。",
-            s["body"],
+            s["body_compact"],
             GREEN_PALE,
             GREEN,
         ),
@@ -543,13 +627,13 @@ def main():
         leftMargin=18 * mm,
         topMargin=17 * mm,
         bottomMargin=21 * mm,
-        title="Chroni GOAI 2026 参赛作品说明",
+        title="Chroni GOAI 2026 更新版项目方案",
         author="Chroni contributors",
         subject="Chroni local-first learning execution Agent competition submission",
     )
     document.build(build_story(styles()), onFirstPage=draw_page, onLaterPages=draw_page)
     reader = PdfReader(str(OUTPUT))
-    if len(reader.pages) < 6:
+    if len(reader.pages) < 9:
         raise RuntimeError(f"Unexpected evidence PDF page count: {len(reader.pages)}")
     print(f"Wrote {OUTPUT} ({len(reader.pages)} pages, {OUTPUT.stat().st_size} bytes)")
 

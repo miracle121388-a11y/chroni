@@ -163,9 +163,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           prerelease=""
+          notes_file="docs/releases/${GITHUB_REF_NAME}.md"
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then prerelease="--prerelease"; fi
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" release/* --clobber
+            if [[ -f "$notes_file" ]]; then
+              gh release edit "$GITHUB_REF_NAME" --notes-file "$notes_file"
+            fi
+          elif [[ -f "$notes_file" ]]; then
+            gh release create "$GITHUB_REF_NAME" release/* \
+              --title "Chroni ${GITHUB_REF_NAME} — 学习执行 Agent" \
+              --notes-file "$notes_file" \
+              $prerelease
           else
             gh release create "$GITHUB_REF_NAME" release/* \
               --title "Chroni ${GITHUB_REF_NAME}" \

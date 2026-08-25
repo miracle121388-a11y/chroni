@@ -5,10 +5,13 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const rootPackage = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 const desktopPackage = JSON.parse(readFileSync(resolve(root, "apps/desktop/package.json"), "utf8"));
+const gatewayPackage = JSON.parse(readFileSync(resolve(root, "apps/gateway/package.json"), "utf8"));
 const requestedTag = (process.argv[2] || process.env.GITHUB_REF_NAME || "").trim();
 
-if (rootPackage.version !== desktopPackage.version) {
-  throw new Error(`Version mismatch: root=${rootPackage.version}, desktop=${desktopPackage.version}`);
+if (rootPackage.version !== desktopPackage.version || rootPackage.version !== gatewayPackage.version) {
+  throw new Error(
+    `Version mismatch: root=${rootPackage.version}, desktop=${desktopPackage.version}, gateway=${gatewayPackage.version}`,
+  );
 }
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(desktopPackage.version)) {
   throw new Error(`Invalid package version: ${desktopPackage.version}`);

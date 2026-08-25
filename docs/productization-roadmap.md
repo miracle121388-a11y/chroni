@@ -1,7 +1,7 @@
 # Chroni 产品化审计与路线图
 
 更新时间：2026-08-25
-审计基线：Chroni `v0.1.4`
+审计基线：Chroni `v0.2.0`
 
 ## 1. 本轮边界
 
@@ -31,13 +31,13 @@ GitHub Releases 下载
 | --- | --- | --- | --- |
 | Windows 安装 | 已有 NSIS Setup 和 Portable | 未签名版本可能触发 SmartScreen；用户不理解两个版本区别 | 安装 FAQ、校验说明、推荐选择 |
 | macOS 安装 | 已有 Universal DMG/ZIP | 未公证版本可能触发 Gatekeeper；用户不清楚安全打开方式 | 安装 FAQ、来源与校验说明 |
-| 首次启动 | 直接进入桌宠和控制中心 | 无应用内 onboarding，用户不知道第一步做什么 | 提供 3 分钟指南和可拖入示例材料 |
+| 首次启动 | 直接进入桌宠和控制中心 | 无应用内 onboarding，用户不知道第一步做什么 | 提供 3 分钟指南、可拖入示例材料和隔离 GOAI Demo |
 | 无 API Key | 本地规则可处理结构明确的 DDL | README 提到能力，但体验边界不够集中 | 明确 local-only 路径、适用范围和验证方法 |
 | 用户自带 Key | 偏好 -> 高级 -> 大模型 API | 需要理解 Base URL、模型、费用和数据发送范围 | 独立模型模式指南和 DeepSeek 配置步骤 |
 | Chroni 内测 | 偏好 -> 高级 -> 智能模型服务 | 测试者不应接触 DeepSeek 主密钥 | Zeabur 网关、独立访问码、限流与脱敏日志 |
 | 材料确认 | 支持抽取预览、直接填入、待确认项 | 用户可能混淆预览与保存 | 快速指南中先预览、再填入、再确认 |
 | 学习执行入口 | 控制中心默认打开“学习任务” | 需要同时看清来源、完成标准、里程碑、证据与反馈 | 以 Learning Mission 为主入口，并连接今日执行 |
-| Demo Mode | 没有隔离式应用内 Demo Mode | 录屏或试用需要自己准备材料 | 新增仓库级示例材料，不写入或污染用户数据 |
+| Demo Mode | 已有隔离式应用内 GOAI Demo | 首次体验不需要准备材料或 API Key | 场景 A/B/C 覆盖主链路、缺失信息和来源冲突；退出后清除合成状态 |
 | 反馈入口 | 有 GitHub Issue 模板与安全报告 | 应用内无独立“帮助与反馈”页 | README 与用户文档集中入口，新增体验反馈模板 |
 | 安装 FAQ | README 有简要提示 | 缺少完整分平台处理流程 | 新增 `docs/user/install-faq.md` |
 | 隐私说明 | README、SECURITY 和运行状态有分散说明 | 用户难以一次看清本地/联网边界 | 新增 `docs/user/privacy.md` |
@@ -123,7 +123,6 @@ GitHub Releases 下载
 | 任务 | 预计修改位置 | 验收标准 | 回滚方式 |
 | --- | --- | --- | --- |
 | 首次启动引导 | renderer、store、types、tests | 新用户 3 分钟完成首个 DDL 和今日计划；老用户不出现 | 特性开关关闭 onboarding |
-| 应用内 Demo Mode | store、intake、renderer、tests | Demo 数据可重置、可清除、不混入真实来源 | 删除 demo namespace 与入口 |
 | 帮助与反馈页 | renderer、preload、main、tests | 可打开文档/Issue、复制脱敏诊断 | 移除独立导航项 |
 | 一键诊断导出 | main、preload、renderer、tests | 不含 Key、原文和完整路径 | 保留手工诊断流程 |
 | 今日手账 Markdown | agent、store、renderer、tests | 可本地生成、编辑、导出 | 停用入口，不迁移核心数据 |
@@ -150,33 +149,27 @@ Chroni Desktop -> Chroni Relay -> Model Provider
 
 ## 11. 验收与质量门槛
 
-- 本轮 `git diff` 不应包含 `apps/desktop/src` 功能代码改动。
-- 文档不出现真实 API Key、用户原文、私人路径或虚构的官方试用额度。
-- README 和文档中的相对链接全部存在。
-- 示例材料不包含真实学校、姓名、邮箱、群号或企业信息。
-- 现有 `pnpm run check` 通过，证明文档整理没有破坏产品回归。
-- 安装指南分别覆盖 Setup、Portable、DMG、SmartScreen、Gatekeeper 和 SHA-256。
+- 文档、示例和提交附件不出现真实 API Key、Bearer Token、用户原文、私人路径或虚构额度。
+- README、Release Notes、产品下载页、截图和安装包版本保持一致。
+- `pnpm run check` 必须通过类型检查、Desktop 测试、Gateway 测试与生产构建。
+- `pnpm run eval:goai` 必须输出逐例机器可读结果，并明确区分合成系统评测与真实模型/学习成效。
+- GOAI 构建必须通过受限素材扫描；公开包保留原作许可证和 About 入口，但不分发受限桌宠帧与二维码。
+- 正式复赛 ZIP 必须来自 clean worktree，写入提交 SHA、运行环境、安装包哈希、逐文件哈希和事实边界。
+- 安装指南覆盖 Setup、Portable、DMG、SmartScreen、Gatekeeper、SHA-256 与签名/公证状态。
 
-### 2026-07-22 实际验证结果
+### 2026-08-25 最新验证基线
 
 | 命令或检查 | 结果 |
 | --- | --- |
-| 新增 Markdown 相对链接检查 | 通过，10 个入口文档的本地链接均存在 |
-| Issue Template YAML 解析 | 通过 |
-| API Key / 长 Bearer Token 模式扫描 | 通过，未发现嵌入密钥 |
-| `npx pnpm@11.7.0 run typecheck` | 通过 |
-| `npx pnpm@11.7.0 run build` | 通过 |
-| `npx pnpm@11.7.0 run check` | 未完全通过：229 项测试中 225 通过、3 失败、1 跳过 |
+| `pnpm run check` | 通过：typecheck、Desktop tests、Gateway tests、production build |
+| Desktop tests | 248 项：247 pass、0 fail、1 skip |
+| Gateway tests | 4 pass、0 fail |
+| `pnpm run eval:goai` | 60 cases；离线成功率 100.0%；Mission 闭环门槛全部通过 |
+| `pnpm run site:check` | 下载链接、DOM 引用和安装包映射通过 |
+| `pnpm run build:goai` | 公开 renderer 未发现受限 XIAOTONG 路径或栅格素材 |
+| 提交材料扫描 | API Key、Bearer Token、本地用户路径和非清单文件均作为阻断项 |
 
-当前 3 项失败均位于未被本轮修改的 `apps/desktop/test/core.test.mjs` 抽取回归：
-
-- `intake persists model tasks, detailed plans, and pending clarifications together`
-- `DeepSeek extraction processes every source independently`
-- `local rules fill deadlines that the model missed within the same source`
-
-失败表现为本地规则额外合并交付物、将“通知：”前缀带入标题，以及未为同来源补齐模型漏掉的截止项。单独复跑后稳定复现。由于修复会改变抽取功能，本轮只将其列为下一正式 Release 前的阻塞项，不在文档产品化任务中调整算法或测试预期。
-
-基础演示材料 `01-course-assignment.txt` 已通过当前本地规则真实执行检查，能够生成 1 条“明天 20:00”的 DDL。复杂示例定位为模型增强和待确认演示，不承诺纯规则生成完美标题。
+标题归一化准确率 95.5%、交付物 F1 83.9%，因此项目不把字段抽取描述为“完美”。完整指标、运行环境和未测项见 `docs/goai/07-evaluation-report.md` 与 `GOAI_COMPLETION_REPORT.md`。
 
 ## 12. 风险与回滚
 

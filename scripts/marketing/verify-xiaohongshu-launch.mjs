@@ -66,8 +66,8 @@ const requiredPaths = [
   "source/asset-manifest.md",
   "source/original-pet-assets/LICENSE",
   "source/original-pet-assets/ADDITIONAL_TERMS.md",
-  "source/original-product-screenshots/chroni-daily-planner-v0.1.4.png",
-  "source/original-product-screenshots/chroni-agent-workspace-v0.1.4.png",
+  "source/original-product-screenshots/chroni-daily-planner-v0.2.0.png",
+  "source/original-product-screenshots/chroni-agent-workspace-v0.2.0.png",
 ];
 for (const path of requiredPaths) {
   assert(existsSync(join(output, path)), `缺少交付文件：${path}`);

@@ -50,8 +50,8 @@ console.log("- apps/desktop/src/renderer/src/assets/tongluv/frames/play/0016.png
 console.log("- apps/desktop/src/renderer/src/assets/tongluv/frames/pet/0016.png");
 console.log("");
 console.log("使用的产品截图：");
-console.log("- docs/assets/chroni-daily-planner-v0.1.4.png");
-console.log("- docs/assets/chroni-agent-workspace-v0.1.4.png");
+console.log("- docs/assets/chroni-daily-planner-v0.2.0.png");
+console.log("- docs/assets/chroni-agent-workspace-v0.2.0.png");
 console.log("");
 console.log("检查结果：");
 console.log("- 图片尺寸通过");

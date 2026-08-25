@@ -6,9 +6,9 @@ const { pathToFileURL } = require("node:url");
 
 const desktopRoot = resolve(__dirname, "..");
 const repositoryRoot = resolve(desktopRoot, "..", "..");
-const outputPath = join(repositoryRoot, "docs", "assets", "chroni-learning-mission-v0.1.4.png");
-const dailyOutputPath = join(repositoryRoot, "docs", "assets", "chroni-daily-planner-v0.1.4.png");
-const agentOutputPath = join(repositoryRoot, "docs", "assets", "chroni-agent-workspace-v0.1.4.png");
+const outputPath = join(repositoryRoot, "docs", "assets", "chroni-learning-mission-v0.2.0.png");
+const dailyOutputPath = join(repositoryRoot, "docs", "assets", "chroni-daily-planner-v0.2.0.png");
+const agentOutputPath = join(repositoryRoot, "docs", "assets", "chroni-agent-workspace-v0.2.0.png");
 const narrowOutputPath = join(repositoryRoot, "output", "visual-checks", "chroni-learning-mission-narrow.png");
 const compactOutputPath = join(repositoryRoot, "output", "visual-checks", "chroni-learning-mission-compact.png");
 

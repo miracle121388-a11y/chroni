@@ -30,7 +30,7 @@
 - 一条 Mission 同时保存来源、目标、交付物、完成标准、里程碑、当前行动、产出证据、检查点与风险。
 - TaskPlan 变化会同步里程碑；检查点可绑定具体里程碑并回写步骤状态和任务进度。
 - 文件证据由主进程流式计算 SHA-256，状态不保存绝对路径和文件内容。
-- 画面：`docs/assets/chroni-learning-mission-v0.1.4.png`，使用隔离演示数据。
+- 画面：`docs/assets/chroni-learning-mission-v0.2.0.png`，使用隔离演示数据。
 
 ## 5. 三分钟真实 Demo：从材料到适应性下一步
 

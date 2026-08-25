@@ -1,12 +1,12 @@
 {
   "schemaVersion": "chroni-goai-eval-v1",
-  "generatedAt": "2026-08-25T08:06:00.239Z",
-  "commitSha": "68cd9a713f706437ce0c1a42dd47274478d0ae95",
+  "generatedAt": "2026-08-25T09:55:29.559Z",
+  "commitSha": "972e1863e4485e5b872bba4b428916eea80d971a",
   "repository": {
-    "commitSha": "68cd9a713f706437ce0c1a42dd47274478d0ae95",
+    "commitSha": "972e1863e4485e5b872bba4b428916eea80d971a",
     "workingTreeDirty": true,
-    "statusEntryCount": 297,
-    "trackedPatchSha256": "05a887c57ce376a941e155979e21cdfb7f90318953e23005e2f0da7fc6ba13e5"
+    "statusEntryCount": 35,
+    "trackedPatchSha256": "71b1ff1bf57bc511d1652639a659b0d71d6f8d1f569462250b316f60cc676cdc"
   },
   "dataset": {
     "name": "goai-v1",
@@ -76,17 +76,17 @@
     "milestoneCheckpointSyncRate": 1
   },
   "engineering": {
-    "localRulesLatencyP50Ms": 28.34,
-    "localRulesLatencyP95Ms": 55.42,
-    "learningMissionLifecycleP50Ms": 46.06,
-    "learningMissionLifecycleP95Ms": 53.89,
-    "offlineCaseP50Ms": 64.42,
-    "offlineCaseP95Ms": 97.42,
+    "localRulesLatencyP50Ms": 27.97,
+    "localRulesLatencyP95Ms": 57.47,
+    "learningMissionLifecycleP50Ms": 42.79,
+    "learningMissionLifecycleP95Ms": 55.01,
+    "offlineCaseP50Ms": 51.6,
+    "offlineCaseP95Ms": 97.8,
     "modelLatencyP50Ms": "尚未完成测量：model benchmark is opt-in and was not run",
     "modelLatencyP95Ms": "尚未完成测量：model benchmark is opt-in and was not run",
     "modelCallsPerCase": 0,
     "tokenOrCostEstimate": "0 for this offline benchmark",
-    "sampledPeakRssMiB": 77,
+    "sampledPeakRssMiB": 76.6,
     "offlineSuccessRate": 1,
     "continuousRunStability": "尚未完成测量：v1 runs each case once"
   },

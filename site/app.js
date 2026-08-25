@@ -1,23 +1,23 @@
 const RELEASE_API = "https://api.github.com/repos/miracle121388-a11y/chroni/releases/latest";
 const RELEASE_FALLBACK = "https://github.com/miracle121388-a11y/chroni/releases/latest";
 const FALLBACK_RELEASE = {
-  tag_name: "v0.1.4",
+  tag_name: "v0.2.0",
   published_at: "2026-07-15T12:38:41Z",
   assets: [
     {
-      name: "Chroni-0.1.4-win-x64-setup.exe",
+      name: "Chroni-0.2.0-win-x64-setup.exe",
       size: 160635683,
-      browser_download_url: "https://github.com/miracle121388-a11y/chroni/releases/download/v0.1.4/Chroni-0.1.4-win-x64-setup.exe",
+      browser_download_url: "https://github.com/miracle121388-a11y/chroni/releases/download/v0.2.0/Chroni-0.2.0-win-x64-setup.exe",
     },
     {
-      name: "Chroni-0.1.4-win-x64-portable.exe",
+      name: "Chroni-0.2.0-win-x64-portable.exe",
       size: 160364611,
-      browser_download_url: "https://github.com/miracle121388-a11y/chroni/releases/download/v0.1.4/Chroni-0.1.4-win-x64-portable.exe",
+      browser_download_url: "https://github.com/miracle121388-a11y/chroni/releases/download/v0.2.0/Chroni-0.2.0-win-x64-portable.exe",
     },
     {
-      name: "Chroni-0.1.4-mac-universal.dmg",
+      name: "Chroni-0.2.0-mac-universal.dmg",
       size: 262015294,
-      browser_download_url: "https://github.com/miracle121388-a11y/chroni/releases/download/v0.1.4/Chroni-0.1.4-mac-universal.dmg",
+      browser_download_url: "https://github.com/miracle121388-a11y/chroni/releases/download/v0.2.0/Chroni-0.2.0-mac-universal.dmg",
     },
   ],
 };
