@@ -446,10 +446,7 @@ function verification() {
     worktreeClean: true,
     runtime: {
       node: process.version,
-      pnpm: execFileSync(process.platform === "win32" ? "pnpm.cmd" : "pnpm", ["--version"], {
-        cwd: root,
-        encoding: "utf8",
-      }).trim(),
+      pnpm: pnpmVersion(),
       platform: `${process.platform}-${process.arch}`,
     },
     evidence: {
@@ -466,4 +463,10 @@ function verification() {
       "No macOS binary is included because this package was built on Windows.",
     ],
   };
+}
+
+function pnpmVersion() {
+  const activeVersion = process.env.npm_config_user_agent?.match(/pnpm\/([^\s]+)/)?.[1];
+  if (activeVersion) return activeVersion;
+  return packageJson.packageManager?.replace(/^pnpm@/, "") || "unknown";
 }
