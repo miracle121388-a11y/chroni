@@ -26,3 +26,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
+      - if: matrix.os == 'ubuntu-latest'
+        run: pnpm run eval:smoke

@@ -194,6 +194,30 @@ export type AgentIcsExportResult = {
   itemCount: number;
 };
 
+export type AgentEvidenceExportResult = {
+  jsonPath: string;
+  markdownPath: string;
+  generatedAt: string;
+  redacted: true;
+  integritySha256: string;
+};
+
+export type GoaiDemoScenario = "clear" | "clarification" | "conflict";
+
+export type GoaiDemoStatus = {
+  active: boolean;
+  scenario?: GoaiDemoScenario;
+  namespace: "goai-demo";
+  synthetic: true;
+  noKeyRequired: true;
+};
+
+export type GoaiDemoResult = {
+  status: GoaiDemoStatus;
+  snapshot: ChroniSnapshot;
+  message: string;
+};
+
 export type DailyTaskColor = "teal" | "coral" | "gold" | "blue" | "plum";
 export type DailyTaskRecurrence = "none" | "daily" | "weekdays" | "weekly";
 
@@ -378,6 +402,86 @@ export type TaskPlan = {
   updatedAt: string;
 };
 
+export type LearningMissionStatus = "planning" | "active" | "at-risk" | "completed";
+
+export type LearningMissionMilestone = {
+  id: string;
+  title: string;
+  description: string;
+  estimatedMinutes: number;
+  completionCriteria: string[];
+  status: TaskStepStatus;
+};
+
+export type LearningMissionEvidence = {
+  id: string;
+  kind: "file" | "note";
+  title: string;
+  linkedDeliverable?: string;
+  note?: string;
+  bytes?: number;
+  sha256?: string;
+  modifiedAt?: string;
+  createdAt: string;
+};
+
+export type LearningMissionCheckpoint = {
+  id: string;
+  status: "on-track" | "blocked" | "completed";
+  summary: string;
+  milestoneId?: string;
+  actualMinutes?: number;
+  blocker?: string;
+  reflection?: string;
+  createdAt: string;
+};
+
+export type LearningMission = {
+  id: string;
+  taskId: string;
+  title: string;
+  goal: string;
+  dueAt: string;
+  deliverables: string[];
+  successCriteria: string[];
+  milestones: LearningMissionMilestone[];
+  evidence: LearningMissionEvidence[];
+  checkpoints: LearningMissionCheckpoint[];
+  sourceEvidenceCount: number;
+  sourceName?: string;
+  sourceExcerpt?: string;
+  plannerSource?: TaskPlan["plannerSource"];
+  evidenceCoveragePercent: number;
+  progressPercent: number;
+  status: LearningMissionStatus;
+  riskSummary?: string;
+  nextAction: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LearningMissionFileInput = {
+  path: string;
+  linkedDeliverable?: string;
+};
+
+export type LearningMissionNoteInput = {
+  title: string;
+  note: string;
+  linkedDeliverable?: string;
+};
+
+export type LearningMissionCheckpointInput = {
+  status: LearningMissionCheckpoint["status"];
+  summary: string;
+  milestoneId?: string;
+  actualMinutes?: number;
+  blocker?: string;
+  reflection?: string;
+};
+
+export type LearningMissionEvidenceInput = Omit<LearningMissionEvidence, "id" | "createdAt">;
+
 export type PlanChange =
   | { type: "step-added"; stepId: string; afterStepId?: string }
   | { type: "step-removed"; stepId: string }
@@ -531,6 +635,7 @@ export type ServiceStatus = {
 export type ChroniSnapshot = {
   items: DdlItem[];
   dailyTasks: DailyTask[];
+  learningMissions: LearningMission[];
   sources: SourceRecord[];
   intakeDrafts: IntakeDraft[];
   clarifications: PendingClarification[];

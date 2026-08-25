@@ -1,6 +1,6 @@
 # Chroni 产品化审计与路线图
 
-更新时间：2026-07-24
+更新时间：2026-08-25
 审计基线：Chroni `v0.1.4`
 
 ## 1. 本轮边界
@@ -19,7 +19,7 @@ GitHub Releases 下载
 -> 在控制中心快速输入，或拖入文件/图片
 -> 本地解析与 OCR
 -> 本地规则抽取、Chroni 内测网关，或用户配置的 OpenAI-compatible 模型增强抽取
--> 核对 DDL 与待确认项
+-> 核对 Learning Mission 与必要待确认项
 -> 检查并启用 TaskPlan
 -> Agent 生成今日时间块
 -> 桌宠、气泡、日程抽屉和系统通知提醒
@@ -36,7 +36,7 @@ GitHub Releases 下载
 | 用户自带 Key | 偏好 -> 高级 -> 大模型 API | 需要理解 Base URL、模型、费用和数据发送范围 | 独立模型模式指南和 DeepSeek 配置步骤 |
 | Chroni 内测 | 偏好 -> 高级 -> 智能模型服务 | 测试者不应接触 DeepSeek 主密钥 | Zeabur 网关、独立访问码、限流与脱敏日志 |
 | 材料确认 | 支持抽取预览、直接填入、待确认项 | 用户可能混淆预览与保存 | 快速指南中先预览、再填入、再确认 |
-| 今日计划入口 | 控制中心默认打开“每日任务” | 已符合主要入口目标，但需要说明 DDL 与每日任务的关系 | 在快速指南中固定操作顺序 |
+| 学习执行入口 | 控制中心默认打开“学习任务” | 需要同时看清来源、完成标准、里程碑、证据与反馈 | 以 Learning Mission 为主入口，并连接今日执行 |
 | Demo Mode | 没有隔离式应用内 Demo Mode | 录屏或试用需要自己准备材料 | 新增仓库级示例材料，不写入或污染用户数据 |
 | 反馈入口 | 有 GitHub Issue 模板与安全报告 | 应用内无独立“帮助与反馈”页 | README 与用户文档集中入口，新增体验反馈模板 |
 | 安装 FAQ | README 有简要提示 | 缺少完整分平台处理流程 | 新增 `docs/user/install-faq.md` |
@@ -56,7 +56,7 @@ GitHub Releases 下载
 | 文件解析、OCR 与抽取 | `apps/desktop/src/intake.ts` |
 | 桌宠拖入与动作反馈 | `apps/desktop/src/renderer/src/main.tsx`、`apps/desktop/src/shared/pet-actions.ts` |
 | 今日计划与时间轴 | `apps/desktop/src/renderer/src/components/DailyPlanner.tsx` |
-| Deadline Agent | `apps/desktop/src/agent/` |
+| 学习执行 Agent | `apps/desktop/src/agent/`、`apps/desktop/src/learning-mission.ts` |
 | 版本展示与自动更新 | `apps/desktop/src/updater.ts`、运行状态页 |
 | 安装与发布 | `apps/desktop/electron-builder.config.cjs`、`.github/workflows/release-build.yml` |
 
@@ -86,8 +86,8 @@ GitHub Releases 下载
 2. 启动 Chroni，不配置 API Key。
 3. 从 `examples/demo/` 选择示例 TXT，拖到桌宠或控制中心。
 4. Chroni 使用本地规则识别明确 DDL，并显示桌宠处理反馈。
-5. 用户核对 DDL，打开规划详情并启用计划。
-6. 进入 Agent 点击“帮我安排今天”，在“每日任务”查看结果。
+5. 用户核对 Learning Mission，打开规划详情并启用计划。
+6. 进入执行 Agent 点击“帮我安排今天”，在“今日执行”查看结果。
 7. 用户知道如何清理示例数据、配置 DeepSeek、检查更新或提交反馈。
 
 该路径依赖示例材料使用明确的相对时间，且不会假装调用了未配置的模型。

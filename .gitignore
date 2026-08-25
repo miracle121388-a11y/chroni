@@ -7,6 +7,10 @@ dist-electron/
 artifacts/
 apps/desktop/dist/
 apps/desktop/dist-electron/
+output/
+tmp/
+__pycache__/
+*.py[cod]
 *.tsbuildinfo
 .DS_Store
 .env
@@ -14,3 +18,10 @@ apps/desktop/dist-electron/
 local/
 Tongluv-main/
 README.pdf
+
+# Local source prompts and competition handbooks
+/产品级提示词.md
+/Chroni_Codex_小红书素材生成提示词.md
+/Chroni_GOAI_2026_Codex_Master_Prompt.md
+/chroni_apple_motion_codex_addendum.md
+/eed923c4-570c-4f5e-bb18-4f451fb97ced.pdf

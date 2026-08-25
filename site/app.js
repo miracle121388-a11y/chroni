@@ -195,14 +195,14 @@ function setHeroProgress(progress) {
   const bubble = document.querySelector("#hero-bubble");
   if (!bubble) return;
   const nextText = progress < 0.15
-    ? "把通知拖给我就好。"
+    ? "把课程要求、截图或项目材料拖给我。"
     : progress < 0.32
-      ? "正在找截止时间和提交要求…"
+      ? "正在识别目标、交付物与提交要求…"
       : progress < 0.52
-        ? "四项关键信息已经确认。"
+        ? "学习目标与验收标准已经确认。"
         : progress < 0.73
-          ? "我正在把步骤排进今天。"
-          : "19:00 开始第一步，我会在桌面等你。";
+          ? "我正在把里程碑排进今天。"
+          : "19:00 开始第一步，完成后记得留下证据。";
   if (bubble.textContent !== nextText) bubble.textContent = nextText;
 }
 
@@ -273,8 +273,8 @@ const mascotStates = {
     label: "阅读",
     image: "./assets/pet-study.png",
     alt: "Chroni 桌宠阅读材料状态",
-    message: "我先看看这份通知里有哪些截止事项和提交要求。",
-    title: "正在读取课程通知",
+    message: "我先从材料里确认学习目标、交付物和验收标准。",
+    title: "正在理解课程材料",
     meta: "已找到 4 项关键信息",
   },
   planning: {

@@ -2,7 +2,7 @@
   "name": "chroni-workspace",
   "version": "0.1.4",
   "private": true,
-  "description": "Chroni local DDL schedule assistant workspace.",
+  "description": "Chroni local-first learning execution agent workspace.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.7.0",
@@ -13,6 +13,7 @@
     "dev": "pnpm --filter @chroni/desktop run dev",
     "start": "pnpm --filter @chroni/desktop run start",
     "build": "pnpm --filter @chroni/desktop run build",
+    "build:goai": "pnpm --filter @chroni/desktop run build:goai",
     "typecheck": "pnpm --filter @chroni/desktop run typecheck",
     "test": "pnpm --filter @chroni/desktop run test",
     "gateway:build": "pnpm --filter @chroni/gateway run build",
@@ -22,10 +23,23 @@
     "package:windows": "pnpm --filter @chroni/desktop run package:win",
     "package:macos": "pnpm --filter @chroni/desktop run package:mac",
     "package:linux": "pnpm --filter @chroni/desktop run package:linux",
+    "package:goai:windows": "pnpm --filter @chroni/desktop run package:goai:win",
+    "package:goai:macos": "pnpm --filter @chroni/desktop run package:goai:mac",
     "release:verify": "node scripts/verify-release-version.mjs",
     "release:checksums": "node scripts/generate-checksums.mjs",
+    "goai:assets:check": "node scripts/verify-goai-assets.mjs",
+    "notices:generate": "node scripts/generate-third-party-notices.mjs",
+    "eval:smoke": "pnpm --filter @chroni/desktop run build:main && node benchmarks/goai-v1/run.mjs --smoke",
+    "eval:goai": "pnpm --filter @chroni/desktop run build:main && node benchmarks/goai-v1/run.mjs",
+    "eval:goai:model": "pnpm --filter @chroni/desktop run build:main && node benchmarks/goai-v1/run.mjs --model",
     "site:build": "node scripts/build-product-site.mjs",
     "site:check": "node scripts/build-product-site.mjs && node scripts/check-product-site.mjs",
+    "marketing:xiaohongshu:build": "node scripts/marketing/build-xiaohongshu-images.mjs",
+    "marketing:xiaohongshu:verify": "node scripts/marketing/verify-xiaohongshu-launch.mjs",
+    "marketing:xiaohongshu:package": "pnpm run check && node scripts/marketing/package-xiaohongshu-launch.mjs",
+    "marketing:xiaohongshu": "pnpm run marketing:xiaohongshu:build && pnpm run marketing:xiaohongshu:verify && pnpm run marketing:xiaohongshu:package",
+    "submission:goai": "python scripts/submission/build_evidence_pdf.py && node scripts/submission/build-goai-judge-package.mjs",
+    "submission:goai:archive": "python scripts/submission/build_evidence_pdf.py && node scripts/submission/build-goai-attachment.mjs",
     "check": "pnpm run typecheck && pnpm run test && pnpm run gateway:test && pnpm run build",
     "dev:mac": "pnpm --filter @chroni/desktop run dev",
     "open:mac": "open -n /Applications/Chroni.app",
@@ -35,6 +49,7 @@
     "apps/*"
   ],
   "devDependencies": {
+    "@napi-rs/canvas": "0.1.80",
     "typescript": "^6.0.3"
   }
 }

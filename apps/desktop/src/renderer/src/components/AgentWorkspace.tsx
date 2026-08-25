@@ -240,7 +240,7 @@ export function TaskDetailPane({ task, snapshot, setSnapshot, onBack }: { task: 
         <div><p>任务详情</p><h2>{task.title}</h2></div>
         <span className={`plan-status ${draft?.status ?? "missing"}`}>{planStatus(draft)}</span>
       </header>
-      <div className="task-facts"><span>DDL {formatDate(task.dueAt)}</span><span>{taskImportanceLabel(task.importance)}</span><span>{task.progressPercent ?? 0}% 完成</span><span>{safeWorkspaceMessage(task.sourceSummary, "手动录入")}</span></div>
+      <div className="task-facts"><span>截止 {formatDate(task.dueAt)}</span><span>{taskImportanceLabel(task.importance)}</span><span>{task.progressPercent ?? 0}% 完成</span><span>{safeWorkspaceMessage(task.sourceSummary, "手动录入")}</span></div>
       {task.extraction && (
         <section className="extracted-requirements" aria-label="原文提取要求">
           <header><h3>原文要求</h3><span>已校验来源</span></header>

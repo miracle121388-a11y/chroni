@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
 
 const productionCsp = [
   "default-src 'none'",
@@ -17,9 +18,17 @@ const devCsp = productionCsp
   .replace("style-src 'self'", "style-src 'self' 'unsafe-inline'")
   .replace("connect-src 'self'", "connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173");
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command }) => {
+  const petAssetMode = process.env.CHRONI_PET_ASSET_MODE === "original" ? "original" : "xiaotong";
+  const petAssetModule = fileURLToPath(new URL(`./src/renderer/src/pet-assets/${petAssetMode}.ts`, import.meta.url));
+  return ({
   root: "src/renderer",
   base: "./",
+  resolve: {
+    alias: {
+      "virtual:chroni-pet-assets": petAssetModule,
+    },
+  },
   plugins: [
     react(),
     command === "serve" && {
@@ -36,4 +45,5 @@ export default defineConfig(({ command }) => ({
     // allows self-hosted fonts but not data: font URLs.
     assetsInlineLimit: 0,
   },
-}));
+  });
+});

@@ -4,6 +4,9 @@
     "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "paths": {
+      "virtual:chroni-pet-assets": ["./src/renderer/src/pet-assets/selected.ts"]
+    },
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "noUnusedLocals": true,
     "noUnusedParameters": true,

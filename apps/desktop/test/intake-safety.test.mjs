@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, processIntake, reprocessSource } from "../dist/intake.js";
+import { assertSafeOfficeArchive, extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, processIntake, reprocessSource } from "../dist/intake.js";
 import { deadlineDateFromText, isConditionalDeadlineText } from "../dist/shared/deadline-text.js";
 import { ChroniStore } from "../dist/store.js";
 
@@ -130,6 +130,27 @@ test("oversized path files are rejected from metadata before extraction", async 
   }
 });
 
+test("Office archive preflight rejects zip bombs and traversal entries", () => {
+  assert.doesNotThrow(() => assertSafeOfficeArchive(makeOfficeArchive([
+    { name: "word/document.xml", compressedSize: 300, uncompressedSize: 1_200 },
+  ]), "safe.docx"));
+  assert.throws(() => assertSafeOfficeArchive(makeOfficeArchive([
+    { name: "word/document.xml", compressedSize: 1, uncompressedSize: 32 * 1024 * 1024 },
+  ]), "bomb.docx"), /展开后过大|压缩比异常/);
+  assert.throws(() => assertSafeOfficeArchive(makeOfficeArchive([
+    { name: "../outside.xml", compressedSize: 20, uncompressedSize: 100 },
+  ]), "traversal.docx"), /不安全路径/);
+});
+
+test("renamed plain text cannot enter the DOCX parser", async () => {
+  const result = await extractPayload({
+    kind: "files",
+    files: [{ name: "forged.docx", contentBase64: Buffer.from("not a zip document").toString("base64") }],
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /格式与扩展名不匹配/);
+});
+
 test("model failures expose an actionable Chinese message without runtime details", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => { throw new Error("connect ECONNREFUSED 127.0.0.1 /Users/private/key"); };
@@ -205,4 +226,43 @@ function isoWithLocalOffset(date) {
   const absoluteOffset = Math.abs(offsetMinutes);
   const pad = (value) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:00${sign}${pad(Math.floor(absoluteOffset / 60))}:${pad(absoluteOffset % 60)}`;
+}
+
+function makeOfficeArchive(entries) {
+  const localParts = [];
+  const centralParts = [];
+  let localOffset = 0;
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name, "utf8");
+    const local = Buffer.alloc(30 + name.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt32LE(entry.compressedSize, 18);
+    local.writeUInt32LE(entry.uncompressedSize, 22);
+    local.writeUInt16LE(name.length, 26);
+    name.copy(local, 30);
+    localParts.push(local);
+
+    const central = Buffer.alloc(46 + name.length);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(8, 10);
+    central.writeUInt32LE(entry.compressedSize, 20);
+    central.writeUInt32LE(entry.uncompressedSize, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt32LE(localOffset, 42);
+    name.copy(central, 46);
+    centralParts.push(central);
+    localOffset += local.length;
+  }
+  const centralDirectory = Buffer.concat(centralParts);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralDirectory.length, 12);
+  end.writeUInt32LE(localOffset, 16);
+  return Buffer.concat([...localParts, centralDirectory, end]);
 }

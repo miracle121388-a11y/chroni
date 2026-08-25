@@ -1,0 +1,284 @@
+{
+  "schemaVersion": "chroni-goai-eval-v1",
+  "generatedAt": "2026-08-25T08:41:57.253Z",
+  "commitSha": "unavailable",
+  "repository": {
+    "commitSha": "unavailable",
+    "workingTreeDirty": true,
+    "statusEntryCount": -1,
+    "trackedPatchSha256": "unavailable"
+  },
+  "dataset": {
+    "name": "goai-v1",
+    "synthetic": true,
+    "caseCount": 8,
+    "fullCaseCount": 60,
+    "smoke": true,
+    "referenceNow": "2026-08-06T10:00:00+08:00",
+    "timezone": "Asia/Shanghai",
+    "sha256": "c49efefe21d7839082b56b4f1cb8bc045fa67b228b978bc25c30aa760c0d4b1a",
+    "categories": {
+      "clear-single": 1,
+      "multi-deliverable": 1,
+      "needs-clarification": 1,
+      "source-conflict": 1,
+      "relative-timezone": 1,
+      "ocr-noise": 1,
+      "no-task": 1,
+      "prompt-injection": 1
+    }
+  },
+  "environment": {
+    "node": "v24.12.0",
+    "platform": "win32",
+    "architecture": "x64",
+    "modelCalls": 0,
+    "networkRequired": false
+  },
+  "extraction": {
+    "taskPrecision": 1,
+    "taskRecall": 1,
+    "taskF1": 1,
+    "titleNormalizationAccuracy": 1,
+    "dueDateExactMatch": 1,
+    "dueTimeExactMatch": 1,
+    "timezoneAccuracy": 1,
+    "deliverablePrecision": 1,
+    "deliverableRecall": 1,
+    "deliverableF1": 1,
+    "sourceEvidenceHitRate": 1,
+    "noTaskFalsePositiveRate": 0,
+    "hallucinatedTaskRate": 0
+  },
+  "clarification": {
+    "triggerRateWhenRequired": 1,
+    "excessiveQuestionRate": 0,
+    "missingFieldCoverage": 1,
+    "recoverySuccessRate": 1,
+    "conflictSafeDeferralRate": 1
+  },
+  "planning": {
+    "taskPlanLocalValidationPassRate": 1,
+    "dependencyCycleDetectionRate": 1,
+    "capacityConstraintPassRate": 1,
+    "highRiskTaskCoverageRate": 0,
+    "scheduleConflictRate": 0,
+    "invalidModelFallbackSuccessRate": 1
+  },
+  "learningMission": {
+    "creationRate": 1,
+    "sourceLinkRate": 1,
+    "deliverableGroundingRate": 1,
+    "successCriteriaPresenceRate": 1,
+    "milestonePlanAlignmentRate": 1,
+    "evidencePersistenceRate": 1,
+    "checkpointPersistenceRate": 1,
+    "milestoneCheckpointSyncRate": 1
+  },
+  "engineering": {
+    "localRulesLatencyP50Ms": 29.98,
+    "localRulesLatencyP95Ms": 41.62,
+    "learningMissionLifecycleP50Ms": 32.81,
+    "learningMissionLifecycleP95Ms": 50.94,
+    "offlineCaseP50Ms": 38.63,
+    "offlineCaseP95Ms": 93.22,
+    "modelLatencyP50Ms": "尚未完成测量：model benchmark is opt-in and was not run",
+    "modelLatencyP95Ms": "尚未完成测量：model benchmark is opt-in and was not run",
+    "modelCallsPerCase": 0,
+    "tokenOrCostEstimate": "0 for this offline benchmark",
+    "sampledPeakRssMiB": 68.4,
+    "offlineSuccessRate": 1,
+    "continuousRunStability": "尚未完成测量：v1 runs each case once"
+  },
+  "counts": {
+    "task": {
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "fields": {
+      "title": {
+        "correct": 5,
+        "total": 5
+      },
+      "dueDate": {
+        "correct": 5,
+        "total": 5
+      },
+      "dueTime": {
+        "correct": 5,
+        "total": 5
+      },
+      "timezone": {
+        "correct": 1,
+        "total": 1
+      },
+      "evidence": {
+        "correct": 5,
+        "total": 5
+      }
+    },
+    "deliverables": {
+      "tp": 3,
+      "fp": 0,
+      "fn": 0
+    },
+    "clarification": {
+      "expected": 2,
+      "triggered": 2,
+      "excessive": 0,
+      "notExpected": 6,
+      "fieldsExpected": 2,
+      "fieldsCovered": 2,
+      "recoveries": 2,
+      "recoveryAttempts": 2
+    },
+    "planning": {
+      "plans": 5,
+      "validPlans": 5
+    },
+    "learningMission": {
+      "expected": 5,
+      "created": 5,
+      "sourceExpected": 5,
+      "sourceLinked": 5,
+      "deliverablesExpected": 3,
+      "deliverablesGrounded": 3,
+      "criteriaExpected": 5,
+      "criteriaPresent": 5,
+      "planExpected": 5,
+      "milestoneAligned": 5,
+      "lifecycleAttempts": 4,
+      "evidencePersisted": 4,
+      "checkpointPersisted": 4,
+      "milestoneSynced": 4
+    },
+    "dependencyCycle": {
+      "attempts": 1,
+      "detected": 1,
+      "rate": 1
+    },
+    "noTask": {
+      "cases": 2,
+      "falsePositives": 0
+    },
+    "conflict": {
+      "cases": 1,
+      "safelyDeferred": 1
+    }
+  },
+  "cases": [
+    {
+      "id": "clear-01",
+      "category": "clear-single",
+      "expectedTasks": 1,
+      "predictedTasks": 1,
+      "matchedTasks": 1,
+      "expectedClarification": false,
+      "predictedClarification": false,
+      "passedTaskCount": true,
+      "passedTaskMatch": true,
+      "learningMissionReady": true,
+      "learningMissionLifecycle": true,
+      "intakeOk": true
+    },
+    {
+      "id": "multi-01",
+      "category": "multi-deliverable",
+      "expectedTasks": 2,
+      "predictedTasks": 2,
+      "matchedTasks": 2,
+      "expectedClarification": false,
+      "predictedClarification": false,
+      "passedTaskCount": true,
+      "passedTaskMatch": true,
+      "learningMissionReady": true,
+      "learningMissionLifecycle": true,
+      "intakeOk": true
+    },
+    {
+      "id": "clarify-01",
+      "category": "needs-clarification",
+      "expectedTasks": 0,
+      "predictedTasks": 0,
+      "matchedTasks": 0,
+      "expectedClarification": true,
+      "predictedClarification": true,
+      "passedTaskCount": true,
+      "passedTaskMatch": true,
+      "learningMissionReady": true,
+      "learningMissionLifecycle": true,
+      "intakeOk": false
+    },
+    {
+      "id": "conflict-01",
+      "category": "source-conflict",
+      "expectedTasks": 0,
+      "predictedTasks": 0,
+      "matchedTasks": 0,
+      "expectedClarification": true,
+      "predictedClarification": true,
+      "passedTaskCount": true,
+      "passedTaskMatch": true,
+      "learningMissionReady": true,
+      "learningMissionLifecycle": true,
+      "intakeOk": false
+    },
+    {
+      "id": "relative-01",
+      "category": "relative-timezone",
+      "expectedTasks": 1,
+      "predictedTasks": 1,
+      "matchedTasks": 1,
+      "expectedClarification": false,
+      "predictedClarification": false,
+      "passedTaskCount": true,
+      "passedTaskMatch": true,
+      "learningMissionReady": true,
+      "learningMissionLifecycle": true,
+      "intakeOk": true
+    },
+    {
+      "id": "ocr-01",
+      "category": "ocr-noise",
+      "expectedTasks": 1,
+      "predictedTasks": 1,
+      "matchedTasks": 1,
+      "expectedClarification": false,
+      "predictedClarification": false,
+      "passedTaskCount": true,
+      "passedTaskMatch": true,
+      "learningMissionReady": true,
+      "learningMissionLifecycle": true,
+      "intakeOk": true
+    },
+    {
+      "id": "negative-01",
+      "category": "no-task",
+      "expectedTasks": 0,
+      "predictedTasks": 0,
+      "matchedTasks": 0,
+      "expectedClarification": false,
+      "predictedClarification": false,
+      "passedTaskCount": true,
+      "passedTaskMatch": true,
+      "learningMissionReady": true,
+      "learningMissionLifecycle": true,
+      "intakeOk": false
+    },
+    {
+      "id": "injection-01",
+      "category": "prompt-injection",
+      "expectedTasks": 0,
+      "predictedTasks": 0,
+      "matchedTasks": 0,
+      "expectedClarification": false,
+      "predictedClarification": false,
+      "passedTaskCount": true,
+      "passedTaskMatch": true,
+      "learningMissionReady": true,
+      "learningMissionLifecycle": true,
+      "intakeOk": false
+    }
+  ]
+}

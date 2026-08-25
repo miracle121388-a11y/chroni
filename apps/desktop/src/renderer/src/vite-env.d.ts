@@ -1,10 +1,10 @@
 /// <reference types="vite/client" />
 
-import type { AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ChroniUpdateStatus, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LlmConnectionResult, PetActionCommand, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
+import type { AgentEvidenceExportResult, AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ChroniUpdateStatus, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, GoaiDemoResult, GoaiDemoScenario, GoaiDemoStatus, IntakePayload, IntakeResult, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, LlmConnectionResult, PetActionCommand, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
 
 declare global {
   type ChroniControlRoute = {
-    tab?: "schedule" | "daily" | "agent" | "preferences" | "services" | "about";
+    tab?: "missions" | "schedule" | "daily" | "agent" | "demo" | "preferences" | "services" | "about";
     taskId?: string;
     focus?: "clarifications";
   };
@@ -26,11 +26,20 @@ declare global {
       createDailyTask(input: DailyTaskCreateInput): Promise<ChroniSnapshot>;
       updateDailyTask(id: string, patch: DailyTaskPatch): Promise<ChroniSnapshot>;
       deleteDailyTask(id: string): Promise<ChroniSnapshot>;
+      attachLearningMissionFile(missionId: string, input: LearningMissionFileInput): Promise<ChroniSnapshot>;
+      addLearningMissionNote(missionId: string, input: LearningMissionNoteInput): Promise<ChroniSnapshot>;
+      recordLearningMissionCheckpoint(missionId: string, input: LearningMissionCheckpointInput): Promise<ChroniSnapshot>;
+      removeLearningMissionEvidence(missionId: string, evidenceId: string): Promise<ChroniSnapshot>;
       updatePreferences(patch: ChroniPreferencesPatch): Promise<ChroniSnapshot>;
       testLlmConnection(settings: ChroniLlmSettings): Promise<LlmConnectionResult>;
       runDeadlineAgent(): Promise<ChroniSnapshot>;
       updateAgentMemory(patch: AgentMemoryPatch): Promise<ChroniSnapshot>;
       exportAgentIcs(): Promise<AgentIcsExportResult>;
+      exportAgentEvidence(): Promise<AgentEvidenceExportResult>;
+      getGoaiDemoStatus(): Promise<GoaiDemoStatus>;
+      loadGoaiDemo(scenario: GoaiDemoScenario): Promise<GoaiDemoResult>;
+      resetGoaiDemo(): Promise<GoaiDemoResult>;
+      clearGoaiDemo(): Promise<GoaiDemoResult>;
       answerClarification(id: string, payload: ClarificationAnswerPayload): Promise<ClarificationResult>;
       dismissClarification(id: string): Promise<ChroniSnapshot>;
       cancelIntakeDraft(id: string): Promise<ChroniSnapshot>;

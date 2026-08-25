@@ -7,6 +7,7 @@ import { cloneAgentRun } from "./agent/agent-state.js";
 import { diffTaskPlans } from "./agent/task-plan-diff.js";
 import { validateTaskPlan } from "./agent/task-plan-validator.js";
 import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveLlmSettings } from "./llm-settings.js";
+import { normalizeLearningMissions, synchronizeLearningMissions } from "./learning-mission.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
 import { localFilePathFromText } from "./shared/local-file-input.js";
 import {
@@ -14,7 +15,7 @@ import {
   CHRONI_MANAGED_LLM_MODEL,
 } from "./shared/types.js";
 import { InputValidationError } from "./validation.js";
-import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyTask, DailyTaskColor, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyTask, DailyTaskColor, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, LearningMission, LearningMissionCheckpointInput, LearningMissionEvidence, LearningMissionEvidenceInput, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
 
 export type SecretCodec = {
   encrypt(value: string): string;
@@ -33,6 +34,7 @@ type StoredState = {
   clarifications: PendingClarification[];
   taskPlans: TaskPlan[];
   taskPlanRevisions: TaskPlanRevision[];
+  learningMissions: LearningMission[];
   preferences: ChroniPreferences;
   companion: {
     state: CompanionState;
@@ -62,7 +64,8 @@ export class ChroniStore {
     this.filePath = join(userDataPath, "chroni-state.json");
     this.#state = this.#load();
     const repairedPathDrafts = this.#discardPathOnlyTextIntakes();
-    if (this.#needsSecretMigration || repairedPathDrafts) this.#save();
+    const synchronizedMissions = this.#synchronizeLearningMissions();
+    if (this.#needsSecretMigration || repairedPathDrafts || synchronizedMissions) this.#save();
   }
 
   snapshot(): ChroniSnapshot {
@@ -74,6 +77,7 @@ export class ChroniStore {
       clarifications: structuredClone(this.#state.clarifications),
       taskPlans: structuredClone(this.#state.taskPlans),
       taskPlanRevisions: structuredClone(this.#state.taskPlanRevisions),
+      learningMissions: structuredClone(this.#state.learningMissions),
       preferences: { ...this.#state.preferences, llm: { ...this.#state.preferences.llm, apiKey: "" } },
       companion: { ...this.#state.companion },
       services: this.serviceStatus(),
@@ -434,6 +438,93 @@ export class ChroniStore {
     return { ok: true, plan: structuredClone(next), snapshot: this.snapshot(), message: `规划修改已保存为 v${next.version}。` };
   }
 
+  addLearningMissionEvidence(missionId: string, input: LearningMissionEvidenceInput): ChroniSnapshot {
+    this.#synchronizeLearningMissions();
+    const mission = this.#state.learningMissions.find((candidate) => candidate.id === missionId);
+    if (!mission) throw new Error("找不到对应的学习任务。");
+    if ((input.kind !== "file" && input.kind !== "note") || !input.title?.trim()) throw new Error("产出证据缺少有效名称。");
+    if (input.linkedDeliverable && !mission.deliverables.includes(input.linkedDeliverable)) throw new Error("所选交付物不属于当前学习任务。");
+    const evidence: LearningMissionEvidence = {
+      id: `mission-evidence-${randomUUID()}`,
+      kind: input.kind,
+      title: input.title.trim().slice(0, 160),
+      createdAt: new Date().toISOString(),
+    };
+    if (input.linkedDeliverable) evidence.linkedDeliverable = input.linkedDeliverable;
+    if (input.note) evidence.note = input.note.slice(0, 4_000);
+    if (Number.isInteger(input.bytes) && Number(input.bytes) >= 0) evidence.bytes = Number(input.bytes);
+    if (typeof input.sha256 === "string" && /^[a-f0-9]{64}$/i.test(input.sha256)) evidence.sha256 = input.sha256.toLowerCase();
+    if (input.modifiedAt && !Number.isNaN(new Date(input.modifiedAt).getTime())) evidence.modifiedAt = new Date(input.modifiedAt).toISOString();
+    mission.evidence = [evidence, ...mission.evidence].slice(0, 200);
+    this.#recordWorkflowTrace([
+      { stage: "observe", summary: `读取学习任务「${mission.title}」的交付要求。`, data: { missionId, deliverableCount: mission.deliverables.length } },
+      { stage: "act", summary: `登记${evidence.kind === "file" ? "文件" : "说明"}证据「${evidence.title}」。`, data: { evidenceId: evidence.id, linkedDeliverable: evidence.linkedDeliverable ?? "unlinked" } },
+      { stage: "verify", summary: "证据元数据已写入本地任务档案；文件内容与本地路径未写入公开快照。", data: { sha256: evidence.sha256?.slice(0, 16) ?? "note" } },
+    ]);
+    this.#save();
+    return this.snapshot();
+  }
+
+  removeLearningMissionEvidence(missionId: string, evidenceId: string): ChroniSnapshot {
+    this.#synchronizeLearningMissions();
+    const mission = this.#state.learningMissions.find((candidate) => candidate.id === missionId);
+    if (!mission) throw new Error("找不到对应的学习任务。");
+    if (!mission.evidence.some((evidence) => evidence.id === evidenceId)) throw new Error("找不到对应的产出证据。");
+    mission.evidence = mission.evidence.filter((evidence) => evidence.id !== evidenceId);
+    this.#save();
+    return this.snapshot();
+  }
+
+  recordLearningMissionCheckpoint(missionId: string, input: LearningMissionCheckpointInput): ChroniSnapshot {
+    this.#synchronizeLearningMissions();
+    const mission = this.#state.learningMissions.find((candidate) => candidate.id === missionId);
+    if (!mission) throw new Error("找不到对应的学习任务。");
+    if (!input.summary?.trim() || (input.status !== "on-track" && input.status !== "blocked" && input.status !== "completed")) throw new Error("执行检查点缺少有效状态或进展说明。");
+    if (input.status === "blocked" && !input.blocker?.trim()) throw new Error("阻塞检查点必须说明阻塞原因。");
+    if (input.milestoneId && !mission.milestones.some((milestone) => milestone.id === input.milestoneId)) throw new Error("所选里程碑不属于当前学习任务。");
+    const checkpoint: LearningMission["checkpoints"][number] = {
+      id: `mission-checkpoint-${randomUUID()}`,
+      status: input.status,
+      summary: input.summary.trim().slice(0, 1_000),
+      createdAt: new Date().toISOString(),
+    };
+    if (input.milestoneId) checkpoint.milestoneId = input.milestoneId;
+    if (Number.isInteger(input.actualMinutes) && Number(input.actualMinutes) > 0) checkpoint.actualMinutes = Math.min(1_440, Number(input.actualMinutes));
+    if (input.blocker?.trim()) checkpoint.blocker = input.blocker.trim().slice(0, 1_000);
+    if (input.reflection?.trim()) checkpoint.reflection = input.reflection.trim().slice(0, 2_000);
+    mission.checkpoints = [checkpoint, ...mission.checkpoints].slice(0, 500);
+    if (checkpoint.milestoneId) this.#applyMissionCheckpointToPlan(mission.taskId, checkpoint);
+    this.#recordWorkflowTrace([
+      { stage: "observe", summary: `记录学习任务「${mission.title}」的执行检查点。`, data: { missionId, status: checkpoint.status } },
+      { stage: "verify", summary: checkpoint.status === "blocked" ? "检测到阻塞，下一步将优先处理阻塞原因。" : "实际投入与复盘已写入本地档案。", data: { actualMinutes: checkpoint.actualMinutes ?? 0 } },
+    ]);
+    this.#save();
+    return this.snapshot();
+  }
+
+  #applyMissionCheckpointToPlan(taskId: string, checkpoint: LearningMission["checkpoints"][number]): void {
+    const candidate = [...this.#state.taskPlans]
+      .filter((plan) => plan.taskId === taskId && plan.status !== "superseded" && plan.steps.some((step) => step.id === checkpoint.milestoneId))
+      .sort((left, right) => Number(right.status === "active") - Number(left.status === "active") || right.version - left.version)[0];
+    if (!candidate || !checkpoint.milestoneId) return;
+    const now = checkpoint.createdAt;
+    let changed = false;
+    const steps = candidate.steps.map((step) => {
+      if (step.id !== checkpoint.milestoneId) return step;
+      const status = checkpoint.status === "completed" ? "completed" as const : checkpoint.status === "blocked" ? "blocked" as const : step.status === "completed" || step.status === "skipped" ? step.status : "in-progress" as const;
+      if (status === step.status && step.userModifiedFields.includes("status")) return step;
+      changed = true;
+      return { ...step, status, userModifiedFields: [...new Set([...step.userModifiedFields, "status"])], updatedAt: now };
+    });
+    if (!changed) return;
+    this.#state.taskPlans = this.#state.taskPlans.map((plan) => plan.id === candidate.id ? { ...plan, steps, updatedAt: now } : plan);
+    const finished = steps.filter((step) => step.status === "completed" || step.status === "skipped").length;
+    const progressPercent = Math.min(99, Math.round(finished / Math.max(1, steps.length) * 100));
+    this.#state.items = this.#state.items.map((item) => item.id === taskId
+      ? { ...item, progressPercent: Math.max(item.progressPercent ?? 0, progressPercent), updatedAt: now }
+      : item);
+  }
+
   updateBehaviorMemory(patch: BehaviorMemoryPatch): ChroniSnapshot {
     this.#state.agent.behaviorMemory = { ...this.#state.agent.behaviorMemory, ...patch, lastUpdatedAt: new Date().toISOString() };
     this.#save();
@@ -750,7 +841,7 @@ export class ChroniStore {
     this.#state.sources = sources.length ? this.#pruneSources([...sources, ...this.#state.sources]) : this.#state.sources;
     this.#settleCompanion(accepted.length
       ? { state: "success", bubble: message }
-      : { state: "confused", bubble: "这条 DDL 已经在日程里了。" });
+      : { state: "confused", bubble: "这条学习任务已经在计划里了。" });
     this.#save();
     return this.snapshot();
   }
@@ -910,7 +1001,7 @@ export class ChroniStore {
       : record);
     this.#settleCompanion(itemIds.length
       ? { state: "success", bubble: message }
-      : { state: "confused", bubble: "重新识别后没有明确 DDL。" });
+      : { state: "confused", bubble: "重新识别后没有明确的学习任务。" });
     this.#save();
     return this.snapshot();
   }
@@ -1005,9 +1096,9 @@ export class ChroniStore {
       storagePath: this.filePath,
       privacy: modelEnabled
         ? managedModel
-          ? "日程、追问、计划和行为偏好保存在本机；启用内测智能服务时，解析后的必要文本片段和选中的结构化偏好会经 Chroni 网关发送到 DeepSeek，二进制原文件不会直接上传。"
-          : "日程、追问、计划和行为偏好保存在本机；启用 LLM 时，会把日程识别所需文本片段（长文档可能分块覆盖全文）和选中的结构化偏好发送到自定义模型服务。"
-        : "日程和来源保存在本机，未启用 LLM 时不会发送到模型服务。",
+          ? "学习任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用内测智能服务时，理解课程要求所需的文本片段和选中的结构化偏好会经 Chroni 网关发送到 DeepSeek，二进制原文件与成果文件不会直接上传。"
+          : "学习任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用 LLM 时，会把理解课程要求所需的文本片段（长文档可能分块覆盖全文）和选中的结构化偏好发送到自定义模型服务。"
+        : "学习任务、来源、产出证据元数据和复盘保存在本机，未启用 LLM 时不会发送到模型服务。",
       notes: [
         ...(this.#storageDiagnostic ? [this.#storageDiagnostic] : []),
         ...(this.#unreadableApiKeyProtected ? ["已保留暂时无法解密的 LLM API Key 密文；在系统安全存储恢复前不会覆盖。"] : []),
@@ -1019,11 +1110,12 @@ export class ChroniStore {
           ? `${managedModel ? "内测访问码" : "LLM API Key"}使用操作系统安全存储加密。`
           : `当前系统安全存储不可用，界面填写的${managedModel ? "内测访问码" : " LLM API Key"}仅在本次运行有效；可改用 CHRONI_LLM_API_KEY。`,
         `${this.#state.sources.length} 条输入来源保存在本机，可在控制中心重新识别。`,
+        `${this.#state.learningMissions.length} 条学习任务档案保存在本机，成果文件仅记录名称、大小和校验值，不复制文件内容或公开本地路径。`,
         this.#state.preferences.remindersEnabled
           ? `提醒已开启${this.#state.preferences.quietHoursEnabled ? `，勿扰时间 ${this.#state.preferences.quietHoursStart}-${this.#state.preferences.quietHoursEnd}` : ""}。`
           : "提醒已关闭。",
         this.#state.preferences.companionEnabled ? "桌宠入口已开启。" : "桌宠入口已隐藏，可在控制中心重新开启。",
-        "信息不完整时会保存待确认草稿；任务计划只有经用户确认后才会启用。",
+        "信息不完整时会保存待确认草稿；任务计划只有经用户确认后才会启用，来源材料不会被误算为学习成果。",
       ],
     };
   }
@@ -1142,6 +1234,7 @@ export class ChroniStore {
     });
     const planIds = new Set(normalizedPlans.values.map((plan) => plan.id));
     const normalizedRevisions = normalizeTaskPlanRevisions(parsed.taskPlanRevisions, itemIds, planIds);
+    const normalizedLearningMissions = normalizeLearningMissions(parsed.learningMissions, itemIds);
     const normalizedAgent = normalizeAgentState(parsed.agent, itemIds);
     const recoveryDetails = [
       normalizationDetail("待确认草稿", normalizedDrafts, repairedDraftLinks),
@@ -1149,6 +1242,7 @@ export class ChroniStore {
       normalizationDetail("追问信息", normalizedClarifications),
       normalizationDetail("任务计划", normalizedPlans),
       normalizationDetail("计划版本", normalizedRevisions),
+      normalizationDetail("学习任务档案", normalizedLearningMissions),
       normalizationDetail("Agent 状态", normalizedAgent),
     ].filter((detail): detail is string => !!detail);
     if (recoveryDetails.length) this.#appendStorageDiagnostic(`已清理本地状态中的异常记录：${recoveryDetails.join("；")}。`);
@@ -1162,6 +1256,7 @@ export class ChroniStore {
       clarifications: normalizedClarifications.values,
       taskPlans: normalizedPlans.values,
       taskPlanRevisions: normalizedRevisions.values,
+      learningMissions: synchronizeLearningMissions(items, normalizedPlans.values, sources, normalizedLearningMissions.values),
       preferences: normalizedPreferences.value,
       companion: normalizedCompanion.value,
       petPlacement: isPetPlacement(parsed.petPlacement) ? { ...parsed.petPlacement } : undefined,
@@ -1186,7 +1281,15 @@ export class ChroniStore {
     }
   }
 
+  #synchronizeLearningMissions(): boolean {
+    const next = synchronizeLearningMissions(this.#state.items, this.#state.taskPlans, this.#state.sources, this.#state.learningMissions);
+    const changed = JSON.stringify(next) !== JSON.stringify(this.#state.learningMissions);
+    this.#state.learningMissions = next;
+    return changed;
+  }
+
   #save(): void {
+    this.#synchronizeLearningMissions();
     this.#synchronizeSourceItemIds();
     if (this.#storageWriteBlocked) throw new Error("本地状态文件处于只读保护状态：无法创建损坏文件的安全副本，未保存本次修改。");
     mkdirSync(dirname(this.filePath), { recursive: true });
@@ -1255,10 +1358,11 @@ function createDefaultState(): StoredState {
     clarifications: [],
     taskPlans: [],
     taskPlanRevisions: [],
+    learningMissions: [],
     preferences: createDefaultPreferences(),
     companion: {
       state: "idle",
-      bubble: "把 DDL 文件、截图或文字拖给我。",
+      bubble: "把课程要求、截图或项目材料拖给我。",
     },
     agent: {
       memory: createAgentMemory(),
@@ -2480,8 +2584,8 @@ export function visibleItems(items: DdlItem[], limit = 6): DdlItem[] {
 export function companionStateForItems(items: DdlItem[]): { state: CompanionState; bubble: string } {
   const incomplete = items.filter((item) => !item.completed);
   const active = visibleActiveScheduleItems(items);
-  if (!items.length) return { state: "idle", bubble: "把 DDL 文件、截图或文字拖给我。" };
-  if (!incomplete.length) return { state: "celebrating", bubble: "今天暂时没有紧急 DDL。" };
+  if (!items.length) return { state: "idle", bubble: "把课程要求、截图或项目材料拖给我。" };
+  if (!incomplete.length) return { state: "celebrating", bubble: "当前学习任务都已完成。" };
   if (!active.length) return { state: "idle", bubble: "稍后提醒的事项会按时回来。" };
   const first = active[0];
   const hours = (new Date(first.dueAt).getTime() - Date.now()) / 3_600_000;

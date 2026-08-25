@@ -2,11 +2,11 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { AgentIcsExportResult, AgentMemoryPatch, AgentRunResult, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniSnapshot, ExplicitPreferenceInput, TaskPlanResult, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentEvidenceExportResult, AgentIcsExportResult, AgentMemoryPatch, AgentRunResult, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniSnapshot, ExplicitPreferenceInput, TaskPlanResult, TaskPlanUpdatePayload } from "./shared/types.js";
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniStore } from "./store.js";
 import { formatOperationError } from "./shared/errors.js";
-import { InputValidationError, validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validatePlanActivation, validatePreferenceStatusPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "./validation.js";
+import { InputValidationError, validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLearningMissionCheckpointInput, validateLearningMissionNoteInput, validatePlanActivation, validatePreferenceStatusPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "./validation.js";
 
 type SnapshotUpdateReason = "data" | "preferences";
 type SnapshotCallback = (snapshot: ChroniSnapshot, reason: SnapshotUpdateReason) => void;
@@ -17,6 +17,7 @@ export type AgentApiOperations = {
   latest(): AgentRunResult | undefined;
   updateMemory(patch: AgentMemoryPatch): ChroniSnapshot;
   exportIcs(): Promise<AgentIcsExportResult>;
+  exportEvidence(): AgentEvidenceExportResult;
   answerClarification(id: string, payload: ClarificationAnswerPayload): Promise<ClarificationResult>;
   dismissClarification(id: string): ChroniSnapshot;
   cancelIntakeDraft(id: string): ChroniSnapshot;
@@ -175,7 +176,7 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     return;
   }
   if (request.method === "POST" && pathname === "/api/agent/run") {
-    if (!agent) throw new HttpError(503, "Deadline Agent 当前不可用，请先启动桌面应用。");
+    if (!agent) throw new HttpError(503, "学习执行 Agent 当前不可用，请先启动桌面应用。");
     const result = await agent.run();
     const snapshot = store.snapshot();
     onSnapshot(snapshot, "data");
@@ -183,21 +184,66 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
     return;
   }
   if (request.method === "GET" && pathname === "/api/agent/latest") {
-    if (!agent) throw new HttpError(503, "Deadline Agent 当前不可用，请先启动桌面应用。");
+    if (!agent) throw new HttpError(503, "学习执行 Agent 当前不可用，请先启动桌面应用。");
     sendJson(response, 200, { ok: true, latest: agent.latest() });
     return;
   }
   if (request.method === "PATCH" && pathname === "/api/agent/memory") {
     const patch = validateAgentMemoryPatch(await readJson(request), store.snapshot().agent.memory);
-    if (!agent) throw new HttpError(503, "Deadline Agent 当前不可用，请先启动桌面应用。");
+    if (!agent) throw new HttpError(503, "学习执行 Agent 当前不可用，请先启动桌面应用。");
     const snapshot = agent.updateMemory(patch);
     onSnapshot(snapshot, "data");
     sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "POST" && pathname === "/api/agent/export-ics") {
-    if (!agent) throw new HttpError(503, "Deadline Agent 当前不可用，请先启动桌面应用。");
+    if (!agent) throw new HttpError(503, "学习执行 Agent 当前不可用，请先启动桌面应用。");
     sendJson(response, 200, { ok: true, ...await agent.exportIcs() });
+    return;
+  }
+  if (request.method === "GET" && pathname === "/api/learning-missions") {
+    sendJson(response, 200, { ok: true, learningMissions: store.snapshot().learningMissions });
+    return;
+  }
+  const missionRoute = pathname.match(/^\/api\/learning-missions\/([^/]+)$/);
+  if (request.method === "GET" && missionRoute) {
+    const id = validateIdentifier(decodeURIComponent(missionRoute[1]), "learning mission id");
+    const mission = store.snapshot().learningMissions.find((candidate) => candidate.id === id);
+    if (!mission) throw new HttpError(404, "找不到这条学习任务。");
+    sendJson(response, 200, { ok: true, learningMission: mission });
+    return;
+  }
+  const missionNoteRoute = pathname.match(/^\/api\/learning-missions\/([^/]+)\/notes$/);
+  if (request.method === "POST" && missionNoteRoute) {
+    const id = validateIdentifier(decodeURIComponent(missionNoteRoute[1]), "learning mission id");
+    if (!store.snapshot().learningMissions.some((candidate) => candidate.id === id)) throw new HttpError(404, "找不到这条学习任务。");
+    const input = validateLearningMissionNoteInput(await readJson(request));
+    const snapshot = store.addLearningMissionEvidence(id, { kind: "note", ...input });
+    onSnapshot(snapshot, "data");
+    sendJson(response, 201, { ok: true, snapshot });
+    return;
+  }
+  const missionCheckpointRoute = pathname.match(/^\/api\/learning-missions\/([^/]+)\/checkpoints$/);
+  if (request.method === "POST" && missionCheckpointRoute) {
+    const id = validateIdentifier(decodeURIComponent(missionCheckpointRoute[1]), "learning mission id");
+    if (!store.snapshot().learningMissions.some((candidate) => candidate.id === id)) throw new HttpError(404, "找不到这条学习任务。");
+    const snapshot = store.recordLearningMissionCheckpoint(id, validateLearningMissionCheckpointInput(await readJson(request)));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 201, { ok: true, snapshot });
+    return;
+  }
+  const missionEvidenceRoute = pathname.match(/^\/api\/learning-missions\/([^/]+)\/evidence\/([^/]+)$/);
+  if (request.method === "DELETE" && missionEvidenceRoute) {
+    const missionId = validateIdentifier(decodeURIComponent(missionEvidenceRoute[1]), "learning mission id");
+    const evidenceId = validateIdentifier(decodeURIComponent(missionEvidenceRoute[2]), "learning mission evidence id");
+    const snapshot = store.removeLearningMissionEvidence(missionId, evidenceId);
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/agent/export-evidence") {
+    if (!agent) throw new HttpError(503, "Agent evidence export is unavailable until the desktop app is running.");
+    sendJson(response, 200, { ok: true, ...agent.exportEvidence() });
     return;
   }
   if (request.method === "GET" && pathname === "/api/agent/clarifications") {
@@ -360,10 +406,16 @@ function apiEndpoints(): string[] {
     "GET /api/snapshot",
     "GET|POST /api/daily-tasks",
     "PATCH|DELETE /api/daily-tasks/:id",
+    "GET /api/learning-missions",
+    "GET /api/learning-missions/:id",
+    "POST /api/learning-missions/:id/notes",
+    "POST /api/learning-missions/:id/checkpoints",
+    "DELETE /api/learning-missions/:id/evidence/:evidenceId",
     "POST /api/agent/run",
     "GET /api/agent/latest",
     "PATCH /api/agent/memory",
     "POST /api/agent/export-ics",
+    "POST /api/agent/export-evidence",
     "GET /api/agent/clarifications",
     "POST /api/agent/clarifications/:id/answer",
     "POST /api/agent/clarifications/:id/dismiss",

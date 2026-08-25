@@ -182,7 +182,7 @@ function inferTitle(text: string): string | undefined {
     .replace(/(截止|截至|之前|完成|提交|上交|请|需要|记得)/g, " ")
     .replace(/[。！!，,：:\s]+/g, " ")
     .trim();
-  if (!cleaned || !/(作业|报告|论文|项目|实验|考试|答辩|汇报|任务|presentation|assignment|report)/i.test(cleaned)) return undefined;
+  if (!cleaned || !/(作业|报告|论文|项目|实验|考试|答辩|汇报|任务|材料|比赛|视频|代码|录音|笔记|presentation|assignment|report)/i.test(cleaned)) return undefined;
   return cleaned.slice(0, 40);
 }
 

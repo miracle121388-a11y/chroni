@@ -1,6 +1,6 @@
 # Chroni 本地 HTTP API
 
-Chroni 桌面应用会启动一个仅监听本机回环地址的 HTTP JSON API。它适合连接受信任的本地脚本、快捷指令和自动化工具，用于预览或写入 DDL、管理每日任务、运行 Deadline Agent，以及处理待确认草稿和任务规划。
+Chroni 桌面应用会启动一个仅监听本机回环地址的 HTTP JSON API。它适合连接受信任的本地脚本、快捷指令和自动化工具，用于预览或写入课程任务、读取 Learning Mission、登记证据说明与阶段检查点、管理每日任务、运行学习执行 Agent，以及处理待确认草稿和任务规划。
 
 本 API 不是远程服务接口。调用前必须先启动完整的 Chroni 桌面应用；关闭应用后，API 也会停止。
 
@@ -252,14 +252,14 @@ curl -fsS \
 | `GET /api/health` | 无 | 无需 Bearer；返回产品版本、实际 `baseUrl`、`apiToken`、支持的输入和端点列表。带浏览器 `Origin` 时仍受 CORS 检查。 |
 | `GET /api/snapshot` | 无 | 返回 `{ ok: true, snapshot }`。API Key、来源全文和近期规划反馈已脱敏。 |
 
-### 输入、DDL 与来源
+### 输入、课程任务与来源
 
 | 方法与路径 | 请求体 | 响应与说明 |
 | --- | --- | --- |
 | `POST /api/extract` | `IntakePayload` | 只预览抽取结果，不写入 Chroni 状态。 |
 | `POST /api/intake` | `IntakePayload` | 写入明确任务；信息不足时可保存待确认草稿并返回 `422`。 |
-| `PATCH /api/items/:id` | DDL 字段补丁 | 更新 DDL，返回 `{ ok: true, snapshot }`。 |
-| `DELETE /api/items/:id` | 无 | 删除 DDL，并清理相关每日时间块、计划、修订、追问和反馈记录。 |
+| `PATCH /api/items/:id` | 任务字段补丁 | 更新课程任务，返回 `{ ok: true, snapshot }`。 |
+| `DELETE /api/items/:id` | 无 | 删除课程任务，并清理相关 Learning Mission、每日时间块、计划、修订、追问和反馈记录。 |
 | `POST /api/sources/:id/reprocess` | 无 | 使用已保存来源重新抽取；成功为 `200`，无法形成结果时为 `422`。 |
 
 `PATCH /api/items/:id` 接受以下字段：
@@ -276,6 +276,54 @@ curl -fsS \
 | `progressPercent` | `0` 至 `100` 的整数；`null` 表示清除 |
 
 至少需要提供一个字段。
+
+### Learning Mission 与阶段证据
+
+Learning Mission 由课程任务、来源和当前 TaskPlan 自动同步生成。API 不提供直接覆盖整条 Mission 的入口，避免调用方绕过来源、计划版本与进度约束。
+
+| 方法与路径 | 请求体 | 响应与说明 |
+| --- | --- | --- |
+| `GET /api/learning-missions` | 无 | 返回 `{ ok: true, learningMissions }`。 |
+| `GET /api/learning-missions/:id` | 无 | 返回 `{ ok: true, learningMission }`；不存在时返回 `404`。 |
+| `POST /api/learning-missions/:id/notes` | `LearningMissionNoteInput` | 登记文字证据，成功返回 HTTP `201` 和更新后的 `snapshot`。 |
+| `POST /api/learning-missions/:id/checkpoints` | `LearningMissionCheckpointInput` | 记录阶段检查点；绑定里程碑时会同步计划步骤状态与任务进度。 |
+| `DELETE /api/learning-missions/:id/evidence/:evidenceId` | 无 | 删除指定证据记录，返回更新后的 `snapshot`。 |
+
+文字证据示例：
+
+```json
+{
+  "title": "需求核对记录",
+  "note": "已核对 PDF 报告与 SQL 文件两个交付物。",
+  "linkedDeliverable": "PDF 报告"
+}
+```
+
+- `title`：必填，最多 160 字符。
+- `note`：必填，最多 4000 字符。
+- `linkedDeliverable`：可选，最多 300 字符；用于计算交付物证据覆盖率。
+
+阶段检查点示例：
+
+```json
+{
+  "status": "blocked",
+  "summary": "核心查询已完成，但边界数据验证受阻",
+  "milestoneId": "mission-task-id-step-2",
+  "actualMinutes": 55,
+  "blocker": "缺少一组可复现的异常数据",
+  "reflection": "先构造最小数据集，再继续整理实验截图"
+}
+```
+
+- `status`：`on-track`、`blocked` 或 `completed`。
+- `summary`：必填，最多 1000 字符。
+- `milestoneId`：可选，必须属于当前 Mission；绑定后会同步对应 TaskPlan 步骤。
+- `actualMinutes`：可选，`1` 至 `1440` 的整数。
+- `blocker`：`blocked` 时必填，最多 1000 字符。
+- `reflection`：可选，最多 2000 字符。
+
+出于本地文件访问边界考虑，HTTP API 不接受任意文件路径作为产出证据。文件证据必须通过 Chroni 控制中心的文件选择器登记，由 Electron 主进程流式计算 SHA-256；状态中只保存文件名、大小、类型、修改时间、哈希和关联交付物，不保存绝对路径或文件内容。受信任的自动化脚本可以通过本节的 `notes` 接口登记文字证据。
 
 ### 每日任务
 
@@ -311,14 +359,15 @@ curl -fsS \
 - `subtasks` 最多 30 项，ID 必须唯一。
 - 更新时还可以提交 `completedDates: ["YYYY-MM-DD"]`；日期必须真实有效。排期字段和 `recurrenceEndsAt` 可用 `null` 清除。
 
-### Deadline Agent
+### 学习执行 Agent
 
 | 方法与路径 | 请求体 | 响应与说明 |
 | --- | --- | --- |
 | `POST /api/agent/run` | 无 | 立即执行一次手动巡检，返回 `{ ok: true, result, snapshot }`。可能按当前设置调用 LLM，并更新每日时间块。 |
 | `GET /api/agent/latest` | 无 | 返回最近一次 Agent 结果；尚未运行时可能没有 `latest` 字段。 |
 | `PATCH /api/agent/memory` | Agent Memory 补丁 | 更新工作时段、容量、提醒与自动巡检设置。 |
-| `POST /api/agent/export-ics` | 无 | 将未完成 DDL 写入本地 `exports` 目录，返回 `{ ok: true, path, itemCount }`。 |
+| `POST /api/agent/export-ics` | 无 | 将未完成课程任务写入本地 `exports` 目录，返回 `{ ok: true, path, itemCount }`。 |
+| `POST /api/agent/export-evidence` | 无 | 导出默认脱敏的 Agent/工作流运行证据 JSON 与 Markdown，包含 Mission 数量、证据覆盖和检查点汇总，并返回路径、生成时间和 SHA-256；不包含原文、标题、证据正文、密钥或本地来源路径。 |
 
 Agent Memory 可更新字段：
 

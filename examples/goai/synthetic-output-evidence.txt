@@ -1,0 +1,9 @@
+CHRONI SYNTHETIC OUTPUT EVIDENCE
+
+This file exists only to demonstrate local evidence registration and SHA-256 hashing.
+It is not a real student's work, course submission, answer, or model-generated solution.
+
+Scenario: database course Learning Mission
+Recorded stage: requirements and deliverables checked
+Expected deliverables: PDF report; SQL file
+Next verification: validate the SQL query against a synthetic boundary dataset

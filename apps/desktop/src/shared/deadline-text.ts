@@ -30,6 +30,7 @@ export function deadlineDateFromText(text: string, now = new Date()): string | u
 
   if (/今天|今日|今早|今晚/.test(normalized)) return relativeDeadline(0, normalized, now);
   if (/明天|明日|明早|明晚/.test(normalized)) return relativeDeadline(1, normalized, now);
+  if (/\btomorrow\b/i.test(normalized)) return relativeDeadline(1, normalized, now);
   if (/大后天/.test(normalized)) return relativeDeadline(3, normalized, now);
   if (/后天|后日/.test(normalized)) return relativeDeadline(2, normalized, now);
 
@@ -69,6 +70,9 @@ export function stripDeadlineTemporalExpressions(text: string): string {
  * such as “如果有问题请联系老师，今晚八点提交” must not block the clear deadline.
  */
 export function isConditionalDeadlineText(text: string): boolean {
+  const temporalCount = (text.match(/20\d{2}\s*[年/.\-]|\d{1,2}\s*[月/.\-]\s*\d{1,2}|今天|明天|后天|(?:上|下|本|这)?(?:个)?(?:周|星期)[一二三四五六日天]|\b(?:today|tomorrow)\b/gi) ?? []).length;
+  if (temporalCount >= 2 && /(但|不过|延期|延迟|改到|改为|调整|变更|如果|若|unless|extension)/i.test(text)) return true;
+  if (temporalCount >= 1 && /(?:如果|若|unless).*(?:延期|延迟|改期|调整|变更|extension)/i.test(text)) return true;
   const sentences = text.split(/[。；;！？!?\n]+/).map((part) => part.trim()).filter(Boolean);
   return sentences.some((sentence) => {
     const clauses = sentence.split(/[，,]/).map((part) => part.trim()).filter(Boolean);
@@ -189,7 +193,7 @@ function hasDeadlineUncertainty(text: string): boolean {
 
 function hasDeadlineQualifier(text: string): boolean {
   if (/(地点|方式|名单|内容|材料|要求).*(?:待通知|另行通知|为准)/.test(text)) return false;
-  return /(?:最终)?以.*(?:通知|消息|公告)为准|(?:截止|日期|时间).*(?:可能|暂定|预计|待通知|另行通知|尚未确定|调整|变更|有变)|^(?:最终)?(?:待通知|另行通知|尚未确定)$/.test(text);
+  return /(?:最终)?以.*(?:通知|消息|公告)为准|(?:截止|日期|时间).*(?:可能|暂定|预计|待通知|另行通知|尚未确定|调整|变更|有变)|(?:等待|请等待|仍待)确认|^(?:最终)?(?:待通知|另行通知|尚未确定)$/.test(text);
 }
 
 function isStandaloneAdvisoryCondition(text: string): boolean {

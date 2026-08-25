@@ -1,4 +1,4 @@
-import type { AgentMemory, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniInputFile, ChroniLlmSettings, DailyTaskCreateInput, DailyTaskPatch, DailyTaskSubtask, ExplicitPreferenceInput, ChroniPreferencesPatch, IntakePayload, ItemPatch, PlanningPreferenceKey, TaskPlanStep, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentMemory, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniInputFile, ChroniLlmSettings, DailyTaskCreateInput, DailyTaskPatch, DailyTaskSubtask, ExplicitPreferenceInput, ChroniPreferencesPatch, IntakePayload, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, PlanningPreferenceKey, TaskPlanStep, TaskPlanUpdatePayload } from "./shared/types.js";
 
 const MAX_TEXT_LENGTH = 2 * 1024 * 1024;
 const MAX_FILES = 32;
@@ -105,6 +105,41 @@ export function validateDailyTaskPatch(value: unknown): DailyTaskPatch {
     result.completedDates = [...new Set(input.completedDates as string[])];
   }
   validateDailyTaskRange(result.scheduledStartAt ?? undefined, result.scheduledEndAt ?? undefined);
+  return result;
+}
+
+export function validateLearningMissionFileInput(value: unknown): LearningMissionFileInput {
+  const input = record(value, "learning mission file");
+  knownKeys(input, ["path", "linkedDeliverable"], "learning mission file");
+  const result: LearningMissionFileInput = { path: nonEmptyString(input.path, "learning mission file.path", 32_768).trim() };
+  if (input.linkedDeliverable !== undefined) result.linkedDeliverable = nonEmptyString(input.linkedDeliverable, "learning mission file.linkedDeliverable", 300).trim();
+  return result;
+}
+
+export function validateLearningMissionNoteInput(value: unknown): LearningMissionNoteInput {
+  const input = record(value, "learning mission note");
+  knownKeys(input, ["title", "note", "linkedDeliverable"], "learning mission note");
+  const result: LearningMissionNoteInput = {
+    title: nonEmptyString(input.title, "learning mission note.title", 160).trim(),
+    note: nonEmptyString(input.note, "learning mission note.note", 4_000).trim(),
+  };
+  if (input.linkedDeliverable !== undefined) result.linkedDeliverable = nonEmptyString(input.linkedDeliverable, "learning mission note.linkedDeliverable", 300).trim();
+  return result;
+}
+
+export function validateLearningMissionCheckpointInput(value: unknown): LearningMissionCheckpointInput {
+  const input = record(value, "learning mission checkpoint");
+  knownKeys(input, ["status", "summary", "milestoneId", "actualMinutes", "blocker", "reflection"], "learning mission checkpoint");
+  if (input.status !== "on-track" && input.status !== "blocked" && input.status !== "completed") fail("learning mission checkpoint.status is invalid.");
+  const result: LearningMissionCheckpointInput = {
+    status: input.status,
+    summary: nonEmptyString(input.summary, "learning mission checkpoint.summary", 1_000).trim(),
+  };
+  if (input.milestoneId !== undefined) result.milestoneId = nonEmptyString(input.milestoneId, "learning mission checkpoint.milestoneId", 240).trim();
+  if (input.actualMinutes !== undefined) result.actualMinutes = boundedNumber(input.actualMinutes, 1, 1_440, "learning mission checkpoint.actualMinutes", true);
+  if (input.blocker !== undefined) result.blocker = nonEmptyString(input.blocker, "learning mission checkpoint.blocker", 1_000).trim();
+  if (input.reflection !== undefined) result.reflection = nonEmptyString(input.reflection, "learning mission checkpoint.reflection", 2_000).trim();
+  if (result.status === "blocked" && !result.blocker) fail("learning mission checkpoint.blocker is required when status is blocked.");
   return result;
 }
 

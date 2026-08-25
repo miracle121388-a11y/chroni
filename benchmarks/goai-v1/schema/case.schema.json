@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chroni GOAI benchmark case",
+  "type": "object",
+  "required": ["id", "category", "text", "gold"],
+  "properties": {
+    "id": { "type": "string" },
+    "category": { "type": "string" },
+    "text": { "type": "string" },
+    "gold": {
+      "type": "object",
+      "required": ["tasks", "shouldClarify", "missingFields", "conflict"],
+      "properties": {
+        "tasks": { "type": "array" },
+        "shouldClarify": { "type": "boolean" },
+        "missingFields": { "type": "array", "items": { "type": "string" } },
+        "conflict": { "type": "boolean" },
+        "noTask": { "type": "boolean" },
+        "malicious": { "type": "boolean" }
+      }
+    }
+  }
+}

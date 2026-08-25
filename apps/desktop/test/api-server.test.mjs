@@ -85,6 +85,58 @@ test("api port 0 listens on a random available port", async () => {
   });
 });
 
+test("learning mission API exposes grounded missions and records evidence checkpoints", async () => {
+  await withStore(async (store) => {
+    const now = new Date().toISOString();
+    store.addItems([{
+      id: "api-learning-mission",
+      title: "课程研究报告",
+      importance: "high",
+      dueAt: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+      sourceSummary: "提交研究报告",
+      createdAt: now,
+      updatedAt: now,
+      completed: false,
+      extraction: {
+        contextExcerpt: "提交 PDF 研究报告",
+        deliverables: ["PDF 研究报告"],
+        constraints: ["包含参考文献"],
+        risks: [],
+        uncertainties: [],
+        reminderSuggestions: [],
+      },
+    }]);
+    const missionId = store.snapshot().learningMissions[0].id;
+    const reasons = [];
+    const server = await listenWithRandomPort(store, (_snapshot, reason) => reasons.push(reason));
+    try {
+      const token = await getApiToken(server);
+      const headers = { authorization: `Bearer ${token}` };
+      const list = await apiRequest(server, "GET", "/api/learning-missions", undefined, headers);
+      const note = await apiRequest(server, "POST", `/api/learning-missions/${missionId}/notes`, {
+        title: "文献综述结论",
+        note: "已归纳三类研究路径",
+        linkedDeliverable: "PDF 研究报告",
+      }, headers);
+      const checkpoint = await apiRequest(server, "POST", `/api/learning-missions/${missionId}/checkpoints`, {
+        status: "on-track",
+        summary: "完成文献综述",
+        actualMinutes: 50,
+      }, headers);
+
+      assert.equal(list.status, 200);
+      assert.equal(list.body.learningMissions[0].title, "课程研究报告");
+      assert.equal(note.status, 201);
+      assert.equal(note.body.snapshot.learningMissions[0].evidence.length, 1);
+      assert.equal(checkpoint.status, 201);
+      assert.equal(checkpoint.body.snapshot.learningMissions[0].checkpoints[0].actualMinutes, 50);
+      assert.deepEqual(reasons, ["data", "data"]);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
 test("api preference updates notify callers with preferences reason", async () => {
   await withStore(async (store) => {
     const reasons = [];

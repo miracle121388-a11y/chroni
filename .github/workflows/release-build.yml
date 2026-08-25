@@ -49,7 +49,7 @@ jobs:
             Remove-Item Env:CSC_LINK -ErrorAction SilentlyContinue
             Remove-Item Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
           }
-          pnpm run package:windows
+          pnpm run package:goai:windows
       - name: Generate Windows checksums
         run: node scripts/generate-checksums.mjs apps/desktop/dist-electron apps/desktop/dist-electron/SHA256SUMS-windows.txt
       - name: Attest Windows packages
@@ -118,7 +118,7 @@ jobs:
           if [[ -z "${CSC_LINK:-}" ]]; then
             unset CSC_LINK CSC_KEY_PASSWORD
           fi
-          pnpm run package:macos
+          pnpm run package:goai:macos
       - name: Generate macOS checksums
         run: node scripts/generate-checksums.mjs apps/desktop/dist-electron apps/desktop/dist-electron/SHA256SUMS-macos.txt
       - name: Attest macOS packages

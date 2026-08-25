@@ -13,6 +13,19 @@ const hasAppleIdCredentials = Boolean(
 const requireSigning = process.env.CHRONI_REQUIRE_SIGNING === "1";
 const requireNotarization = process.env.CHRONI_REQUIRE_NOTARIZATION === "1";
 const canNotarize = hasMacCertificate && (hasAppleApiCredentials || hasAppleIdCredentials);
+const petAssetMode = process.env.CHRONI_PET_ASSET_MODE === "original" ? "original" : "xiaotong";
+const licenseResources = [
+  { from: "../../LICENSE", to: "licenses/CHRONI-MIT-LICENSE.txt" },
+  { from: "../../THIRD_PARTY_NOTICES.md", to: "licenses/THIRD_PARTY_NOTICES.md" },
+  { from: "../../THIRD_PARTY_DEPENDENCIES.md", to: "licenses/THIRD_PARTY_DEPENDENCIES.md" },
+  { from: "third_party/fonts/OFL-1.1.txt", to: "licenses/FONTS-SIL-OFL-1.1.txt" },
+  { from: "third_party/fonts/NOTICE.md", to: "licenses/FONT-NOTICE.md" },
+  ...(petAssetMode === "xiaotong" ? [
+    { from: "third_party/xiaotong/LICENSE", to: "licenses/XIAOTONG-APACHE-2.0.txt" },
+    { from: "third_party/xiaotong/ADDITIONAL_TERMS.md", to: "licenses/XIAOTONG-ADDITIONAL-TERMS.md" },
+    { from: "third_party/xiaotong/README.md", to: "licenses/XIAOTONG-NOTICE.md" },
+  ] : []),
+];
 
 if (process.platform === "darwin" && requireSigning && !hasMacCertificate) {
   throw new Error("CHRONI_REQUIRE_SIGNING=1, but CSC_LINK is not configured.");
@@ -32,18 +45,10 @@ module.exports = {
   artifactName: "Chroni-${version}-${os}-${arch}.${ext}",
   files: [
     "dist/**",
-    "third_party/**",
     "preload.cjs",
     "package.json",
   ],
-  extraResources: [
-    { from: "../../LICENSE", to: "licenses/CHRONI-MIT-LICENSE.txt" },
-    { from: "third_party/xiaotong/LICENSE", to: "licenses/XIAOTONG-APACHE-2.0.txt" },
-    { from: "third_party/xiaotong/ADDITIONAL_TERMS.md", to: "licenses/XIAOTONG-ADDITIONAL-TERMS.md" },
-    { from: "third_party/xiaotong/README.md", to: "licenses/XIAOTONG-NOTICE.md" },
-    { from: "third_party/fonts/OFL-1.1.txt", to: "licenses/FONTS-SIL-OFL-1.1.txt" },
-    { from: "third_party/fonts/NOTICE.md", to: "licenses/FONT-NOTICE.md" },
-  ],
+  extraResources: licenseResources,
   asar: true,
   compression: "maximum",
   npmRebuild: false,

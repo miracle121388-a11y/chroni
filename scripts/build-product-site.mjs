@@ -9,6 +9,7 @@ const output = join(root, "dist", "site");
 const assets = [
   ["docs/assets/chroni-daily-planner-v0.1.4.png", "assets/daily-planner.png"],
   ["docs/assets/chroni-agent-workspace-v0.1.4.png", "assets/agent-workspace.png"],
+  ["docs/assets/chroni-learning-mission-v0.1.4.png", "assets/learning-mission.png"],
   ["apps/desktop/build/icon-source.svg", "assets/chroni-icon.svg"],
   ["apps/desktop/src/renderer/src/assets/tongluv/frames/idle/0000.png", "assets/pet-idle.png"],
   ["apps/desktop/src/renderer/src/assets/tongluv/frames/study/0016.png", "assets/pet-study.png"],

@@ -22,6 +22,9 @@ const unsupportedExtensions = new Set([".exe", ".dll", ".zip", ".rar", ".7z", ".
 
 const maxTextBytes = 2 * 1024 * 1024;
 const maxDocumentBytes = 18 * 1024 * 1024;
+const maxArchiveEntries = 2_000;
+const maxArchiveUncompressedBytes = 64 * 1024 * 1024;
+const maxArchiveCompressionRatio = 200;
 const minimumOcrConfidence = 55;
 const llmChunkCharacters = 60_000;
 const llmChunkOverlap = 800;
@@ -378,12 +381,12 @@ function ambiguousTaskInputs(input: ExtractedInput): ExtractedInput[] {
   const segments = input.text
     .split(/[\r\n。；;.!?？]+/)
     .map((segment) => segment.trim())
-    .filter((segment) => containsAmbiguousNextWeek(segment) && hasPossibleTaskWithoutDeadline(segment));
+    .filter((segment) => !containsPromptInjectionIndicators(segment) && containsAmbiguousNextWeek(segment) && hasPossibleTaskWithoutDeadline(segment));
   return [...new Set(segments)].map((text) => ({ ...input, text }));
 }
 
 function clarificationTaskInputs(input: ExtractedInput): ExtractedInput[] {
-  const segments = candidateLines(normalizeText(input.text)).filter(hasPossibleTaskWithoutDeadline);
+  const segments = candidateLines(normalizeText(input.text)).filter((segment) => !containsPromptInjectionIndicators(segment) && hasPossibleTaskWithoutDeadline(segment));
   if (!segments.length) return hasPossibleTaskWithoutDeadline(input.text) ? [input] : [];
   return segments.map((text) => ({ ...input, text }));
 }
@@ -490,7 +493,8 @@ function isLlmEnabled(settings?: ChroniLlmSettings): boolean {
 }
 
 function hasPossibleTaskWithoutDeadline(text: string): boolean {
-  return /(作业|报告|项目|提交|完成|ddl|deadline|due|考试|答辩|实验|汇报|presentation|quiz|任务|提醒)/i.test(text);
+  return !containsPromptInjectionIndicators(text)
+    && /(作业|报告|项目|论文|提交|完成|截止|截至|交付|材料|比赛|视频|代码|录音|笔记|归档|问卷|ddl|deadline|due|考试|答辩|实验|汇报|presentation|quiz|assignment|任务|提醒)/i.test(text);
 }
 
 function fallbackExtractedInputs(payload: IntakePayload, extracted: ExtractedInput[]): ExtractedInput[] {
@@ -815,13 +819,13 @@ function failureFromFile(file: ChroniInputFile, reason: string): ExtractedFailur
 }
 
 export function extractDdlItemsFromText(text: string, sourceName = "输入内容", referenceNow = new Date()): DdlItem[] {
-  const normalized = normalizeText(text);
+  const normalized = normalizeOcrText(normalizeText(text));
   if (!normalized) return [];
 
   const candidates = candidateLines(normalized);
   const items = candidates
     .map((line, index) => {
-      if (!hasDeadlineIntent(line) || isConditionalDeadlineText(line)) return null;
+      if (containsPromptInjectionIndicators(line) || !hasDeadlineIntent(line) || isConditionalDeadlineText(line)) return null;
       const dueAt = safeDateFromText(line, referenceNow);
       if (!dueAt) return null;
       let titleSource = line;
@@ -832,15 +836,15 @@ export function extractDdlItemsFromText(text: string, sourceName = "输入内容
         title = shortTitle(titleSource);
       }
       if (title === "未命名 DDL") return null;
-      return createItem(title, dueAt, `${sourceName}: ${titleSource.slice(0, 180)}`);
+      return createItem(title, dueAt, `${sourceName}: ${titleSource.slice(0, 180)}`, undefined, extractionContextFromRuleText(titleSource));
     })
     .filter((item): item is DdlItem => !!item);
 
   if (items.length) return mergeDuplicateItems(items);
-  if (!hasDeadlineIntent(normalized) || isConditionalDeadlineText(normalized)) return [];
+  if (containsPromptInjectionIndicators(normalized) || !hasDeadlineIntent(normalized) || isConditionalDeadlineText(normalized)) return [];
   const dueAt = safeDateFromText(normalized, referenceNow);
   const title = shortTitle(normalized);
-  return dueAt && title !== "未命名 DDL" ? [createItem(title, dueAt, `${sourceName}: ${normalized.slice(0, 180)}`)] : [];
+  return dueAt && title !== "未命名 DDL" ? [createItem(title, dueAt, `${sourceName}: ${normalized.slice(0, 180)}`, undefined, extractionContextFromRuleText(normalized))] : [];
 }
 
 function safeDateFromText(text: string, referenceNow = new Date()): string | null {
@@ -871,6 +875,7 @@ async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput>
     return { sourceName: name, sourceType, text };
   }
   if (extension === ".docx") {
+    assertSafeOfficeArchive(buffer, name);
     const result = await mammoth.extractRawText({ buffer });
     assertReliableExtractedText(result.value, name);
     return { sourceName: name, sourceType, text: result.value };
@@ -880,6 +885,7 @@ async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput>
     return { sourceName: name, sourceType, text };
   }
   if (spreadsheetExtensions.has(extension)) {
+    assertSafeOfficeArchive(buffer, name);
     const sheets = await readXlsxFile(buffer) as unknown as WorkbookSheet[];
     const text = workbookText(sheets);
     assertReliableExtractedText(text, name);
@@ -894,6 +900,72 @@ async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput>
   }
 
   throw new Error(`文件类型不支持：${name}`);
+}
+
+export function assertSafeOfficeArchive(buffer: Buffer, name = "Office 文档"): void {
+  const endSignature = 0x06054b50;
+  const centralSignature = 0x02014b50;
+  const localSignature = 0x04034b50;
+  if (buffer.length < 22 || buffer.readUInt32LE(0) !== localSignature) throw new Error(`文件格式与扩展名不匹配：${name}`);
+
+  const minimumOffset = Math.max(0, buffer.length - 22 - 0xffff);
+  let endOffset = -1;
+  for (let offset = buffer.length - 22; offset >= minimumOffset; offset -= 1) {
+    if (buffer.readUInt32LE(offset) === endSignature) {
+      endOffset = offset;
+      break;
+    }
+  }
+  if (endOffset < 0) throw new Error(`压缩文档结构损坏：${name}`);
+
+  const diskNumber = buffer.readUInt16LE(endOffset + 4);
+  const centralDisk = buffer.readUInt16LE(endOffset + 6);
+  const entriesOnDisk = buffer.readUInt16LE(endOffset + 8);
+  const entryCount = buffer.readUInt16LE(endOffset + 10);
+  const centralSize = buffer.readUInt32LE(endOffset + 12);
+  const centralOffset = buffer.readUInt32LE(endOffset + 16);
+  if (diskNumber !== 0 || centralDisk !== 0 || entriesOnDisk !== entryCount) throw new Error(`不支持分卷压缩文档：${name}`);
+  if (entryCount === 0 || entryCount === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff) {
+    throw new Error(`压缩文档目录无效或使用了不支持的 ZIP64：${name}`);
+  }
+  if (entryCount > maxArchiveEntries) throw new Error(`压缩文档条目过多：${name}`);
+  if (centralOffset + centralSize > endOffset || centralOffset < 0) throw new Error(`压缩文档目录越界：${name}`);
+
+  let cursor = centralOffset;
+  let totalCompressed = 0;
+  let totalUncompressed = 0;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (cursor + 46 > endOffset || buffer.readUInt32LE(cursor) !== centralSignature) throw new Error(`压缩文档目录损坏：${name}`);
+    const flags = buffer.readUInt16LE(cursor + 8);
+    const compressedSize = buffer.readUInt32LE(cursor + 20);
+    const uncompressedSize = buffer.readUInt32LE(cursor + 24);
+    const fileNameLength = buffer.readUInt16LE(cursor + 28);
+    const extraLength = buffer.readUInt16LE(cursor + 30);
+    const commentLength = buffer.readUInt16LE(cursor + 32);
+    const next = cursor + 46 + fileNameLength + extraLength + commentLength;
+    if (next > endOffset) throw new Error(`压缩文档条目越界：${name}`);
+    if ((flags & 0x1) !== 0) throw new Error(`不支持加密的压缩文档：${name}`);
+
+    const entryName = buffer.subarray(cursor + 46, cursor + 46 + fileNameLength).toString("utf8");
+    const normalizedName = entryName.replace(/\\/g, "/");
+    const segments = normalizedName.split("/");
+    if (!entryName || entryName.includes("\0") || normalizedName.startsWith("/") || /^[a-zA-Z]:\//.test(normalizedName) || segments.includes("..")) {
+      throw new Error(`压缩文档包含不安全路径：${name}`);
+    }
+
+    if (uncompressedSize > maxArchiveUncompressedBytes) throw new Error(`压缩文档展开后过大：${name}`);
+    if (uncompressedSize > 1024 * 1024 && (compressedSize === 0 || uncompressedSize / compressedSize > maxArchiveCompressionRatio)) {
+      throw new Error(`压缩文档压缩比异常：${name}`);
+    }
+    totalCompressed += compressedSize;
+    totalUncompressed += uncompressedSize;
+    if (totalUncompressed > maxArchiveUncompressedBytes) throw new Error(`压缩文档展开后过大：${name}`);
+    cursor = next;
+  }
+  if (cursor !== centralOffset + centralSize) throw new Error(`压缩文档目录长度不一致：${name}`);
+  if (totalUncompressed > 1024 * 1024 && (totalCompressed === 0 || totalUncompressed / totalCompressed > maxArchiveCompressionRatio)) {
+    throw new Error(`压缩文档总压缩比异常：${name}`);
+  }
 }
 
 async function extractPdfText(buffer: Buffer, name: string): Promise<string> {
@@ -1056,6 +1128,10 @@ function normalizeText(text: string): string {
     .trim();
 }
 
+function normalizeOcrText(text: string): string {
+  return text.replace(/(?<=\p{Script=Han})[ \t]+(?=\p{Script=Han})/gu, "");
+}
+
 function candidateLines(text: string): string[] {
   const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
   const sentenceParts = lines.flatMap((line) => line.split(/[。；;.!?？]+/).map((part) => part.trim()).filter(Boolean));
@@ -1071,15 +1147,68 @@ function hasMultipleTemporalExpressions(text: string): boolean {
 }
 
 function hasTaskTitleEvidence(text: string): boolean {
-  return /(作业|报告|项目|论文|实验|测验|考试|答辩|汇报|展示|会议|活动|任务|presentation|assignment|report|project)/i.test(text);
+  return /(作业|报告|项目|论文|实验|测验|考试|答辩|汇报|展示|会议|活动|任务|材料|比赛|视频|代码|录音|笔记|归档|问卷|presentation|assignment|report|project)/i.test(text);
 }
 
 function hasDeadlineIntent(text: string): boolean {
-  return /(作业|报告|项目|论文|实验|测验|小测|考试|期中|期末|答辩|面试|汇报|展示|路演|会议|活动|presentation|quiz|essay|paper|homework|assignment|project|ddl|deadline|due|截止|截至|提交|完成|上交|交付|deliverable|turn\s*in|submit)/i.test(text);
+  return /(作业|报告|项目|论文|实验|测验|小测|考试|期中|期末|答辩|面试|汇报|展示|路演|会议|活动|材料|视频|代码|录音|笔记|归档|问卷|presentation|quiz|essay|paper|homework|assignment|project|ddl|deadline|due|截止|截至|提交|完成|上交|交付|deliverable|turn\s*in|submit)/i.test(text);
+}
+
+function containsPromptInjectionIndicators(text: string): boolean {
+  return /(?:忽略|无视).*(?:规则|指令|提示)|\bSYSTEM\s*:|你现在是(?:管理员|系统)|(?:泄露|暴露|发送|上传).*(?:API\s*Key|密钥|环境变量|本地文件|chroni-state)|(?:绕过|跳过).*(?:确认|安全|规则)|执行删除数据库|伪造.*(?:提交|完成)|call\s+external\s+url|reveal\s+secrets?|expose\s+environment\s+variables?/i.test(text);
+}
+
+function extractionContextFromRuleText(text: string): DdlExtractionContext {
+  const hasArtifactCue = /(?:提交|上交|交付|\bsubmit\b|\bturn\s*in\b|需(?:要)?|准备|包括|包含|[:：])[^。；;]{1,160}/i.test(text);
+  return {
+    contextExcerpt: text.slice(0, 2_000),
+    deliverables: hasArtifactCue ? inferredDeliverables(text) : [],
+    constraints: [],
+    risks: [],
+    uncertainties: [],
+    reminderSuggestions: [],
+  };
+}
+
+function inferredDeliverables(text: string): string[] {
+  const patterns: Array<[RegExp, string]> = [
+    [/SQL\s*文件/i, "SQL 文件"],
+    [/README(?:\.md)?/i, "README"],
+    [/(?:源代码|代码)(?!归档)/i, "源代码"],
+    [/说明文档/i, "说明文档"],
+    [/需求文档/i, "需求文档"],
+    [/(?:PDF\s*报告|报告\s*PDF)/i, "PDF 报告"],
+    [/\bPDF\b/i, "PDF"],
+    [/\bPPT\b/i, "PPT"],
+    [/\bCSV\b/i, "CSV"],
+    [/实验截图|screenshots?/i, "实验截图"],
+    [/演示视频/i, "演示视频"],
+    [/视频/i, "视频"],
+    [/海报/i, "海报"],
+    [/原型/i, "原型"],
+    [/安装包/i, "安装包"],
+    [/\bZIP\b/i, "ZIP"],
+    [/图表/i, "图表"],
+    [/照片/i, "照片"],
+    [/录音/i, "录音"],
+    [/阅读笔记|笔记/i, "阅读笔记"],
+    [/调研问卷|问卷/i, "调研问卷"],
+    [/原始数据/i, "原始数据"],
+    [/结论/i, "结论"],
+    [/数据库报告/i, "数据库报告"],
+    [/分析报告/i, "分析报告"],
+    [/复盘报告/i, "复盘报告"],
+    [/总结/i, "总结"],
+    [/\breport\b/i, "report"],
+  ];
+  const values = patterns.flatMap(([pattern, label]) => pattern.test(text) ? [label] : []);
+  return [...new Set(values)].filter((value) => !values.some((candidate) => candidate !== value && candidate.includes(value)));
 }
 
 export function shortTitle(text: string): string {
   const cleaned = stripDeadlineTemporalExpressions(text)
+    .replace(/^\s*(?:today|tomorrow|the\s+day\s+after\s+tomorrow)(?:\s+at)?\s*/i, "")
+    .replace(/^\s*(?:submit|finish|complete|deliver|upload|turn\s+in)\s+(?:the\s+)?/i, "")
     .replace(/如果[^，,。；;]+[，,]?/g, " ")
     .replace(/以[^，,。；;]+为准/g, " ")
     .replace(/(可能|暂定|尚未确定|待确认|待通知|另行通知|已经发布|已发布|时间如下)/g, " ")

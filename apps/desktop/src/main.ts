@@ -1,24 +1,30 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, Notification, safeStorage, shell } from "electron";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { createReadStream, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { basename, join, resolve } from "node:path";
 import { DeadlineAgent } from "./agent/deadline-agent.js";
 import { createLlmAgentPlanner } from "./agent/agent-planner.js";
 import { reminderEligibility } from "./agent/agent-reminder.js";
 import { AgentScheduler } from "./agent/agent-scheduler.js";
 import { createAgentTools, type DeadlineAgentTools } from "./agent/agent-tools.js";
+import { exportRedactedAgentEvidence } from "./agent/evidence-report.js";
 import { startChroniApiServer, type AgentApiOperations } from "./api-server.js";
 import { ensureTaskPlan, extractPayload, processIntake, reprocessSource } from "./intake.js";
+import { clearGoaiDemoStore, createGoaiDemoStore, GOAI_DEMO_NAMESPACE } from "./goai-demo.js";
 import { testLlmConnection } from "./llm-client.js";
 import { resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
-import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, GoaiDemoResult, GoaiDemoScenario, GoaiDemoStatus, IntakePayload, IntakeResult, ItemPatch, LearningMissionEvidenceInput, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { ChroniUpdater } from "./updater.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface, type ControlCenterRoute } from "./windows.js";
-import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
+import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLearningMissionCheckpointInput, validateLearningMissionFileInput, validateLearningMissionNoteInput, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
 
 let store: ChroniStore;
+let primaryStore: ChroniStore;
+let storeSecretCodec: SecretCodec | undefined;
+let activeDemoScenario: GoaiDemoScenario | undefined;
 let apiServer: ReturnType<typeof startChroniApiServer> | undefined;
 let deadlineAgent: DeadlineAgent;
 let agentTools: DeadlineAgentTools;
@@ -39,7 +45,9 @@ if (!gotLock) {
     applyMacDevelopmentIcon();
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");
     process.env.CHRONI_OCR_CACHE_PATH ||= join(app.getPath("userData"), "cache", "ocr");
-    store = new ChroniStore(app.getPath("userData"), createSecretCodec());
+    storeSecretCodec = createSecretCodec();
+    primaryStore = new ChroniStore(app.getPath("userData"), storeSecretCodec);
+    store = primaryStore;
     installDeadlineAgent();
     applicationUpdater = createApplicationUpdater();
     lastTaskFingerprint = taskFingerprint(store.snapshot());
@@ -61,21 +69,7 @@ if (!gotLock) {
     });
     applyPreferences(store.snapshot().preferences);
     registerHotkey();
-    apiServer = startChroniApiServer(store, (snapshot, reason) => {
-      if (reason === "preferences") {
-        applyPreferences(snapshot.preferences);
-        registerHotkey();
-      }
-      const nextFingerprint = taskFingerprint(snapshot);
-      if (reason === "data" && lastTaskFingerprint && nextFingerprint !== lastTaskFingerprint) agentScheduler.scheduleTaskChange();
-      lastTaskFingerprint = nextFingerprint;
-      broadcast("chroni:snapshot-updated", snapshot);
-      refreshScheduleAfterUpdate();
-    }, {
-      discoveryFilePath: join(app.getPath("userData"), "chroni-api.json"),
-      agent: agentApiOperations(),
-      version: app.getVersion(),
-    });
+    startLocalApiServer();
     applicationUpdater.start();
     refreshCompanionFromSchedule();
     refreshReminders();
@@ -118,7 +112,7 @@ function installIpc(): void {
   ipcMain.handle("chroni:intake", async (_event, payload: IntakePayload) => {
     const validatedPayload = validateIntakePayload(payload);
     const previousPendingIds = pendingClarificationIds();
-    beginPetInput(validatedPayload, "正在识别 DDL...");
+    beginPetInput(validatedPayload, "正在理解课程要求...");
     try {
       const result = await processIntake(validatedPayload, store);
       broadcast("chroni:snapshot-updated", result.snapshot);
@@ -177,6 +171,23 @@ function installIpc(): void {
     if (taskFingerprint(snapshot) !== previousFingerprint) scheduleAgentForTaskChange();
     return publishStoreSnapshot(snapshot);
   });
+  ipcMain.handle("chroni:learning-mission-file", async (_event, missionId: string, rawInput: unknown) => {
+    const input = validateLearningMissionFileInput(rawInput);
+    const evidence = await localFileEvidence(input.path, input.linkedDeliverable);
+    return publishStoreSnapshot(store.addLearningMissionEvidence(validateIdentifier(missionId, "learning mission id"), evidence));
+  });
+  ipcMain.handle("chroni:learning-mission-note", (_event, missionId: string, rawInput: unknown) => {
+    const input = validateLearningMissionNoteInput(rawInput);
+    return publishStoreSnapshot(store.addLearningMissionEvidence(validateIdentifier(missionId, "learning mission id"), { kind: "note", ...input }));
+  });
+  ipcMain.handle("chroni:learning-mission-checkpoint", (_event, missionId: string, rawInput: unknown) => {
+    const input = validateLearningMissionCheckpointInput(rawInput);
+    return publishStoreSnapshot(store.recordLearningMissionCheckpoint(validateIdentifier(missionId, "learning mission id"), input));
+  });
+  ipcMain.handle("chroni:learning-mission-evidence-remove", (_event, missionId: string, evidenceId: string) => publishStoreSnapshot(store.removeLearningMissionEvidence(
+    validateIdentifier(missionId, "learning mission id"),
+    validateIdentifier(evidenceId, "learning mission evidence id"),
+  )));
   ipcMain.handle("chroni:preferences-update", (_event, patch: ChroniPreferencesPatch) => {
     const previousHotkey = store.snapshot().preferences.hotkey;
     let snapshot = store.updatePreferences(validatePreferencesPatch(patch));
@@ -209,6 +220,11 @@ function installIpc(): void {
     if (!agentTools.exportIcs) throw new Error("日历导出功能当前不可用。");
     return agentTools.exportIcs();
   });
+  ipcMain.handle("chroni:agent-export-evidence", () => exportAgentEvidence());
+  ipcMain.handle("chroni:goai-demo-status", () => goaiDemoStatus());
+  ipcMain.handle("chroni:goai-demo-load", async (_event, scenario: GoaiDemoScenario) => activateGoaiDemo(validateGoaiDemoScenario(scenario)));
+  ipcMain.handle("chroni:goai-demo-reset", async () => activateGoaiDemo(activeDemoScenario ?? "clear"));
+  ipcMain.handle("chroni:goai-demo-clear", async () => deactivateGoaiDemo());
   ipcMain.handle("chroni:clarification-answer", async (_event, id: string, payload: ClarificationAnswerPayload) => {
     const result = store.answerClarification(validateIdentifier(id, "clarification id"), validateClarificationAnswer(payload));
     const complete = await completeClarificationPlanning(result);
@@ -253,7 +269,7 @@ function installIpc(): void {
   ipcMain.handle("chroni:quick-add", async (_event, text: string) => {
     const payload = validateIntakePayload({ kind: "text", text });
     const previousPendingIds = pendingClarificationIds();
-    beginPetInput(payload, "正在识别 DDL...");
+    beginPetInput(payload, "正在理解课程要求...");
     try {
       const result = await processIntake(payload, store);
       broadcast("chroni:snapshot-updated", result.snapshot);
@@ -288,6 +304,151 @@ function installIpc(): void {
     return snapshot;
   });
   ipcMain.handle("chroni:open-storage", () => shell.showItemInFolder(store.filePath));
+}
+
+async function localFileEvidence(filePath: string, linkedDeliverable?: string): Promise<LearningMissionEvidenceInput> {
+  const maxEvidenceBytes = 512 * 1024 * 1024;
+  const absolutePath = resolve(filePath);
+  let metadata: ReturnType<typeof statSync>;
+  try {
+    metadata = statSync(absolutePath);
+  } catch {
+    throw new Error("无法读取所选产出文件，请确认文件仍然存在且具有读取权限。");
+  }
+  if (!metadata.isFile()) throw new Error("请选择一个可读取的本地文件作为产出证据。");
+  if (metadata.size > maxEvidenceBytes) throw new Error("单个产出证据文件不能超过 512 MiB。");
+  const sha256 = await new Promise<string>((resolveHash, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(absolutePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", reject);
+    stream.on("end", () => resolveHash(hash.digest("hex")));
+  });
+  let verifiedMetadata: ReturnType<typeof statSync>;
+  try {
+    verifiedMetadata = statSync(absolutePath);
+  } catch {
+    throw new Error("文件在登记过程中被移动或删除，请重新选择。");
+  }
+  if (!verifiedMetadata.isFile() || verifiedMetadata.size !== metadata.size || verifiedMetadata.mtimeMs !== metadata.mtimeMs) {
+    throw new Error("文件在登记过程中发生了变化，请等待文件保存完成后重试。");
+  }
+  return {
+    kind: "file",
+    title: basename(absolutePath).slice(0, 160),
+    bytes: metadata.size,
+    sha256,
+    modifiedAt: metadata.mtime.toISOString(),
+    ...(linkedDeliverable ? { linkedDeliverable } : {}),
+  };
+}
+
+function startLocalApiServer(): void {
+  apiServer = startChroniApiServer(store, (snapshot, reason) => {
+    if (reason === "preferences") {
+      applyPreferences(snapshot.preferences);
+      registerHotkey();
+    }
+    const nextFingerprint = taskFingerprint(snapshot);
+    if (reason === "data" && lastTaskFingerprint && nextFingerprint !== lastTaskFingerprint) agentScheduler.scheduleTaskChange();
+    lastTaskFingerprint = nextFingerprint;
+    broadcast("chroni:snapshot-updated", snapshot);
+    refreshScheduleAfterUpdate();
+  }, {
+    discoveryFilePath: join(app.getPath("userData"), "chroni-api.json"),
+    agent: agentApiOperations(),
+    version: app.getVersion(),
+  });
+}
+
+async function stopLocalApiServer(): Promise<void> {
+  if (!apiServer?.listening) {
+    apiServer = undefined;
+    return;
+  }
+  await new Promise<void>((resolve) => apiServer?.close(() => resolve()));
+  apiServer = undefined;
+}
+
+async function switchActiveStore(nextStore: ChroniStore): Promise<void> {
+  agentScheduler?.dispose();
+  await stopLocalApiServer();
+  store = nextStore;
+  installDeadlineAgent();
+  lastTaskFingerprint = taskFingerprint(store.snapshot());
+  startLocalApiServer();
+  applyPreferences(store.snapshot().preferences);
+  registerHotkey();
+  if (!activeDemoScenario) agentScheduler.startDailyChecks();
+  broadcast("chroni:snapshot-updated", store.snapshot());
+  refreshScheduleAfterUpdate();
+}
+
+async function activateGoaiDemo(scenario: GoaiDemoScenario): Promise<GoaiDemoResult> {
+  activeDemoScenario = scenario;
+  const demoStore = createGoaiDemoStore(app.getPath("userData"), storeSecretCodec, scenario);
+  await switchActiveStore(demoStore);
+  if (scenario === "clear") {
+    for (const item of store.snapshot().items) {
+      await ensureTaskPlan(item.id, store, true, "rules-only");
+      const plan = store.taskPlanByTaskId(item.id);
+      if (plan) store.activateTaskPlan(item.id, plan.id);
+      const mission = store.snapshot().learningMissions.find((candidate) => candidate.taskId === item.id);
+      if (mission) {
+        store.addLearningMissionEvidence(mission.id, {
+          kind: "note",
+          title: "演示检查记录：需求与提交物已对齐",
+          note: "已依据课程通知核对 PDF 报告、SQL 文件、实验截图与课程平台提交要求。此记录属于隔离的合成演示数据。",
+          linkedDeliverable: mission.deliverables[0],
+        });
+        store.recordLearningMissionCheckpoint(mission.id, {
+          status: "on-track",
+          summary: "已完成要求理解，准备进入关系模式设计。",
+          actualMinutes: 25,
+          reflection: "先锁定两个交付物的共同依赖，减少报告与 SQL 文件返工。",
+        });
+      }
+    }
+    await runDeadlineAgentAndPublish("manual");
+  }
+  const snapshot = store.snapshot();
+  broadcast("chroni:snapshot-updated", snapshot);
+  return {
+    status: goaiDemoStatus(),
+    snapshot,
+    message: scenario === "clear"
+      ? "场景 A 已完成本地提取、任务拆解、排期与 Agent 验证。"
+      : scenario === "clarification"
+        ? "场景 B 已停在必要截止时间确认，其他可识别信息均已保留。"
+        : "场景 C 已保留冲突证据，等待用户选择可信截止时间。",
+  };
+}
+
+async function deactivateGoaiDemo(): Promise<GoaiDemoResult> {
+  activeDemoScenario = undefined;
+  await switchActiveStore(primaryStore);
+  clearGoaiDemoStore(app.getPath("userData"));
+  const snapshot = store.snapshot();
+  return {
+    status: goaiDemoStatus(),
+    snapshot,
+    message: "演示数据已清除，已返回你的正式本地数据。",
+  };
+}
+
+function goaiDemoStatus(): GoaiDemoStatus {
+  return {
+    active: !!activeDemoScenario,
+    scenario: activeDemoScenario,
+    namespace: GOAI_DEMO_NAMESPACE,
+    synthetic: true,
+    noKeyRequired: true,
+  };
+}
+
+function validateGoaiDemoScenario(value: unknown): GoaiDemoScenario {
+  if (value === "clear" || value === "clarification" || value === "conflict") return value;
+  throw new Error("Unsupported GOAI demo scenario.");
 }
 
 function createApplicationUpdater(): ChroniUpdater {
@@ -366,7 +527,7 @@ function installDeadlineAgent(): void {
       });
       if (!outcome.sent) return outcome;
       showTaskNotification({
-        title: "Chroni Agent：高风险 DDL",
+        title: "Chroni Agent：高风险学习任务",
         body: `${task.title} · ${formatUserFacingMessage(task.reasons[0], "需要优先处理")}`,
       }, task.taskId);
       store.markItemReminded(task.taskId);
@@ -395,6 +556,21 @@ function installDeadlineAgent(): void {
   });
 }
 
+function exportAgentEvidence() {
+  return exportRedactedAgentEvidence(
+    store.snapshot(),
+    store.agentTraceHistory(),
+    join(app.getPath("userData"), "exports"),
+    {
+      version: app.getVersion(),
+      platform: process.platform,
+      architecture: process.arch,
+      petAssetMode: process.env.CHRONI_PET_ASSET_MODE === "original" ? "original" : "xiaotong",
+      demoScenario: activeDemoScenario,
+    },
+  );
+}
+
 async function runDeadlineAgentAndPublish(trigger: AgentRunTrigger = "manual"): Promise<AgentRunResult> {
   if (trigger === "manual") {
     beginPetWork("Agent 正在巡检并安排任务...");
@@ -410,7 +586,7 @@ async function runDeadlineAgentAndPublish(trigger: AgentRunTrigger = "manual"): 
   }
   const highRiskCount = result.priorities.filter((item) => item.riskLevel === "high" || item.riskLevel === "critical").length;
   const bubble = highRiskCount
-    ? `Agent 巡检完成：${highRiskCount} 个高风险 DDL。`
+    ? `Agent 巡检完成：${highRiskCount} 个高风险学习任务。`
     : "Agent 巡检完成，今日安排正常。";
   const snapshot = store.setCompanion(highRiskCount ? "deadline_near" : "success", bubble);
   broadcast("chroni:snapshot-updated", snapshot);
@@ -442,6 +618,7 @@ function agentApiOperations(): AgentApiOperations {
       if (!agentTools.exportIcs) throw new Error("日历导出功能当前不可用。");
       return agentTools.exportIcs();
     },
+    exportEvidence: () => exportAgentEvidence(),
     answerClarification: async (id, payload) => {
       const result = store.answerClarification(id, payload);
       return completeClarificationPlanning(result);
@@ -527,7 +704,7 @@ function refreshReminders(): void {
       showTaskNotification({
         title: isSnoozeWakeUp
           ? "Chroni：稍后提醒"
-          : new Date(item.dueAt).getTime() < now ? "Chroni：DDL 已逾期" : "Chroni：DDL 临近",
+          : new Date(item.dueAt).getTime() < now ? "Chroni：学习任务已逾期" : "Chroni：关键节点临近",
         body: `${item.title} · ${timeUntil(item.dueAt)}`,
         silent: false,
       }, item.id);
@@ -549,7 +726,7 @@ function controlCenterRoute(value: unknown): ControlCenterRoute | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const candidate = value as Record<string, unknown>;
   const route: ControlCenterRoute = {};
-  if (candidate.tab === "schedule" || candidate.tab === "daily" || candidate.tab === "agent" || candidate.tab === "preferences" || candidate.tab === "services" || candidate.tab === "about") route.tab = candidate.tab;
+  if (candidate.tab === "missions" || candidate.tab === "schedule" || candidate.tab === "daily" || candidate.tab === "agent" || candidate.tab === "demo" || candidate.tab === "preferences" || candidate.tab === "services" || candidate.tab === "about") route.tab = candidate.tab;
   if (typeof candidate.taskId === "string" && candidate.taskId.trim()) route.taskId = candidate.taskId.trim().slice(0, 200);
   if (candidate.focus === "clarifications") route.focus = candidate.focus;
   return Object.keys(route).length ? route : undefined;

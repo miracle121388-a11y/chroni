@@ -4,30 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f7f7f3">
-    <meta name="description" content="下载 Chroni。把课程通知、项目文档和截图交给桌面上的 Deadline Agent，自动提取截止事项、拆解任务并安排今天。">
+    <meta name="description" content="下载 Chroni，本地优先的学习执行 Agent。把课程要求转化为可执行、可验证、可调整的 Learning Mission。">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Chroni">
-    <meta property="og:title" content="下载 Chroni - 把截止事项变成今天的计划">
-    <meta property="og:description" content="拖入材料，Chroni 会读懂要求、拆解任务并排进今天。支持 Windows 与 macOS。">
-    <meta property="og:image" content="https://getchroni.zeabur.app/assets/daily-planner.png">
+    <meta property="og:title" content="Chroni - 本地学习执行 Agent">
+    <meta property="og:description" content="不替学生完成作业，而是把课程要求转化为可执行、可验证、可调整的学习过程。">
+    <meta property="og:image" content="https://getchroni.zeabur.app/assets/learning-mission.png">
     <meta property="og:url" content="https://getchroni.zeabur.app/">
     <link rel="canonical" href="https://getchroni.zeabur.app/">
     <link rel="icon" href="./assets/chroni-icon.svg" type="image/svg+xml">
     <link rel="preload" href="./assets/pet-idle.png" as="image">
     <link rel="preload" href="./assets/pet-study.png" as="image">
     <link rel="stylesheet" href="./styles.css">
-    <title>下载 Chroni - 桌面截止日期 Agent</title>
+    <title>Chroni - 本地学习执行 Agent</title>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "Chroni",
-        "applicationCategory": "ProductivityApplication",
+        "applicationCategory": "EducationalApplication",
         "operatingSystem": "Windows 10, Windows 11, macOS 12 and later",
         "downloadUrl": "https://getchroni.zeabur.app/#download",
         "softwareVersion": "0.1.4",
         "license": "https://opensource.org/license/mit",
-        "description": "Local-first desktop deadline agent for turning files, screenshots and notices into actionable daily plans."
+        "description": "Local-first learning execution agent that turns course requirements into evidence-grounded learning missions, daily actions and verifiable outcomes."
       }
     </script>
   </head>
@@ -40,8 +40,8 @@
         <span>Chroni</span>
       </a>
       <nav aria-label="主导航">
-        <a href="#story">工作方式</a>
-        <a href="#planner">每日计划</a>
+        <a href="#missions">学习任务</a>
+        <a href="#planner">今日执行</a>
         <a href="#companion">桌宠</a>
         <a href="#download">下载</a>
         <a class="nav-source" href="https://github.com/miracle121388-a11y/chroni">GitHub</a>
@@ -52,9 +52,9 @@
       <section class="hero-story" id="top" aria-labelledby="hero-title">
         <div class="hero-stage">
           <div class="hero-copy">
-            <p class="overline">Chroni for desktop</p>
-            <h1 id="hero-title">把截止事项，<br>变成今天的计划。</h1>
-            <p class="hero-lead">文件、截图和通知拖进来。Chroni 会读懂要求、拆解步骤，再把真正能执行的工作排进今天。</p>
+            <p class="overline">Learning execution agent</p>
+            <h1 id="hero-title">Chroni<br>学习执行 Agent</h1>
+            <p class="hero-lead">不替你完成作业。Chroni 把课程要求转化为有依据的目标、里程碑、今日行动与产出证据，让个性化学习真正落到执行过程。</p>
             <div class="hero-actions">
               <a class="download-button primary-download" id="primary-download" href="#download">
                 <span id="primary-download-label">获取 Chroni</span>
@@ -68,7 +68,7 @@
             <p class="mobile-desktop-note">Chroni 是桌面应用，请在 Windows 或 macOS 电脑上下载。</p>
           </div>
 
-          <div class="hero-product-stage" aria-label="Chroni 将课程通知转化为每日计划的过程">
+          <div class="hero-product-stage" aria-label="Chroni 将课程要求转化为可验证学习任务的过程">
             <article class="notice-card" id="hero-notice">
               <div class="notice-source">
                 <span class="source-mark" aria-hidden="true">课</span>
@@ -81,7 +81,7 @@
             </article>
 
             <div class="hero-mascot" aria-hidden="true">
-              <div class="mascot-bubble" id="hero-bubble">把通知拖给我就好。</div>
+              <div class="mascot-bubble" id="hero-bubble">把课程要求拖给我就好。</div>
               <div class="mascot-images">
                 <img class="mascot-frame mascot-idle" src="./assets/pet-idle.png" alt="">
                 <img class="mascot-frame mascot-reading" src="./assets/pet-study.png" alt="">
@@ -90,7 +90,7 @@
             </div>
 
             <aside class="extraction-panel" id="hero-extraction" aria-label="Chroni 提取的任务信息">
-              <div class="panel-status"><span aria-hidden="true">✓</span> 已找到可执行任务</div>
+              <div class="panel-status"><span aria-hidden="true">✓</span> 已建立 Learning Mission</div>
               <dl>
                 <div><dt>截止时间</dt><dd>7 月 30 日 23:59</dd></div>
                 <div><dt>提交物</dt><dd>源码 / README PDF</dd></div>
@@ -102,18 +102,18 @@
             <figure class="hero-window" id="hero-window">
               <div class="window-bar">
                 <span class="window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
-                <strong>Chroni · 每日任务</strong>
-                <span class="window-state">Agent 已排程</span>
+                <strong>Chroni · 学习任务</strong>
+                <span class="window-state">证据闭环已建立</span>
               </div>
               <div class="window-viewport">
-                <img src="./assets/daily-planner.png" alt="Chroni 每日任务界面，任务按照真实时长排列">
-                <div class="planner-insight">今天先完成核心功能，明晚进行最终测试。</div>
+                <img src="./assets/learning-mission.png" alt="Chroni 学习任务控制台，展示目标、交付物、里程碑与产出证据">
+                <div class="planner-insight">下一步：验证 SQL 查询并补充阶段产出。</div>
               </div>
             </figure>
           </div>
 
           <div class="hero-progress" aria-hidden="true">
-            <span>通知</span><i></i><span>理解</span><i></i><span>计划</span><i></i><span>提醒</span>
+            <span>材料</span><i></i><span>理解</span><i></i><span>执行</span><i></i><span>验证</span>
           </div>
           <a class="hero-next" href="#story">滚动，看它怎样工作 <span aria-hidden="true">↓</span></a>
         </div>
@@ -122,15 +122,15 @@
       <section class="release-bar" aria-label="发布信息">
         <div><span>当前版本</span><strong id="release-version">v0.1.4</strong></div>
         <div><span>支持平台</span><strong>Windows · macOS</strong></div>
-        <div><span>数据方式</span><strong>Local-first</strong></div>
+        <div><span>核心闭环</span><strong>Mission · Evidence</strong></div>
         <a href="#download">全部下载选项 <span aria-hidden="true">→</span></a>
       </section>
 
       <section class="clarity-story" id="story" aria-labelledby="story-title">
         <div class="clarity-stage">
           <div class="section-heading clarity-heading">
-            <p class="overline">From notice to action</p>
-            <h2 id="story-title">不是把文字搬进日历。<br>是先理解，再行动。</h2>
+            <p class="overline">From requirement to mission</p>
+            <h2 id="story-title">不是把文字搬进日历。<br>是理解目标，再建立任务。</h2>
           </div>
 
           <div class="clarity-scene" aria-label="多种材料被整理为结构化任务">
@@ -187,15 +187,47 @@
               </article>
             </div>
           </div>
-          <p class="scene-caption">来源证据会被保留。明确任务先进入计划，次要缺失信息稍后再确认。</p>
+          <p class="scene-caption">来源依据会被保留。明确要求先建立学习任务，只有会影响安全执行的缺失信息才会阻塞确认。</p>
+        </div>
+      </section>
+
+      <section class="learning-mission-section section" id="missions" aria-labelledby="missions-title">
+        <div class="section-heading mission-site-heading">
+          <p class="overline">Learning Mission</p>
+          <h2 id="missions-title">一条课程任务，<br>不应只剩一个截止时间。</h2>
+          <p>Chroni 把目标、交付物、完成标准、执行里程碑、真实投入和产出证据放进同一份任务档案。计划发生偏差时，下一步会随检查点重新计算。</p>
+        </div>
+        <div class="mission-proof" data-reveal>
+          <figure class="product-proof mission-product-proof">
+            <div class="window-bar">
+              <span class="window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
+              <strong>真实产品界面 · 隔离演示数据</strong>
+              <span>Learning Mission</span>
+            </div>
+            <img src="./assets/learning-mission.png" alt="Chroni 学习任务控制台真实界面，显示数据库项目的目标、交付物、进度、证据覆盖和里程碑">
+          </figure>
+          <aside class="mission-loop" aria-label="学习任务执行闭环">
+            <p class="overline">Evidence-led loop</p>
+            <ol>
+              <li><span>01</span><div><strong>Ground</strong><p>从原始课程要求锁定事实与边界。</p></div></li>
+              <li><span>02</span><div><strong>Plan</strong><p>形成目标、依赖、里程碑与完成标准。</p></div></li>
+              <li><span>03</span><div><strong>Act</strong><p>把可执行步骤安排进真实可用时间。</p></div></li>
+              <li><span>04</span><div><strong>Verify</strong><p>登记成果与实际投入，识别阻塞和偏差。</p></div></li>
+              <li><span>05</span><div><strong>Adapt</strong><p>保留用户控制权，重新计算下一步。</p></div></li>
+            </ol>
+          </aside>
+        </div>
+        <div class="mission-principle" data-reveal>
+          <strong>Chroni 不替学生生成最终答案。</strong>
+          <span>它帮助学生看清要求、组织过程、留下证据，并对自己的学习负责。</span>
         </div>
       </section>
 
       <section class="planner-section section" id="planner" aria-labelledby="planner-title">
         <div class="section-heading planner-heading">
-          <p class="overline">Daily planner</p>
-          <h2 id="planner-title">空闲时间不会自己出现。<br>Chroni 会把任务放进去。</h2>
-          <p>固定事件先占位，Agent 再按截止时间、依赖和预计耗时安排任务。发生冲突时，同一个任务会被移动，而不是重新创建。</p>
+          <p class="overline">Daily execution</p>
+          <h2 id="planner-title">计划只有进入今天，<br>才真正开始发生。</h2>
+          <p>固定事件先占位，Agent 再按学习里程碑、截止时间、依赖和预计耗时安排行动。发生冲突时，同一个任务会被移动，而不是重新创建。</p>
         </div>
 
         <div class="planner-build-scene" data-reveal>
@@ -247,13 +279,13 @@
       <section class="agent-band" aria-labelledby="agent-title">
         <div class="agent-inner">
           <div class="agent-copy" data-reveal>
-            <p class="overline">Deadline Agent</p>
-            <h2 id="agent-title">计划不是一句建议。<br>它有依据，也能重排。</h2>
-            <p>剩余工时够不够、哪个任务风险最高、今天还能安排多少，Agent 会在日程生成前完成一次复查。</p>
+            <p class="overline">Learning Execution Agent</p>
+            <h2 id="agent-title">Agent 不止给建议。<br>它观察、行动，也验证。</h2>
+            <p>任务是否有依据、里程碑是否被阻塞、剩余工时够不够、今天还能安排多少，Agent 会在每次行动前后完成复查。</p>
             <ul>
-              <li><span>01</span>综合截止时间、依赖和每日容量</li>
-              <li><span>02</span>保留规划来源与结构化执行记录</li>
-              <li><span>03</span>模型不可用时仍有本地规则回退</li>
+              <li><span>01</span>综合学习目标、截止时间、依赖和每日容量</li>
+              <li><span>02</span>以检查点、成果证据和 Trace 验证执行结果</li>
+              <li><span>03</span>模型不可用时仍有本地规则与安全回退</li>
             </ul>
           </div>
           <figure class="agent-frame" data-reveal>
@@ -262,7 +294,7 @@
               <strong>Chroni · Agent</strong>
               <span>计划覆盖率 100%</span>
             </div>
-            <img src="./assets/agent-workspace.png" alt="Chroni Deadline Agent 工作台，展示今日安排、计划覆盖率与高风险任务">
+            <img src="./assets/agent-workspace.png" alt="Chroni 学习执行 Agent 工作台，展示今日安排、计划覆盖率与高风险任务">
           </figure>
         </div>
       </section>
@@ -305,8 +337,8 @@
         <div class="journal-inner">
           <div class="journal-copy" data-reveal>
             <p class="overline">Daily review</p>
-            <h2 id="journal-title">一天结束，计划变成记录。</h2>
-            <p>完成的时间块不会消失。Chroni 将任务进度、延后原因和明日安排收拢成可回顾的日终手账。</p>
+            <h2 id="journal-title">一天结束，执行变成证据。</h2>
+            <p>完成的时间块不会消失。Chroni 将实际投入、阶段成果、阻塞原因、复盘与明日安排收拢成可回顾的学习过程。</p>
           </div>
           <div class="journal-transform" data-reveal>
             <div class="completed-stack" aria-label="今日完成记录">
@@ -328,9 +360,9 @@
         <div class="trust-inner">
           <div>
             <p class="overline">Local-first by design</p>
-            <h2 id="trust-title">日程先留在你的电脑上。</h2>
+            <h2 id="trust-title">学习过程先属于你自己。</h2>
           </div>
-          <p>原始文件、日程、计划、偏好和执行记录默认保存在本机。开启智能模型后，仅当前处理所需的文本会按配置发送，原始文件不会进入 Chroni 网关。</p>
+          <p>原始文件、学习任务、成果证据元数据、计划、偏好和执行记录默认保存在本机。开启智能模型后，仅当前理解课程要求所需的文本会按配置发送，原始文件与成果文件不会进入 Chroni 网关。</p>
           <div class="trust-links">
             <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/privacy.md">隐私说明 <span aria-hidden="true">→</span></a>
             <a href="https://github.com/miracle121388-a11y/chroni">查看源代码 <span aria-hidden="true">→</span></a>
@@ -341,7 +373,7 @@
       <section class="download-section section" id="download" aria-labelledby="download-title">
         <div class="section-heading download-heading">
           <p class="overline">Download Chroni</p>
-          <h2 id="download-title">把下一项重要的事，<br>交给 Chroni。</h2>
+          <h2 id="download-title">让下一项学习任务，<br>真正开始推进。</h2>
           <p id="release-status" role="status" aria-live="polite">v0.1.4 已发布，页面正在检查是否有更新。</p>
         </div>
 
@@ -406,7 +438,7 @@
           </details>
           <details>
             <summary>Windows 和 macOS 的功能一致吗？</summary>
-            <p>两端共享日程、Agent、每日计划和文件提取能力，并分别适配窗口、桌宠拖动、托盘与系统通知交互。</p>
+            <p>两端共享 Learning Mission、学习执行 Agent、每日计划、成果证据和文件理解能力，并分别适配窗口、桌宠拖动、托盘与系统通知交互。</p>
           </details>
           <details>
             <summary>新版本怎样更新？</summary>
@@ -417,7 +449,7 @@
 
       <section class="closing section" aria-labelledby="closing-title">
         <img src="./assets/pet-wake.png" alt="Chroni 桌宠">
-        <div><p class="overline">Ready when you are</p><h2 id="closing-title">下一份通知，直接拖给我。</h2></div>
+        <div><p class="overline">Ready when you are</p><h2 id="closing-title">下一份课程要求，直接拖给我。</h2></div>
         <a class="download-button final-download" id="final-download" href="#download">
           <span id="final-download-label">获取 Chroni</span><span aria-hidden="true">↓</span>
         </a>
@@ -425,7 +457,7 @@
     </main>
 
     <footer>
-      <div class="footer-brand"><strong>Chroni</strong><span>Local-first Deadline Agent</span></div>
+      <div class="footer-brand"><strong>Chroni</strong><span>Local-first Learning Execution Agent</span></div>
       <div class="footer-links">
         <a href="https://github.com/miracle121388-a11y/chroni">GitHub</a>
         <a href="https://github.com/miracle121388-a11y/chroni/releases">Releases</a>

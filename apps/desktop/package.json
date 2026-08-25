@@ -2,7 +2,7 @@
   "name": "@chroni/desktop",
   "version": "0.1.4",
   "private": true,
-  "description": "Local-first desktop deadline agent with document extraction, daily planning, and companion reminders.",
+  "description": "Local-first learning execution agent with grounded document understanding, evidence-led planning, and ambient companion interaction.",
   "license": "MIT",
   "author": "Chroni contributors",
   "homepage": "https://github.com/miracle121388-a11y/chroni#readme",
@@ -24,13 +24,18 @@
     "build:main": "tsc -p tsconfig.json",
     "build:renderer": "vite build",
     "build": "pnpm run build:main && pnpm run build:renderer",
+    "build:goai": "cross-env CHRONI_PET_ASSET_MODE=original pnpm run build && node ../../scripts/verify-goai-assets.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
     "test": "pnpm run build && node --test test/*.test.mjs",
     "clean:package": "node scripts/clean-package-output.mjs",
     "package": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --publish never",
     "package:win": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --win --x64 --publish never",
     "package:mac": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --mac --universal --publish never",
-    "package:linux": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --linux --x64 --publish never"
+    "package:linux": "pnpm run clean:package && pnpm run build && electron-builder --config electron-builder.config.cjs --linux --x64 --publish never",
+    "package:goai:win": "cross-env CHRONI_PET_ASSET_MODE=original pnpm run package:goai:win:inner",
+    "package:goai:win:inner": "pnpm run clean:package && pnpm run build && node ../../scripts/verify-goai-assets.mjs && electron-builder --config electron-builder.config.cjs --win --x64 --publish never",
+    "package:goai:mac": "cross-env CHRONI_PET_ASSET_MODE=original pnpm run package:goai:mac:inner",
+    "package:goai:mac:inner": "pnpm run clean:package && pnpm run build && node ../../scripts/verify-goai-assets.mjs && electron-builder --config electron-builder.config.cjs --mac --universal --publish never"
   },
   "dependencies": {
     "electron-updater": "6.8.9",

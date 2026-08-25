@@ -12,7 +12,7 @@ type WindowSet = {
 };
 
 export type ControlCenterRoute = {
-  tab?: "schedule" | "daily" | "agent" | "preferences" | "services" | "about";
+  tab?: "missions" | "schedule" | "daily" | "agent" | "demo" | "preferences" | "services" | "about";
   taskId?: string;
   focus?: "clarifications";
 };
