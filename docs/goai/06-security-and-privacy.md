@@ -4,7 +4,7 @@ Chroni is local-first, not network-free under every configuration. Tasks, Learni
 
 ## What leaves the device
 
-When LLM extraction is enabled, bounded source excerpts, the current reference time, and requested structured fields are sent to the configured OpenAI-compatible endpoint or managed gateway. Chroni does not upload local files as arbitrary binaries to the model; it extracts text/OCR locally first. Provider retention and training policy are governed by that provider. The no-key GOAI demo and offline benchmark make no model calls.
+When LLM extraction is enabled, bounded source excerpts, the current reference time, and requested structured fields are sent to the configured OpenAI-compatible endpoint or managed gateway. Chroni does not upload local files as arbitrary binaries to the model; it extracts text/OCR locally first. Provider retention and training policy are governed by that provider. The local-rules sample path and offline benchmark make no model calls.
 
 Custom API keys are encoded using Electron `safeStorage` where available and are not present in renderer snapshots, traces, benchmark reports, or redacted evidence. Managed gateway secrets and beta access hashes are deployment environment variables. The local HTTP API listens on `127.0.0.1` and requires a random bearer token after health discovery.
 
@@ -12,7 +12,7 @@ Output evidence files do not leave the device. The main process streams each sel
 
 ## Data control
 
-The app exposes the local storage directory in **运行状态**. Users can quit Chroni and delete the state file and exports. GOAI demo data uses a separate directory and is deleted on **退出演示**. Planning memory is visible and can be disabled, deleted individually, or cleared. There is no hidden analytics/telemetry client in this implementation.
+The app exposes the local storage directory in **运行状态**. Users can quit Chroni and delete the state file and exports. Planning memory is visible and can be disabled, deleted individually, or cleared. Daily reviews are stored by date in the same local state and are removed with that data. There is no hidden analytics/telemetry client in this implementation.
 
 ## Validation and fallback
 

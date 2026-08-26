@@ -1,5 +1,6 @@
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 from pypdf import PdfReader
@@ -25,11 +26,27 @@ ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
 VERSION = PACKAGE["version"]
 OUTPUT = ROOT / "output" / "pdf" / "Chroni_GOAI_2026_更新版项目方案.pdf"
-DAILY_SCREENSHOT = ROOT / "docs" / "assets" / "chroni-daily-planner-v0.2.0.png"
-AGENT_SCREENSHOT = ROOT / "docs" / "assets" / "chroni-agent-workspace-v0.2.0.png"
-MISSION_SCREENSHOT = ROOT / "docs" / "assets" / "chroni-learning-mission-v0.2.0.png"
+SCREENSHOT_ROOT = ROOT / "docs" / "store" / "assets" / "screenshots" / "zh-CN"
+FIRST_RUN_SCREENSHOT = SCREENSHOT_ROOT / "00-first-run.png"
+DAILY_SCREENSHOT = SCREENSHOT_ROOT / "01-today.png"
+MISSION_SCREENSHOT = SCREENSHOT_ROOT / "02-learning-mission.png"
+AGENT_SCREENSHOT = SCREENSHOT_ROOT / "03-agent.png"
+SMART_SCREENSHOT = SCREENSHOT_ROOT / "03-smart-organize.png"
+REVIEW_SCREENSHOT = SCREENSHOT_ROOT / "04-daily-review.png"
 EVALUATION = json.loads((ROOT / "benchmarks" / "goai-v1" / "reports" / "latest.json").read_text(encoding="utf-8"))
 INSTALLER = ROOT / "apps" / "desktop" / "dist-electron" / f"Chroni-{VERSION}-win-x64-setup.exe"
+BASELINE_TAG = "v0.1.4"
+BASELINE_COMMIT = subprocess.check_output(
+    ["git", "rev-list", "-n", "1", BASELINE_TAG], cwd=ROOT, text=True
+).strip()
+CURRENT_COMMIT = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+COMMITS_SINCE_BASELINE = subprocess.check_output(
+    ["git", "rev-list", "--count", f"{BASELINE_TAG}..HEAD"], cwd=ROOT, text=True
+).strip()
+DIFF_SUMMARY = subprocess.check_output(
+    ["git", "diff", "--shortstat", f"{BASELINE_TAG}..HEAD"], cwd=ROOT, text=True
+).strip()
+SUBMISSION_DATE = "2026-08-26"
 
 INK = colors.HexColor("#20312C")
 MUTED = colors.HexColor("#66736D")
@@ -298,7 +315,7 @@ def build_story(s):
         Spacer(1, 31 * mm),
         para("GOAI 2026 · BOUNDLESS AGENTS · AI + 教育", s["cover_kicker"]),
         para("Chroni", s["cover_title"]),
-        para("面向大学项目制学习的本地学习执行 Agent", s["cover_subtitle"]),
+        para("从课程材料到每日行动、过程证据与复盘的本地学习执行 Agent", s["cover_subtitle"]),
         Spacer(1, 12 * mm),
     ])
     cover_rule = Table([[""]], colWidths=[34 * mm], rowHeights=[2.4 * mm])
@@ -317,7 +334,7 @@ def build_story(s):
     ])
     cover_meta = [
         [para("项目版本", s["metric_label"]), para("验证状态", s["metric_label"]), para("材料日期", s["metric_label"])],
-        [para(VERSION, s["metric"]), para("复赛就绪", s["metric"]), para("2026-08-25", s["metric"])],
+        [para(VERSION, s["metric"]), para("复赛最终版", s["metric"]), para(SUBMISSION_DATE, s["metric"])],
     ]
     meta = Table(cover_meta, colWidths=[58 * mm] * 3)
     meta.setStyle(TableStyle([
@@ -337,22 +354,27 @@ def build_story(s):
     story.extend([
         section_title("00", "复赛更新摘要", s["h1"]),
         para(
-            "本轮将 Chroni 从桌面 Deadline Agent 升级为面向大学项目制学习的本地学习执行 Agent。DDL 仍是可靠触发器，产品中心已转向持续维护学习目标、交付物、完成标准、里程碑、今日行动、产出证据与阶段反馈。",
+            "本轮严格以 v0.1.4 初版为基线。初版已经能完成材料抽取、TaskPlan、每日时间轴和提醒；v0.2.1 在此基础上补齐 Learning Mission、证据/检查点、智能整理、每日回顾、评测与发布工程，使系统从 DDL 管理进入可持续学习执行闭环。",
             s["body"],
         ),
         info_box(
-            "<b>v0.2.0 核心闭环：</b>材料输入 → 来源与意图确认 → Learning Mission → TaskPlan → 今日执行 → 证据/检查点 → 风险重算与下一步调整。",
+            "<b>v0.2.1 核心闭环：</b>材料输入 → 智能整理 → Learning Mission → TaskPlan → 今日执行 → 证据/检查点 → 每日回顾 → 风险与下一步调整。",
             s["body"],
         ),
         Spacer(1, 5 * mm),
-        para("从 v0.1.4 到 v0.2.0", s["h2"]),
+        para("从 v0.1.4 到 v0.2.1", s["h2"]),
+        para(
+            f"基线 commit：{BASELINE_COMMIT[:8]}　当前 commit：{CURRENT_COMMIT[:8]}　新增提交：{COMMITS_SINCE_BASELINE} 个。Git 统计：{DIFF_SUMMARY}。",
+            s["small"],
+        ),
     ])
     update_rows = [
-        [para("维度", s["table_bold"]), para("v0.1.4", s["table_bold"]), para("v0.2.0 复赛版", s["table_bold"])],
+        [para("维度", s["table_bold"]), para("v0.1.4 初版", s["table_bold"]), para("v0.2.1 复赛版", s["table_bold"])],
         [para("产品中心", s["table_bold"]), para("DDL、TaskPlan 与提醒", s["table"]), para("Learning Mission 与学习执行闭环", s["table"])],
         [para("验证方式", s["table_bold"]), para("用户勾选完成", s["table"]), para("SHA-256 产出证据、阶段检查点与人工确认", s["table"])],
         [para("Agent 行为", s["table_bold"]), para("抽取、追问、拆解、排程", s["table"]), para("Ground → Plan → Act → Verify → Adapt", s["table"])],
-        [para("演示与评测", s["table_bold"]), para("用户准备材料、通用回归", s["table"]), para("无 Key 隔离 Demo、三种路径、60 条固定时钟评测", s["table"])],
+        [para("每日反馈", s["table_bold"]), para("查看任务完成状态", s["table"]), para("独立每日回顾、活动轨迹、总结、历史与顺延", s["table"])],
+        [para("演示与评测", s["table_bold"]), para("通用回归和安装包", s["table"]), para("A/B/C 三种路径、60 条固定时钟评测、精确 commit 与哈希", s["table"])],
     ]
     story.extend([
         styled_table(update_rows, [31 * mm, 54 * mm, 89 * mm], row_backgrounds=[WHITE, PAPER, WHITE, PAPER]),
@@ -362,7 +384,7 @@ def build_story(s):
     requirement_rows = [
         [para("手册要求", s["table_bold"]), para("本项目可核验交付", s["table_bold"])],
         [para("更新项目方案", s["table_bold"]), para("本 PDF：更新摘要、价值、Agent 闭环、技术、评测、安全和后续边界。", s["table"])],
-        [para("可运行 Demo", s["table_bold"]), para("Windows 安装包 + 应用内无 Key 隔离 Demo + 180/60 秒脚本 + 三组输入。", s["table"])],
+        [para("可运行 Demo", s["table_bold"]), para("Windows 安装包 + 180/60 秒脚本 + 三组合成输入；明确主链路无 Key 可运行。", s["table"])],
         [para("工程与复现", s["table_bold"]), para("启动/测试/构建命令、核心源码、评测 runner/schema、关键测试、提交 SHA 与哈希。", s["table"])],
         [para("数据与合规", s["table_bold"]), para("合成数据边界、隐私/IP、威胁模型、MIT License 与第三方许可证。", s["table"])],
     ]
@@ -427,8 +449,9 @@ def build_story(s):
         [para("证据与反馈", s["table_bold"]), para("文件流式 SHA-256 与说明证据；检查点绑定里程碑并回写步骤、进度和下一步。", s["table"])],
         [para("Agent 规划", s["table_bold"]), para("Ground → Plan → Act → Verify → Adapt；风险、容量、工具和结构化 Trace。", s["table"])],
         [para("每日时间轴", s["table_bold"]), para("日、多日、周、月视图；按真实时长显示，支持缩放、拖动、重排和历史回顾。", s["table"])],
+        [para("每日回顾", s["table_bold"]), para("按日期保存活动轨迹、完成率、自动摘要、个人记录和未完成项；支持历史回顾与未来计划。", s["table"])],
         [para("可控记忆", s["table_bold"]), para("只从用户明确保存的计划差异学习；可停用、删除或清空。", s["table"])],
-        [para("隔离演示", s["table_bold"]), para("三个无 Key 合成场景使用独立 Store，重置和退出不会污染真实数据。", s["table"])],
+        [para("可复现演示", s["table_bold"]), para("A/B/C 合成输入覆盖明确任务、缺失字段与来源冲突；本地规则主链路无需 Key。", s["table"])],
     ]
     story.extend([
         styled_table(capability_rows, [38 * mm, 136 * mm], row_backgrounds=[WHITE, PAPER, WHITE, PAPER, WHITE]),
@@ -438,8 +461,10 @@ def build_story(s):
     story.extend([
         section_title("02", "真实产品界面", s["h1"]),
         para(f"下列截图来自 Chroni {VERSION} 的真实控制中心，使用明确标注的隔离合成演示数据，不是概念效果图。", s["body"]),
-        scaled_image(MISSION_SCREENSHOT, 166 * mm),
-        para("Learning Mission 控制台：来源、目标、交付物、完成标准、里程碑、证据覆盖和阶段反馈处于同一任务档案。", s["caption"]),
+        scaled_image(SMART_SCREENSHOT, 125 * mm),
+        para("智能整理：文本、文件和拖入材料进入统一工作流；明确事项直接整理，必要确认集中为一个阻断问题。", s["caption"]),
+        scaled_image(MISSION_SCREENSHOT, 125 * mm),
+        para("学习任务：来源、目标、交付物、完成标准、里程碑、证据覆盖和阶段反馈处于同一任务档案。", s["caption"]),
         info_box(
             "<b>教育边界：</b>证据覆盖只说明交付物存在用户登记记录，不等同于学术质量评分；任务完成仍由用户确认。",
             s["body"],
@@ -449,10 +474,22 @@ def build_story(s):
         PageBreak(),
         Spacer(1, 3 * mm),
         section_title("02", "真实产品界面（执行层）", s["h1"]),
-        scaled_image(DAILY_SCREENSHOT, 116 * mm),
-        para("今日执行：任务按真实时长占据时间轴，可缩放、拖拽、重排并查看多日计划。", s["caption"]),
-        scaled_image(AGENT_SCREENSHOT, 116 * mm),
+        scaled_image(DAILY_SCREENSHOT, 125 * mm),
+        para("今日执行：任务按真实时长占据时间轴；重叠自动分栏，可缩放、拖拽、重排并查看多日计划。", s["caption"]),
+        scaled_image(AGENT_SCREENSHOT, 125 * mm),
         para("学习执行 Agent 工作台：展示下一步、今日工作块、高风险任务、覆盖率、规划来源和结构化 Trace。", s["caption"]),
+        PageBreak(),
+        Spacer(1, 3 * mm),
+        section_title("02", "真实产品界面（每日反馈）", s["h1"]),
+        para("v0.2.1 将每日活动整理提升为独立一级栏目，让执行结果持续反馈给下一次规划。", s["body"]),
+        scaled_image(REVIEW_SCREENSHOT, 166 * mm),
+        para("每日回顾：按日期保存活动轨迹、完成率、计划/完成时长、自动摘要、个人记录和未完成项顺延。", s["caption"]),
+        info_box(
+            "<b>持续使用价值：</b>用户可以回顾过去、总结当天，也可以检查未来计划；回顾不是一次性生成的文本，而是与本地任务状态共同持久化的产品对象。",
+            s["body"],
+            GREEN_PALE,
+            GREEN,
+        ),
         PageBreak(),
     ])
 
@@ -469,10 +506,11 @@ def build_story(s):
     architecture_rows = [
         [para("阶段", s["table_bold"]), para("模型职责（可选）", s["table_bold"]), para("本地确定性职责", s["table_bold"])],
         [para("Ground", s["table_bold"]), para("从长文本提出目标、交付物、完成标准和时间候选。", s["table"]), para("解析/OCR；核对来源、日期、条件、冲突、重复项和 schema。", s["table"])],
-        [para("主动追问", s["table_bold"]), para("可优化问题表达。", s["table"]), para("决定是否真正缺失；回答后恢复原流程。", s["table"])],
+        [para("智能整理", s["table_bold"]), para("可辅助跨段语义和问题表达。", s["table"]), para("明确事项先落地；只在事实阻断执行时提出一个必要问题。", s["table"])],
         [para("Plan", s["table_bold"]), para("提出步骤、耗时和不确定性。", s["table"]), para("版本化 TaskPlan；验证依赖、总耗时、交付物、完成标准和截止边界。", s["table"])],
         [para("Act", s["table_bold"]), para("可提出结构化分配建议。", s["table"]), para("风险、slack、容量、时间冲突、排程/提醒/持久化工具和规则回退。", s["table"])],
-        [para("Verify / Adapt", s["table_bold"]), para("可辅助总结反馈，不得自行完成或评分。", s["table"]), para("证据 SHA-256、里程碑检查点、实际投入、阻塞回写、进度与下一步重算。", s["table"])],
+        [para("Verify / Review", s["table_bold"]), para("可辅助生成每日摘要，不得自行完成或评分。", s["table"]), para("证据 SHA-256、里程碑检查点、每日活动轨迹、个人记录与未完成项顺延。", s["table"])],
+        [para("Adapt", s["table_bold"]), para("可提出结构化调整建议。", s["table"]), para("根据实际投入、阻塞、剩余容量和历史状态重算风险、计划与下一步。", s["table"])],
         [para("记忆 / Trace", s["table_bold"]), para("只消费筛选后的结构化偏好。", s["table"]), para("偏好证据门槛、开关/删除、脱敏运行证据导出。", s["table"])],
     ]
     story.extend([
@@ -480,12 +518,12 @@ def build_story(s):
         Spacer(1, 6 * mm),
         para("可复用能力模块", s["h2"]),
         para(
-            "DeadlineExtraction · EvidenceValidation · MissingFieldClarification · TaskPlanGeneration · PlanConstraintValidation · LearningMissionSynthesis · EvidenceCheckpoint · DailyScheduling · ReminderDispatch · PlanningPreferenceLearning · RunTraceExport",
+            "DeadlineExtraction · EvidenceValidation · MissingFieldClarification · TaskPlanGeneration · PlanConstraintValidation · LearningMissionSynthesis · EvidenceCheckpoint · DailyScheduling · DailyReview · ReminderDispatch · PlanningPreferenceLearning · RunTraceExport",
             s["body"],
         ),
         para("开源仓库中的核心实现", s["h2"]),
         para(
-            "完整源码在开源仓库中提供。核心实现包括 intake.ts、learning-mission.ts、sample-data.ts、deadline-agent.ts、agent-tools.ts、task-plan-agent.ts、evidence-report.ts、store.ts、api-server.ts，以及 LearningMission/Agent/DailyPlanner 前端组件和 CI/Release 工作流。",
+            "附件保留 intake、Learning Mission、Deadline Agent、工具、TaskPlan、证据、Store 与 Daily Review 等关键实现；完整源码、typed API、CI 和 Release 工作流可按附件记录的精确 commit 在公开仓库核验。",
             s["body"],
         ),
         PageBreak(),
@@ -518,7 +556,7 @@ def build_story(s):
     ])
     test_rows = [
         [para("门禁", s["table_bold"]), para("结果", s["table_bold"]), para("范围", s["table_bold"])],
-        [para("Desktop tests", s["table_bold"]), para("249 pass / 0 fail / 1 skip", s["table"]), para("共 250 项；抽取、Mission、证据/检查点、Store、Agent、Demo、UI、API 与打包。", s["table"])],
+        [para("Desktop tests", s["table_bold"]), para("255 pass / 0 fail / 1 skip", s["table"]), para("共 256 项；抽取、Mission、证据/检查点、Store、Agent、每日回顾、UI、API 与打包。", s["table"])],
         [para("Gateway tests", s["table_bold"]), para("4 pass / 0 fail", s["table"]), para("鉴权、限流、超时、上游错误和日志边界。", s["table"])],
         [para("GOAI build", s["table_bold"]), para("通过", s["table"]), para("Renderer 资源扫描无受限 XIAOTONG 路径或栅格素材。", s["table"])],
         [para("Windows package", s["table_bold"]), para("本机生成", s["table"]), para("NSIS 安装版和 portable；校验和以附件安装说明为准。", s["table"])],
@@ -538,11 +576,11 @@ def build_story(s):
 
     story.extend([
         section_title("05", "三分钟演示证明", s["h1"]),
-        para("隔离示例使用独立 userData/sample-data Store；加载场景会重建合成状态，退出会删除示例目录并恢复主 Store。全程不需要 API Key。", s["body"]),
+        para("附件提供三组合成输入。明确任务的主链路使用本地规则即可完成，不依赖 API Key；DeepSeek 增强是可选项。演示同时覆盖缺失信息与来源冲突，避免只展示成功分支。", s["body"]),
     ])
     demo_rows = [
         [para("场景", s["table_bold"]), para("输入证据", s["table_bold"]), para("应观察到的行为", s["table_bold"])],
-        [para("A Learning Mission", s["table_bold"]), para("数据库课程项目；PDF + SQL；明确截止。", s["table"]), para("创建任务、TaskPlan、Mission、隔离合成证据与检查点，再进入今日执行和 Trace。", s["table"])],
+        [para("A 五项综合通知", s["table_bold"]), para("五类学习/申请任务、交付物、方式、偏好和一个条件变化。", s["table"]), para("明确任务直接整理；形成 TaskPlan/Mission，进入今日执行与每日回顾，不因非阻断信息先弹问。", s["table"])],
         [para("B 缺失截止", s["table_bold"]), para("启动材料含两个交付物，但没有截止时间。", s["table"]), para("只追问 dueAt；回答后恢复同一草稿并继续规划。", s["table"])],
         [para("C 来源冲突", s["table_bold"]), para("平台和群公告给出两个不同时间。", s["table"]), para("不静默覆盖；保留证据和选项，用户确认后继续。", s["table"])],
     ]
@@ -553,17 +591,17 @@ def build_story(s):
     ])
     timeline_rows = [
         [para("0:00-0:20", s["table_bold"]), para("定位：不代写，解决课程要求到执行、证据与调整的断层。", s["table"])],
-        [para("0:20-1:05", s["table_bold"]), para("运行场景 A，展示来源、目标、交付物、完成标准和里程碑。", s["table"])],
-        [para("1:05-1:35", s["table_bold"]), para("展示证据与检查点绑定里程碑，以及进度/下一步变化。", s["table"])],
-        [para("1:35-2:05", s["table_bold"]), para("打开今日执行和 Agent Trace，展示容量排程与本地工具结果。", s["table"])],
+        [para("0:20-1:05", s["table_bold"]), para("导入场景 A，展示智能整理、来源、目标、交付物、完成标准和里程碑。", s["table"])],
+        [para("1:05-1:35", s["table_bold"]), para("展示证据/检查点、今日执行的容量排程与结构化 Trace。", s["table"])],
+        [para("1:35-2:05", s["table_bold"]), para("完成一个时间块并打开每日回顾，展示活动轨迹、总结、历史和顺延。", s["table"])],
         [para("2:05-2:42", s["table_bold"]), para("运行 B/C，证明只追问阻断项，冲突事实由用户裁决。", s["table"])],
-        [para("2:42-3:00", s["table_bold"]), para("导出脱敏证据并退出 Demo，证明 Trace、完整性和 Store 隔离。", s["table"])],
+        [para("2:42-3:00", s["table_bold"]), para("展示 benchmark、测试、仓库 commit、安装包与哈希。", s["table"])],
     ]
     story.extend([
         styled_table(timeline_rows, [31 * mm, 143 * mm], header=False, row_backgrounds=[WHITE, PAPER, WHITE, PAPER, WHITE, PAPER]),
         Spacer(1, 7 * mm),
         info_box(
-            "附件的 02_产品与Demo 含完整 180/60 秒脚本和三个原始合成输入文件。现场优先使用场景 A 的离线路径，避免网络或模型额度影响。",
+            "附件的 02_产品与Demo 含完整 180/60 秒脚本和三个合成输入文件。现场优先使用场景 A 的本地规则路径，避免网络或模型额度影响。",
             s["body"],
         ),
         PageBreak(),
@@ -578,8 +616,8 @@ def build_story(s):
         [para("压缩文档", s["table_bold"]), para("DOCX/XLSX 预检魔数、中央目录、条目数、64 MiB 展开配额、200 倍压缩比、加密和路径穿越。", s["table"])],
         [para("模型输出", s["table_bold"]), para("只作为候选；日期、来源、字段、计划约束和状态变更均由本地验证。", s["table"])],
         [para("产出证据", s["table_bold"]), para("文件流式 SHA-256、512 MiB 上限与变更检测；状态不保存绝对路径/内容；HTTP API 不接受任意文件路径。", s["table"])],
-        [para("数据与密钥", s["table_bold"]), para("本地优先；Key 使用系统安全存储；导出移除原文、路径、标题、证据/检查点正文和 Token。", s["table"])],
-        [para("第三方素材", s["table_bold"]), para("GOAI/公开 Release 强制 original 模式，不打包 XIAOTONG 帧或捐赠码；字体与依赖声明随包。", s["table"])],
+        [para("数据与密钥", s["table_bold"]), para("任务、Mission、每日回顾和记忆默认本地保存；Key 使用系统安全存储；导出移除原文、路径和 Token。", s["table"])],
+        [para("第三方素材", s["table_bold"]), para("赛事安装包强制 original 模式，不打包 XIAOTONG 帧或捐赠码；可选产品素材的许可边界独立披露。", s["table"])],
     ]
     story.extend([
         styled_table(
@@ -608,7 +646,7 @@ def build_story(s):
         ),
         Spacer(1, 1 * mm),
         info_box(
-            "<b>结论：</b>Chroni 已形成可运行、可演示、可复现、可回退并能解释教育边界的学习执行 Agent。真实授权用户研究、正式签名/公证、模型基准和真实 OCR 大样本仍属于后续工作。",
+            "<b>结论：</b>Chroni 已形成从材料理解、任务规划、今日执行、证据反馈到每日回顾的可运行闭环，并提供失败分支、复现证据与教育边界。真实授权用户研究、正式签名/公证、模型基准和真实 OCR 大样本仍属于后续工作。",
             s["body_compact"],
             GREEN_PALE,
             GREEN,

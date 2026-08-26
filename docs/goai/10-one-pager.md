@@ -17,6 +17,7 @@ Ground 来源与边界
 → Plan 目标、交付物、完成标准和里程碑
 → Act 今日可执行时间块
 → Verify 产出证据、实际投入和阶段检查点
+→ Review 当日活动、总结与未完成项
 → Adapt 风险、阻塞与下一步
 ```
 
@@ -35,10 +36,11 @@ DDL 是触发器，桌宠是低打扰的环境入口，Learning Mission 和本�
 2. **可执行 Agent**：版本化 TaskPlan、依赖与估时、风险/slack/容量调度、本地排程/提醒/持久化工具、结构化 Trace 和规则回退。
 3. **证据驱动反馈**：产出文件由主进程流式计算 SHA-256，只保存元数据；检查点绑定里程碑并同步计划步骤、进度与风险。
 4. **Local-first 安全**：renderer 无 Node 权限、typed IPC、Bearer 回环 API、OS 安全存储、默认脱敏导出、合成 Demo 隔离与原始资产赛事构建。
+5. **每日反馈闭环**：独立每日回顾按日期保存活动轨迹、完成率、自动摘要、个人记录和顺延项，为下一轮规划提供上下文。
 
 ## 已实现产品
 
-可运行 Electron 桌面端；Windows/macOS 窗口与桌宠交互；TXT/PDF/DOCX/XLSX/ICS/图片接收与 OCR；主动追问恢复；TaskPlan；Learning Mission；文件/说明证据；阶段检查点；日/多日/周/月时间轴；学习执行 Agent；行为记忆；本地 API；更新和双端打包流程；无 Key 隔离 Demo；自动化测试与 60 条合成评测。
+可运行 Electron 桌面端；Windows/macOS 窗口与桌宠交互；TXT/PDF/DOCX/XLSX/ICS/图片接收与 OCR；智能整理；主动追问恢复；TaskPlan；Learning Mission；文件/说明证据；阶段检查点；日/多日/周/月时间轴；每日回顾；学习执行 Agent；行为记忆；本地 API；更新和双端打包流程；自动化测试与 60 条合成评测。
 
 项目不声称真实用户规模、学校合作、学习成绩提升、收入、融资或自研基础模型。
 

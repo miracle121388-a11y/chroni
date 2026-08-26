@@ -17,6 +17,8 @@ flowchart TB
     PLAN --> MISSION["Learning Mission 同步器"]
     MISSION --> AGENT["Ground / Plan / Act / Verify / Adapt"]
     AGENT --> TOOLS["排程 / 提醒 / 持久化 / ICS 工具"]
+    TOOLS --> REVIEW["每日回顾 / 历史轨迹 / 未完成项顺延"]
+    REVIEW --> STORE
     IPC --> EVIDENCE["文件 SHA-256 / 说明证据 / 阶段检查点"]
     EVIDENCE --> MISSION
     TOOLS --> STORE["Atomic local ChroniStore"]
@@ -61,7 +63,8 @@ progress / evidenceCoverage / status / risk / nextAction
 6. TaskPlan 只能通过本地 Store 方法生成、编辑、版本化与激活，随后同步 Learning Mission。
 7. 学习执行 Agent 依据风险、slack、容量、里程碑和反馈调用本地工具，再验证覆盖和冲突。
 8. 用户可登记产出文件。主进程流式计算 SHA-256，只存元数据，不存绝对路径和二进制内容。
-9. 结构化 Trace 可在界面查看；导出默认移除标题、原文、路径、证据正文、密钥和模型隐藏推理，并附 SHA-256。
+9. 每日回顾按日期聚合任务轨迹、完成率、计划/完成时长、总结、个人记录和未完成项，并通过 Store/API 持久化。
+10. 结构化 Trace 可在界面查看；导出默认移除标题、原文、路径、证据正文、密钥和模型隐藏推理，并附 SHA-256。
 
 不可信边界包括来源文件、OCR 文本、HTTP 调用方和全部模型输出。可信状态转换仅位于 validation 与 Store 方法。任何导入文本都不能触发 Electron 命令。
 
@@ -87,11 +90,11 @@ progress / evidenceCoverage / status / risk / nextAction
 
 受阻检查点会把对应步骤置为 blocked 并提高风险；顺利/完成检查点更新步骤状态与进度。Agent 再基于剩余工作和现实容量计算下一步，用户始终可以编辑或拒绝。
 
-触发器包括手动、启动、每日和防抖任务变化。调度器会去重并发运行。在 GOAI Demo 中，自动巡检和通知被关闭，所有合成场景确定、隔离、可删除。
+触发器包括手动、启动、每日和防抖任务变化。调度器会去重并发运行。赛事示例使用仓库中的合成输入；结构明确的主链路可在无 Key、本地规则模式下复现。
 
 ## Schema、恢复与 API
 
-核心 schema 包括 `DdlItem`（兼容内部名称）、`SourceRecord`、`IntakeDraft`、`PendingClarification`、`TaskPlan`、`LearningMission`、`LearningMissionEvidence`、`LearningMissionCheckpoint`、`DailyTask`、`AgentRunResult` 和 `ChroniSnapshot`。
+核心 schema 包括 `DdlItem`（兼容内部名称）、`SourceRecord`、`IntakeDraft`、`PendingClarification`、`TaskPlan`、`LearningMission`、`LearningMissionEvidence`、`LearningMissionCheckpoint`、`DailyTask`、`DailyReview`、`AgentRunResult` 和 `ChroniSnapshot`。
 
 校验层限制文本、数组、标识符、日期、文件体积、模型字段和规划编辑。追问答案恢复原草稿并幂等地创建至多一个任务。模型/规划器失败会回退本地规则，不改写原始截止事实。
 
