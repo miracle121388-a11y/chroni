@@ -11,9 +11,10 @@ const desktopRoot = resolve(__dirname, "..");
 const repositoryRoot = resolve(desktopRoot, "..", "..");
 const outputDirectory = join(repositoryRoot, "docs", "store", "assets", "screenshots", "zh-CN");
 const screenshotSize = { width: 1440, height: 900 };
+const fixtureRoot = mkdtempSync(join(tmpdir(), "chroni-store-capture-"));
+const capturePartition = `chroni-store-capture-${process.pid}`;
 
 app.whenReady().then(async () => {
-  const fixtureRoot = mkdtempSync(join(tmpdir(), "chroni-store-capture-"));
   let controlWindow;
   let petWindow;
   try {
@@ -26,9 +27,6 @@ app.whenReady().then(async () => {
     const store = new ChroniStore(fixtureRoot);
     const captureNow = new Date();
     captureNow.setHours(7, 45, 0, 0);
-    seedStore(store, createRuleTaskPlan, captureNow);
-    await seedAgent(store, DeadlineAgent, createAgentTools, captureNow);
-    seedDailyTasks(store, captureNow);
 
     ipcMain.handle("chroni:snapshot", () => store.snapshot());
     ipcMain.handle("chroni:update-status", () => ({
@@ -44,6 +42,43 @@ app.whenReady().then(async () => {
     await controlWindow.loadFile(join(desktopRoot, "dist", "renderer", "index.html"), { query: { view: "control" } });
     await waitForSelector(controlWindow, ".control-shell");
     controlWindow.showInactive();
+    await waitForStableFrame(controlWindow);
+    await capture(controlWindow, "00-first-run.png", ".daily-first-run");
+    const firstRunActions = await controlWindow.webContents.executeJavaScript(`(() => ({
+      title: document.querySelector('.daily-first-run h3')?.textContent?.trim(),
+      actions: [...document.querySelectorAll('.daily-first-run button')].map((button) => button.textContent?.trim()),
+      zoom: document.querySelector('.daily-timeline-zoom output')?.textContent?.trim(),
+    }))()`);
+    assert(firstRunActions.title === "安排今天的第一件事", "First-run title is missing from the empty product state.");
+    assert(firstRunActions.actions.includes("导入任务") && firstRunActions.actions.includes("新建日程"), "First-run actions are incomplete.");
+    assert(firstRunActions.zoom === "125%", `First-run timeline zoom is not deterministic: ${firstRunActions.zoom}`);
+    const emptyTimelineState = await controlWindow.webContents.executeJavaScript(`(() => {
+      const empty = document.querySelector('.daily-timeline-empty');
+      const calendar = document.querySelector('.daily-calendar-grid');
+      if (!(empty instanceof HTMLElement) || !(calendar instanceof HTMLElement)) return null;
+      const emptyRect = empty.getBoundingClientRect();
+      const calendarRect = calendar.getBoundingClientRect();
+      return {
+        text: empty.textContent?.replace(/\\s+/g, ' ').trim(),
+        emptyTop: emptyRect.top,
+        emptyBottom: emptyRect.bottom,
+        visibleTop: calendarRect.top + 64,
+        visibleBottom: calendarRect.bottom,
+      };
+    })()`);
+    assert(
+      emptyTimelineState
+        && emptyTimelineState.text.includes("还没有时间安排")
+        && emptyTimelineState.emptyTop >= emptyTimelineState.visibleTop
+        && emptyTimelineState.emptyBottom <= emptyTimelineState.visibleBottom,
+      `First-run empty timeline state is outside the visible calendar viewport: ${JSON.stringify(emptyTimelineState)}`,
+    );
+
+    seedStore(store, createRuleTaskPlan, captureNow);
+    await seedAgent(store, DeadlineAgent, createAgentTools, captureNow);
+    seedDailyTasks(store, captureNow);
+    await controlWindow.loadFile(join(desktopRoot, "dist", "renderer", "index.html"), { query: { view: "control" } });
+    await waitForSelector(controlWindow, ".control-shell");
     await waitForStableFrame(controlWindow);
 
     await selectNavigation(controlWindow, "今日执行");
@@ -285,6 +320,7 @@ function createCaptureWindow() {
 function captureWebPreferences() {
   return {
     preload: join(desktopRoot, "preload.cjs"),
+    partition: capturePartition,
     contextIsolation: true,
     nodeIntegration: false,
     sandbox: true,
@@ -319,7 +355,7 @@ async function resetScrollPositions(window) {
 async function capture(window, name, requiredSelector) {
   await waitForSelector(window, requiredSelector);
   await waitForStableFrame(window);
-  await resetScrollPositions(window);
+  if (name !== "00-first-run.png") await resetScrollPositions(window);
   if (name === "01-today.png") await frameDailyCalendar(window);
   const dimensions = await window.webContents.executeJavaScript("({ width: window.innerWidth, height: window.innerHeight })");
   assert(dimensions.width === screenshotSize.width && dimensions.height === screenshotSize.height, `${name} viewport is ${dimensions.width}x${dimensions.height}.`);

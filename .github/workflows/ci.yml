@@ -25,6 +25,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - if: matrix.os == 'ubuntu-latest'
+        run: pnpm run audit:prod
       - run: pnpm run check
       - if: matrix.os == 'ubuntu-latest'
         run: pnpm run eval:smoke

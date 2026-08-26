@@ -7,7 +7,8 @@ import builderConfig from "../electron-builder.config.cjs";
 
 const require = createRequire(import.meta.url);
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-const builderSchema = JSON.parse(readFileSync(require.resolve("app-builder-lib/scheme.json"), "utf8"));
+const electronBuilderRequire = createRequire(require.resolve("electron-builder/package.json"));
+const builderSchema = JSON.parse(readFileSync(electronBuilderRequire.resolve("app-builder-lib/scheme.json"), "utf8"));
 const releaseWorkflow = readFileSync(new URL("../../../.github/workflows/release-build.yml", import.meta.url), "utf8");
 const storeWorkflow = readFileSync(new URL("../../../.github/workflows/store-build.yml", import.meta.url), "utf8");
 const rendererSource = readFileSync(new URL("../src/renderer/src/main.tsx", import.meta.url), "utf8");

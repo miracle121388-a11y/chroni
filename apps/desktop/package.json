@@ -44,11 +44,11 @@
   },
   "dependencies": {
     "electron-updater": "6.8.9",
-    "mammoth": "^1.12.0",
+    "mammoth": "^1.12.1",
     "pdf-parse": "^2.4.5",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "read-excel-file": "^9.2.0",
+    "read-excel-file": "^9.3.10",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {

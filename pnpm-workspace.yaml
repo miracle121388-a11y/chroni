@@ -3,3 +3,6 @@ packages:
 allowBuilds:
   electron-winstaller: true
   tesseract.js: true
+overrides:
+  '@xmldom/xmldom': 0.8.15
+  js-yaml: 4.3.1

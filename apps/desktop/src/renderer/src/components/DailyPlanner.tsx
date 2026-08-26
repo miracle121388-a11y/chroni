@@ -380,7 +380,13 @@ function CalendarTimeGrid({ days, selectedDate, tasks, timelineRef, zoom, disabl
   });
   const hasAllDay = rows.some((row) => row.allDay.length > 0);
   const hasTasks = rows.some((row) => row.tasks.length > 0);
-  const nowPosition = days.some((date) => dateKey(date) === todayKey) ? timelinePosition(now.getHours() * 60 + now.getMinutes(), timelineHeight) : undefined;
+  const includesToday = days.some((date) => dateKey(date) === todayKey);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nowPosition = includesToday ? timelinePosition(nowMinutes, timelineHeight) : undefined;
+  const emptyStateMinutes = includesToday
+    ? Math.max(90, Math.min(dayEndMinutes - 90, nowMinutes + 120))
+    : 11 * 60;
+  const emptyStatePosition = timelinePosition(emptyStateMinutes, timelineHeight);
   const ticks = Array.from({ length: 25 }, (_, hour) => hour);
   const columnMinimums = rows.map((row) => calendarColumnMinimum(row.maxLaneCount, days.length, row.tasks.length > 0));
   const calendarColumns = columnMinimums.map((width) => `minmax(${width}px, 1fr)`).join(" ");
@@ -481,7 +487,7 @@ function CalendarTimeGrid({ days, selectedDate, tasks, timelineRef, zoom, disabl
               </div>
             ))}
             {nowPosition !== undefined && nowPosition >= 0 && nowPosition <= timelineHeight && <div className="daily-now" style={{ top: nowPosition }}><i /><span>{formatClock(now)}</span></div>}
-            {!hasTasks && <div className="daily-timeline-empty"><span aria-hidden="true"><PlannerIcon name="spark" /></span><b>还没有时间安排</b><p>双击时间网格即可建立日程。</p></div>}
+            {!hasTasks && <div className="daily-timeline-empty" style={{ top: emptyStatePosition }}><span aria-hidden="true"><PlannerIcon name="spark" /></span><b>还没有时间安排</b><p>双击时间网格即可建立日程。</p></div>}
           </div>
         </div>
       </div>

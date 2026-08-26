@@ -29,6 +29,7 @@
     "package:goai:macos": "pnpm --filter @chroni/desktop run package:goai:mac",
     "release:verify": "node scripts/verify-release-version.mjs",
     "release:checksums": "node scripts/generate-checksums.mjs",
+    "audit:prod": "pnpm audit --prod --audit-level high",
     "store:assets": "node scripts/generate-store-assets.mjs",
     "store:screenshots": "pnpm --filter @chroni/desktop run store:screenshots",
     "store:check": "node scripts/verify-store-readiness.mjs",
