@@ -44,19 +44,19 @@ npx pnpm@11.7.0 run package:macos    # macOS
 
 也可以用 `MAC_APPLE_ID`、`MAC_APPLE_APP_SPECIFIC_PASSWORD` 和 `MAC_APPLE_TEAM_ID` 完成公证。API Key 方式更适合 CI。
 
-确认凭据稳定后，添加 Repository Variable：
+手动工作流需要严格校验签名时，可添加 Repository Variable：
 
 ```text
 CHRONI_REQUIRE_SIGNING=1
 CHRONI_REQUIRE_NOTARIZATION=1
 ```
 
-开启后，凭据缺失会直接使发布失败，不会悄悄上传未签名产物。没有证书时应保留为 `0`，并将产物明确标记为测试构建。
+所有 `v*` 标签发布都会自动强制这两项为 `1`：凭据缺失、Developer ID 签名失败或公证票据无效时，工作流直接失败，不会上传 ad-hoc 签名产物。没有证书时只能手动运行工作流生成测试 artifact，不能创建正式 Release。
 
 ## 创建发布
 
 ```bash
-VERSION=v0.2.0
+VERSION=v0.2.1
 git tag -a "$VERSION" -m "Chroni $VERSION"
 git push origin "$VERSION"
 ```
@@ -66,15 +66,16 @@ git push origin "$VERSION"
 1. 校验标签与两个 package 版本一致。
 2. 在 Windows 和 macOS 上分别运行完整检查。
 3. 构建安装器、便携版、Universal DMG/ZIP 和更新元数据。
-4. 生成平台校验和与 GitHub build provenance attestation。
-5. 汇总产物、生成 `SHA256SUMS.txt` 并创建 GitHub Release。
+4. 解开已封装应用，核对产品桌宠帧、构建变体、Intel/Apple Silicon 原生模块、Bundle/隐私元数据、ASAR 完整性、Developer ID 签名和 Apple 公证。
+5. 生成平台校验和与 GitHub build provenance attestation。
+6. 汇总产物、生成 `SHA256SUMS.txt` 并创建 GitHub Release。
 
 带连字符的版本，例如 `v0.2.0-beta.1`，会自动创建为 prerelease。手动运行工作流只生成 30 天 artifact，不会创建正式 Release。
 
 工作流会优先读取对应版本的 `docs/releases/<tag>.md` 作为正式说明；如文件不存在，才回退到 GitHub 自动生成说明。必要时可再次同步：
 
 ```bash
-gh release edit v0.2.0 --notes-file docs/releases/v0.2.0.md
+gh release edit v0.2.1 --notes-file docs/releases/v0.2.1.md
 ```
 
 ## 发布后验证
@@ -85,12 +86,12 @@ gh release edit v0.2.0 --notes-file docs/releases/v0.2.0.md
 - 下载全部 Release 产物，核对文件与 `SHA256SUMS.txt`。
 
 ```powershell
-$Version = "0.2.0"
+$Version = "0.2.1"
 Get-FileHash ".\Chroni-$Version-win-x64-setup.exe" -Algorithm SHA256
 ```
 
 ```bash
-VERSION="0.2.0"
+VERSION="0.2.1"
 shasum -a 256 -c SHA256SUMS.txt
 gh attestation verify "Chroni-${VERSION}-win-x64-setup.exe" --repo miracle121388-a11y/chroni
 ```

@@ -1,25 +1,9 @@
 const RELEASE_API = "https://api.github.com/repos/miracle121388-a11y/chroni/releases/latest";
 const RELEASE_FALLBACK = "https://github.com/miracle121388-a11y/chroni/releases/latest";
 const FALLBACK_RELEASE = {
-  tag_name: "v0.2.0",
-  published_at: "2026-07-15T12:38:41Z",
-  assets: [
-    {
-      name: "Chroni-0.2.0-win-x64-setup.exe",
-      size: 160635683,
-      browser_download_url: "https://github.com/miracle121388-a11y/chroni/releases/download/v0.2.0/Chroni-0.2.0-win-x64-setup.exe",
-    },
-    {
-      name: "Chroni-0.2.0-win-x64-portable.exe",
-      size: 160364611,
-      browser_download_url: "https://github.com/miracle121388-a11y/chroni/releases/download/v0.2.0/Chroni-0.2.0-win-x64-portable.exe",
-    },
-    {
-      name: "Chroni-0.2.0-mac-universal.dmg",
-      size: 262015294,
-      browser_download_url: "https://github.com/miracle121388-a11y/chroni/releases/download/v0.2.0/Chroni-0.2.0-mac-universal.dmg",
-    },
-  ],
+  tag_name: "最新版",
+  published_at: "",
+  assets: [],
 };
 
 const targets = {
@@ -103,7 +87,7 @@ function configurePlatform(platform) {
   return { final, primary, target };
 }
 
-function applyRelease(release, platform, selected) {
+function applyRelease(release, platform, selected, fallback = false) {
   const primaryMeta = document.querySelector("#primary-download-meta");
   const releaseStatus = document.querySelector("#release-status");
   const releaseVersion = document.querySelector("#release-version");
@@ -132,13 +116,15 @@ function applyRelease(release, platform, selected) {
   }
 
   releaseVersion.textContent = release.tag_name;
-  releaseStatus.textContent = `${release.tag_name} 已发布，页面已为你匹配可直接运行的安装包。`;
+  releaseStatus.textContent = fallback
+    ? "正在从 GitHub 检查最新安装包；读取失败时将打开 Latest Release 页面。"
+    : `${release.tag_name} 已发布，页面已为你匹配可直接运行的安装包。`;
 }
 
 async function loadLatestRelease() {
   const platform = detectPlatform();
   const selected = configurePlatform(platform);
-  applyRelease(FALLBACK_RELEASE, platform, selected);
+  applyRelease(FALLBACK_RELEASE, platform, selected, true);
 
   try {
     const response = await fetch(RELEASE_API, {
@@ -147,7 +133,8 @@ async function loadLatestRelease() {
     if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
     applyRelease(await response.json(), platform, selected);
   } catch (error) {
-    console.warn("Using bundled Chroni release metadata", error);
+    document.querySelector("#release-status").textContent = "暂时无法自动读取版本，请从 Latest Release 页面选择当前安装包。";
+    console.warn("Unable to load Chroni release metadata", error);
   }
 }
 

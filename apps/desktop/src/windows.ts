@@ -325,7 +325,7 @@ function scheduleWindowOptions(): BrowserWindowConstructorOptions {
     resizable: false,
     minimizable: false,
     skipTaskbar: true,
-    alwaysOnTop: process.platform === "win32",
+    alwaysOnTop: true,
     show: false,
   };
 }
@@ -546,12 +546,22 @@ function persistPetPlacement(win: BrowserWindow): void {
 }
 
 function createTrayIcon(): NativeImage {
+  if (process.platform === "darwin") {
+    // Menu-bar artwork must be a monochrome template image so macOS can adapt
+    // it to light/dark appearances. Do not reuse the full-colour app icon.
+    const templateSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18"><path d="M4 2.5h10M4 15.5h10M5.2 3.2c0 2.8 3.8 3.1 3.8 5.8s-3.8 3-3.8 5.8m7.6-11.6C12.8 6 9 6.3 9 9s3.8 3 3.8 5.8" fill="none" stroke="#000" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const templateIcon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(templateSvg).toString("base64")}`);
+    if (!templateIcon.isEmpty()) {
+      templateIcon.setTemplateImage(true);
+      return templateIcon;
+    }
+  }
   const windowsIconPath = windowsAppIconPath();
   if (windowsIconPath) {
     const windowsIcon = nativeImage.createFromPath(windowsIconPath);
     if (!windowsIcon.isEmpty()) return windowsIcon;
   }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="8" fill="#243b53"/><path d="M8 17h9l-2 7 9-11h-9l2-6z" fill="#f8d66d"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="2" y="2" width="28" height="28" rx="7" fill="#f6f3e9"/><path d="M10 8h12M10 24h12M12 9c0 4 4 4 4 7s-4 3-4 7m8-14c0 4-4 4-4 7s4 3 4 7" fill="none" stroke="#315d52" stroke-width="2.2" stroke-linecap="round"/><circle cx="16" cy="16" r="1.7" fill="#b97832"/></svg>`;
   return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
 }
 

@@ -67,6 +67,7 @@ module.exports = {
     enableEmbeddedAsarIntegrityValidation: true,
     onlyLoadAppFromAsar: true,
   },
+  afterPack: require("./scripts/after-pack.cjs"),
   publish: {
     provider: "github",
     owner: "miracle121388-a11y",
@@ -81,6 +82,9 @@ module.exports = {
     extraResources: [
       { from: "build/PrivacyInfo.xcprivacy", to: "PrivacyInfo.xcprivacy" },
     ],
+    // pnpm installs both Darwin CPU variants (see pnpm-workspace.yaml). The
+    // two target ASARs intentionally contain the same pair of thin binaries;
+    // runtime module selection then chooses the matching process architecture.
     x64ArchFiles: "**/node_modules/@napi-rs/canvas-darwin-*/**",
     identity: hasMacCertificate ? undefined : "-",
     hardenedRuntime: hasMacCertificate,

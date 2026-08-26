@@ -1,9 +1,13 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const renderer = join(root, "apps", "desktop", "dist", "renderer");
 if (!existsSync(renderer)) throw new Error("GOAI renderer build is missing. Run pnpm run build:goai first.");
+const buildManifest = JSON.parse(readFileSync(join(root, "apps", "desktop", "dist", "build-manifest.json"), "utf8"));
+if (buildManifest.variant !== "goai" || buildManifest.petAssetMode !== "original") {
+  throw new Error(`GOAI build manifest is invalid: ${JSON.stringify(buildManifest)}`);
+}
 
 const forbiddenPath = [
   /tongluv/i,

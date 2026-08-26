@@ -149,7 +149,7 @@ export function DailyReviewWorkspace({ snapshot, setSnapshot, initialDate, onOpe
         <main className="review-day-panel">
           <section className="review-day-overview">
             <div className="review-day-title"><div><span>{relation === 0 ? "今天" : relation < 0 ? "历史回顾" : "未来计划"}</span><h3>{formatLongDate(selectedDate)}</h3></div><em className={dirty ? "draft" : existing ? "saved" : "generated"}>{dirty ? "有变化 · 待保存" : existing ? `已保存 · ${formatClock(new Date(existing.updatedAt))}` : "等待保存"}</em></div>
-            <p>{reviewHeadline(tasks.length, completedTasks.length, currentDraft.completedMinutes, currentDraft.plannedMinutes, unfinishedTasks.length, relation)}</p>
+            <p>{reviewHeadline(tasks.length, completedTasks.length, currentDraft.plannedMinutes, unfinishedTasks.length, relation)}</p>
             <div className="review-progress-track" aria-label={`完成率 ${completionPercent}%`}><i style={{ width: `${completionPercent}%` }} /></div>
             <div className="review-metrics" aria-label="当天完成情况">
               <div><b>{completionPercent}%</b><span>完成率</span></div>
@@ -259,7 +259,7 @@ function taskTime(task: DailyTask): string {
   return task.scheduledEndAt ? `${start}–${formatClock(new Date(task.scheduledEndAt))}` : start;
 }
 
-function reviewHeadline(total: number, completed: number, completedMinutes: number, plannedMinutes: number, unfinished: number, relation: number): string {
+function reviewHeadline(total: number, completed: number, plannedMinutes: number, unfinished: number, relation: number): string {
   if (relation > 0) return total ? `已经为这一天安排 ${total} 项活动，预计需要 ${formatDuration(plannedMinutes)}；可以先写下最重要的目标。` : "这一天还没有固定安排，可以先写下想完成的重点。";
   if (!total) return "没有固定日程并不等于没有收获，临时活动和休息也值得记录。";
   if (completed === total) return `计划中的 ${total} 项活动已经全部完成，今天可以安心收尾。`;

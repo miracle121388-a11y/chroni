@@ -1,5 +1,5 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, Notification, safeStorage, shell } from "electron";
-import { createReadStream, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 import { DeadlineAgent } from "./agent/deadline-agent.js";
@@ -567,7 +567,7 @@ function exportAgentEvidence() {
       version: app.getVersion(),
       platform: process.platform,
       architecture: process.arch,
-      petAssetMode: process.env.CHRONI_PET_ASSET_MODE === "original" ? "original" : "xiaotong",
+      petAssetMode: builtPetAssetMode(),
       demoScenario: activeSampleScenario,
     },
   );
@@ -789,4 +789,14 @@ function applyMacDevelopmentIcon(): void {
   if (process.platform !== "darwin" || app.isPackaged) return;
   const icon = nativeImage.createFromPath(join(app.getAppPath(), "build", "icon.png"));
   if (!icon.isEmpty()) app.dock?.setIcon(icon);
+}
+
+function builtPetAssetMode(): "original" | "xiaotong" {
+  try {
+    const manifest = JSON.parse(readFileSync(join(app.getAppPath(), "dist", "build-manifest.json"), "utf8")) as { petAssetMode?: unknown };
+    if (manifest.petAssetMode === "original" || manifest.petAssetMode === "xiaotong") return manifest.petAssetMode;
+  } catch {
+    // Development-only fallback for a partially built workspace.
+  }
+  return process.env.CHRONI_PET_ASSET_MODE === "original" ? "original" : "xiaotong";
 }

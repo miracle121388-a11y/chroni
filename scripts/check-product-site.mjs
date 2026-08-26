@@ -8,6 +8,7 @@ const output = join(root, "dist", "site");
 const html = readFileSync(join(output, "index.html"), "utf8");
 const script = readFileSync(join(output, "app.js"), "utf8");
 const privacy = readFileSync(join(output, "privacy.html"), "utf8");
+const expectedVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 
 const ids = [...html.matchAll(/id="([^"]+)"/g)].map((match) => match[1]);
 const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
@@ -39,17 +40,27 @@ for (const requiredText of ["默认保存在本机", "模型调用由你开启",
   if (!privacy.includes(requiredText)) throw new Error(`Privacy page is missing: ${requiredText}`);
 }
 
-const requiredAssetPatterns = [
-  /win-x64-setup\.exe/i,
-  /win-x64-portable\.exe/i,
-  /mac-universal\.dmg/i,
+const requiredAssetMatchers = [
+  "win-x64-setup\\.exe",
+  "win-x64-portable\\.exe",
+  "mac-universal\\.dmg",
 ];
-for (const pattern of requiredAssetPatterns) {
-  if (!pattern.test(script)) throw new Error(`Missing release matcher: ${pattern}`);
+for (const matcher of requiredAssetMatchers) {
+  if (!script.includes(matcher)) throw new Error(`Missing release matcher: ${matcher}`);
 }
 
 for (const platform of ["windows", "macos", "other"]) {
   if (!script.includes(`${platform}:`)) throw new Error(`Missing platform behavior: ${platform}`);
+}
+
+if (/releases\/download\/v\d/i.test(`${html}\n${script}`)) {
+  throw new Error("Product site contains a version-pinned installer fallback.");
+}
+if (!html.includes("https://github.com/miracle121388-a11y/chroni/releases/latest")) {
+  throw new Error("Product site does not provide a safe Latest Release fallback.");
+}
+if (!html.includes(`"softwareVersion": "${expectedVersion}"`)) {
+  throw new Error(`Product site structured version does not match ${expectedVersion}.`);
 }
 
 for (const file of ["_headers", "_redirects", "robots.txt", "sitemap.xml", ".nojekyll"]) {

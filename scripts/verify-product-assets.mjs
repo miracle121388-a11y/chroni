@@ -8,6 +8,10 @@ const companionSource = join(desktop, "src", "renderer", "src", "assets", "tongl
 const expectedCompanionDigest = "de2c82d469e902723c7289374c69d70a8d0e4385cd72027fda73acfcc64087e2";
 const renderer = join(desktop, "dist", "renderer");
 if (!existsSync(renderer)) throw new Error("Chroni renderer build is missing. Run pnpm run build first.");
+const buildManifest = JSON.parse(readFileSync(join(desktop, "dist", "build-manifest.json"), "utf8"));
+assert(buildManifest.variant === "product", `Expected product build, received ${buildManifest.variant}.`);
+assert(buildManifest.petAssetMode === "xiaotong", `Expected xiaotong companion assets, received ${buildManifest.petAssetMode}.`);
+assert(buildManifest.version === JSON.parse(readFileSync(join(desktop, "package.json"), "utf8")).version, "Build manifest version does not match package.json.");
 
 const companionSourceFiles = walk(companionSource)
   .filter((file) => extname(file).toLowerCase() === ".png")
@@ -57,7 +61,7 @@ if (animationFrames.length < 100 || animationBytes < 5_000_000) {
   throw new Error(`Product build does not contain the complete desktop companion animation set (${animationFrames.length} PNG files, ${animationBytes} bytes).`);
 }
 
-console.log(`Chroni product asset verification passed: ${animationFrames.length} companion PNG frames (${animationBytes} bytes) and all six core workspaces are present.`);
+console.log(`Chroni product asset verification passed: ${animationFrames.length} companion PNG frames (${animationBytes} bytes), product manifest, and all six core workspaces are present.`);
 
 function walk(directory) {
   return readdirSync(directory).flatMap((name) => {

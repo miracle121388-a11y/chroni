@@ -88,8 +88,10 @@ jobs:
       APPLE_ID: ${{ secrets.MAC_APPLE_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.MAC_APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.MAC_APPLE_TEAM_ID }}
-      CHRONI_REQUIRE_SIGNING: ${{ vars.CHRONI_REQUIRE_SIGNING || '0' }}
-      CHRONI_REQUIRE_NOTARIZATION: ${{ vars.CHRONI_REQUIRE_NOTARIZATION || '0' }}
+      # A public tag must never silently publish an ad-hoc-signed app. Manual
+      # workflow runs may still build local test artifacts without credentials.
+      CHRONI_REQUIRE_SIGNING: ${{ github.ref_type == 'tag' && '1' || vars.CHRONI_REQUIRE_SIGNING || '0' }}
+      CHRONI_REQUIRE_NOTARIZATION: ${{ github.ref_type == 'tag' && '1' || vars.CHRONI_REQUIRE_NOTARIZATION || '0' }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6

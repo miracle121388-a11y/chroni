@@ -15,7 +15,7 @@ The build should continue to keep first-screen image transfer below the agreed p
 - The JavaScript bundle is deferred.
 - Non-Hero mascot state images are requested after first render.
 - Product sections use stable dimensions to prevent layout shift.
-- Release metadata loads asynchronously and falls back to bundled v0.2.0 data.
+- Release metadata loads asynchronously and falls back to the version-neutral Latest Release page.
 
 ## Component boundaries
 
@@ -60,7 +60,7 @@ Before each public release:
 - JavaScript disabled: core product explanation and download links remain usable.
 - `prefers-reduced-motion: reduce`.
 - Slow 4G and 4x CPU throttling.
-- GitHub API unavailable: bundled release fallback still downloads v0.2.0.
+- GitHub API unavailable: every download control opens Latest Release instead of a stale version-pinned installer.
 
 ## Degradation
 

@@ -17,18 +17,25 @@ const rendererTypes = readFileSync(new URL("../src/renderer/src/vite-env.d.ts", 
 const preloadSource = readFileSync(new URL("../preload.cjs", import.meta.url), "utf8");
 const mainSource = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
 const windowsSource = readFileSync(new URL("../src/windows.ts", import.meta.url), "utf8");
+const workspaceConfig = readFileSync(new URL("../../../pnpm-workspace.yaml", import.meta.url), "utf8");
+const artifactVerifier = readFileSync(new URL("../../../scripts/verify-desktop-artifact.mjs", import.meta.url), "utf8");
+const afterPackSource = readFileSync(new URL("../scripts/after-pack.cjs", import.meta.url), "utf8");
 
 test("packaging commands never publish before release artifacts are verified", () => {
-  for (const name of ["package", "package:win", "package:mac", "package:linux", "package:win:store", "package:mac:store", "package:goai:win:inner", "package:goai:mac:inner"]) {
+  for (const name of ["package:inner", "package:win:inner", "package:mac:inner", "package:linux:inner", "package:win:store:inner", "package:mac:store:inner", "package:goai:win:inner", "package:goai:mac:inner"]) {
     assert.match(packageJson.scripts[name], /--publish never/);
+    assert.match(packageJson.scripts[name], /verify-desktop-artifact\.mjs/);
   }
-  for (const name of ["package", "package:win", "package:mac", "package:linux"]) {
+  for (const name of ["package", "package:win", "package:mac", "package:linux", "package:win:store", "package:mac:store"]) {
+    assert.match(packageJson.scripts[name], /CHRONI_PET_ASSET_MODE=xiaotong/);
+  }
+  for (const name of ["package:inner", "package:win:inner", "package:mac:inner", "package:linux:inner", "package:win:store:inner", "package:mac:store:inner"]) {
     assert.match(packageJson.scripts[name], /verify:product-assets/);
   }
-  assert.match(packageJson.scripts["package:goai:win"], /package:goai:win:inner/);
-  assert.match(packageJson.scripts["package:goai:mac"], /package:goai:mac:inner/);
-  for (const name of ["package:win:store", "package:mac:store"]) {
-    assert.match(packageJson.scripts[name], /verify:product-assets/);
+  for (const name of ["package:goai:win", "package:goai:mac"]) {
+    assert.match(packageJson.scripts[name], /CHRONI_PET_ASSET_MODE=original/);
+  }
+  for (const name of ["package:win:store:inner", "package:mac:store:inner"]) {
     assert.match(packageJson.scripts[name], /verify-store-readiness\.mjs/);
     assert.match(packageJson.scripts[name], /verify-store-artifact\.mjs/);
   }
@@ -36,6 +43,30 @@ test("packaging commands never publish before release artifacts are verified", (
 
 test("macOS universal packaging preserves both canvas native architectures", () => {
   assert.equal(builderConfig.mac.x64ArchFiles, "**/node_modules/@napi-rs/canvas-darwin-*/**");
+  assert.match(workspaceConfig, /supportedArchitectures:[\s\S]*cpu:[\s\S]*- x64[\s\S]*- arm64/);
+  assert.match(artifactVerifier, /canvas-darwin-arm64\/skia\.darwin-arm64\.node/);
+  assert.match(artifactVerifier, /canvas-darwin-x64\/skia\.darwin-x64\.node/);
+  assert.match(artifactVerifier, /assertArchitectures/);
+});
+
+test("packaged asset variant and macOS metadata are verified after packaging", () => {
+  assert.equal(typeof builderConfig.afterPack, "function");
+  assert.match(afterPackSource, /NSCameraUsageDescription/);
+  assert.match(afterPackSource, /NSAllowsArbitraryLoads/);
+  assert.match(artifactVerifier, /dist\/build-manifest\.json/);
+  assert.match(artifactVerifier, /Product artifact contains only/);
+  assert.match(artifactVerifier, /ElectronAsarIntegrity/);
+  assert.match(artifactVerifier, /PrivacyInfo\.xcprivacy/);
+  assert.match(artifactVerifier, /iconutil/);
+  assert.match(artifactVerifier, /hdiutil/);
+  assert.match(artifactVerifier, /unzip/);
+  assert.match(artifactVerifier, /com\.apple\.security\.cs\.allow-jit/);
+});
+
+test("macOS menu bar and schedule surfaces follow native visibility rules", () => {
+  assert.match(windowsSource, /templateIcon\.setTemplateImage\(true\)/);
+  assert.match(windowsSource, /const templateSvg = .*stroke=\"#000\"/);
+  assert.match(windowsSource, /alwaysOnTop: true/);
 });
 
 test("Store packages keep Chroni identity, sandbox permissions, and system-managed updates", () => {
@@ -71,6 +102,8 @@ test("public release jobs use the verified product packaging path", () => {
   assert.match(releaseWorkflow, /pnpm run package:windows/);
   assert.match(releaseWorkflow, /pnpm run package:macos/);
   assert.doesNotMatch(releaseWorkflow, /pnpm run package:goai:(?:windows|macos)/);
+  assert.match(releaseWorkflow, /CHRONI_REQUIRE_SIGNING: \$\{\{ github\.ref_type == 'tag' && '1'/);
+  assert.match(releaseWorkflow, /CHRONI_REQUIRE_NOTARIZATION: \$\{\{ github\.ref_type == 'tag' && '1'/);
 });
 
 test("default desktop packages include the companion's required notices", () => {

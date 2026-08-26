@@ -19,7 +19,10 @@ const devCsp = productionCsp
   .replace("connect-src 'self'", "connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173");
 
 export default defineConfig(({ command }) => {
-  const petAssetMode = process.env.CHRONI_PET_ASSET_MODE === "original" ? "original" : "xiaotong";
+  const petAssetMode = process.env.CHRONI_PET_ASSET_MODE?.trim() || "xiaotong";
+  if (petAssetMode !== "original" && petAssetMode !== "xiaotong") {
+    throw new Error(`Unsupported CHRONI_PET_ASSET_MODE: ${petAssetMode}`);
+  }
   const petAssetModule = fileURLToPath(new URL(`./src/renderer/src/pet-assets/${petAssetMode}.ts`, import.meta.url));
   return ({
   root: "src/renderer",

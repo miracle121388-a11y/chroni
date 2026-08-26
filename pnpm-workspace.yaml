@@ -1,5 +1,11 @@
 packages:
   - "apps/*"
+supportedArchitectures:
+  os:
+    - current
+  cpu:
+    - x64
+    - arm64
 allowBuilds:
   electron-winstaller: true
   tesseract.js: true
