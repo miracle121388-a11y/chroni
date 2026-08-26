@@ -1,0 +1,95 @@
+name: Publish Desktop Release Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to publish (for example, v0.2.1)
+        required: true
+        type: string
+      artifact_run_id:
+        description: Successful Desktop Release workflow run ID
+        required: true
+        type: string
+      artifact_ref_name:
+        description: Ref suffix used by the build artifacts
+        required: true
+        default: main
+        type: string
+
+concurrency:
+  group: chroni-publish-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish-release:
+    name: Verify and publish GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Verify release tag and version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          node scripts/verify-release-version.mjs "$RELEASE_TAG"
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null
+      - name: Download successful build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.artifact_run_id }}
+          pattern: chroni-*-${{ inputs.artifact_ref_name }}
+          path: release
+          merge-multiple: true
+      - name: Verify platform checksums
+        working-directory: release
+        run: |
+          sha256sum --check SHA256SUMS-windows.txt
+          sha256sum --check SHA256SUMS-macos.txt
+      - name: Attest release packages
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.yml
+            release/*.blockmap
+      - name: Generate combined checksums
+        run: node scripts/generate-checksums.mjs release release/SHA256SUMS.txt
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          prerelease=""
+          notes_file="docs/releases/${RELEASE_TAG}.md"
+          if [[ "$RELEASE_TAG" == *-* ]]; then prerelease="--prerelease"; fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release/* --clobber
+            if [[ -f "$notes_file" ]]; then
+              gh release edit "$RELEASE_TAG" --notes-file "$notes_file"
+            fi
+          elif [[ -f "$notes_file" ]]; then
+            gh release create "$RELEASE_TAG" release/* \
+              --verify-tag \
+              --title "Chroni ${RELEASE_TAG} — 学习执行 Agent" \
+              --notes-file "$notes_file" \
+              $prerelease
+          else
+            gh release create "$RELEASE_TAG" release/* \
+              --verify-tag \
+              --title "Chroni ${RELEASE_TAG}" \
+              --generate-notes \
+              $prerelease
+          fi
+          gh release view "$RELEASE_TAG" --json url,isDraft,isPrerelease,tagName
