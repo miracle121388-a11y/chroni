@@ -102,8 +102,9 @@ test("public release jobs use the verified product packaging path", () => {
   assert.match(releaseWorkflow, /pnpm run package:windows/);
   assert.match(releaseWorkflow, /pnpm run package:macos/);
   assert.doesNotMatch(releaseWorkflow, /pnpm run package:goai:(?:windows|macos)/);
-  assert.match(releaseWorkflow, /CHRONI_REQUIRE_SIGNING: \$\{\{ github\.ref_type == 'tag' && '1'/);
-  assert.match(releaseWorkflow, /CHRONI_REQUIRE_NOTARIZATION: \$\{\{ github\.ref_type == 'tag' && '1'/);
+  assert.match(releaseWorkflow, /CHRONI_REQUIRE_SIGNING: \$\{\{ vars\.CHRONI_REQUIRE_SIGNING \|\| '0' \}\}/);
+  assert.match(releaseWorkflow, /CHRONI_REQUIRE_NOTARIZATION: \$\{\{ vars\.CHRONI_REQUIRE_NOTARIZATION \|\| '0' \}\}/);
+  assert.doesNotMatch(releaseWorkflow, /github\.ref_type == 'tag' && '1'/);
 });
 
 test("default desktop packages include the companion's required notices", () => {

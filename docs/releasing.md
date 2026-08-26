@@ -51,7 +51,7 @@ CHRONI_REQUIRE_SIGNING=1
 CHRONI_REQUIRE_NOTARIZATION=1
 ```
 
-所有 `v*` 标签发布都会自动强制这两项为 `1`：凭据缺失、Developer ID 签名失败或公证票据无效时，工作流直接失败，不会上传 ad-hoc 签名产物。没有证书时只能手动运行工作流生成测试 artifact，不能创建正式 Release。
+当前项目尚无 Apple Developer 账号，因此 `v*` 标签默认允许生成 ad-hoc 签名的 macOS 正式安装包。工作流仍会校验应用签名结构、桌宠素材、Universal 双架构、DMG/ZIP、ASAR 完整性和校验和。取得证书后，将上述两个变量设为 `1`，即可恢复 Developer ID 签名和 Apple 公证的强制门禁。
 
 ## 创建发布
 
@@ -66,7 +66,7 @@ git push origin "$VERSION"
 1. 校验标签与两个 package 版本一致。
 2. 在 Windows 和 macOS 上分别运行完整检查。
 3. 构建安装器、便携版、Universal DMG/ZIP 和更新元数据。
-4. 解开已封装应用，核对产品桌宠帧、构建变体、Intel/Apple Silicon 原生模块、Bundle/隐私元数据、ASAR 完整性、Developer ID 签名和 Apple 公证。
+4. 解开已封装应用，核对产品桌宠帧、构建变体、Intel/Apple Silicon 原生模块、Bundle/隐私元数据、ASAR 完整性和当前签名策略；配置严格变量时额外强制核对 Developer ID 与 Apple 公证。
 5. 生成平台校验和与 GitHub build provenance attestation。
 6. 汇总产物、生成 `SHA256SUMS.txt` 并创建 GitHub Release。
 
@@ -81,7 +81,7 @@ gh release edit v0.2.1 --notes-file docs/releases/v0.2.1.md
 ## 发布后验证
 
 - 在一台没有开发环境的 Windows 电脑上测试安装、首次启动、卸载和保留数据。
-- 在 Intel 与 Apple Silicon macOS 上测试 DMG、Gatekeeper、公证和通知权限。
+- 在 Intel 与 Apple Silicon macOS 上测试 DMG、Gatekeeper 首次放行和通知权限；配置 Apple 凭据后再增加公证验证。
 - 从上一个正式版本检查应用内更新，并验证下载后重启安装。
 - 下载全部 Release 产物，核对文件与 `SHA256SUMS.txt`。
 

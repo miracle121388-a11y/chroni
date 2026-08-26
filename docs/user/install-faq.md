@@ -43,15 +43,15 @@ Portable 不是“完全不写入数据”。它只是不安装程序，Chroni �
 Windows PowerShell：
 
 ```powershell
-Get-FileHash ".\Chroni-0.2.0-win-x64-setup.exe" -Algorithm SHA256
+Get-FileHash ".\Chroni-0.2.1-win-x64-setup.exe" -Algorithm SHA256
 Get-Content ".\SHA256SUMS.txt"
 ```
 
 macOS Terminal：
 
 ```bash
-shasum -a 256 Chroni-0.2.0-mac-universal.dmg
-grep "Chroni-0.2.0-mac-universal.dmg" SHA256SUMS.txt
+shasum -a 256 Chroni-0.2.1-mac-universal.dmg
+grep "Chroni-0.2.1-mac-universal.dmg" SHA256SUMS.txt
 ```
 
 计算结果必须与发布页同名文件对应的值完全一致。版本升级后请替换命令中的版本号。
