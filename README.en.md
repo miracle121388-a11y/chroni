@@ -10,18 +10,16 @@ Chroni does not complete coursework for students. It turns course requirements i
 
 _Actual product UI with isolated synthetic demo data._
 
-[Product and download site](https://getchroni.zeabur.app/) · [GOAI review index](./docs/goai/00-submission-index.md) · [Chinese README](./README.md) · [Evaluation](./docs/goai/07-evaluation-report.md) · [Security](./docs/security/threat-model.md)
+[Product and download site](https://getchroni.zeabur.app/) · [Chinese README](./README.md) · [User guide](./docs/user/quick-start.md) · [Security](./docs/security/threat-model.md)
 
 ## Current version and three-minute path
 
-The repository package version is `0.2.0`. Public installer availability, signatures, and notarization status must be checked on [GitHub Releases](https://github.com/miracle121388-a11y/chroni/releases).
+The repository package version is `0.2.1`. Public installer availability, signatures, and notarization status must be checked on [GitHub Releases](https://github.com/miracle121388-a11y/chroni/releases).
 
-1. Install and start Chroni, then open **GOAI Demo** in the control center.
-2. Run scenario A to create a grounded database-course Learning Mission, TaskPlan, output evidence, checkpoint, daily blocks, and Agent trace without an API key.
-3. Run B to see a single necessary due-time question; run C to resolve conflicting source deadlines.
-4. Export redacted evidence from **Agent**, then exit demo to delete synthetic data and restore the primary Store.
-
-Fixtures are in [`examples/goai`](./examples/goai/). The demo is deterministic, synthetic, isolated, offline-capable, and makes zero model calls.
+1. Install and start Chroni. The **Today** timeline is the default workspace.
+2. Drop a course file onto the companion or import it from **Task Sources**.
+3. Review grounded goals and milestones in **Learning Tasks**, then choose **Smart plan** in **Today** to place realistic work blocks on the timeline.
+4. Complete a block, record output evidence, and let Chroni adjust the remaining plan.
 
 ## Capabilities
 
@@ -57,19 +55,19 @@ The renderer starts on `http://127.0.0.1:5173`; Electron opens automatically. Th
 
 ## Optional DeepSeek setup
 
-Open **Preferences → Model service → Custom API**, enable the model, set the base URL to your OpenAI-compatible DeepSeek endpoint, enter your API key, and select a model available to your account. Use **Test connection** before saving. Do not commit keys or post them in issues. Exact provider models and prices change; follow the provider's current console/documentation.
+Open **Preferences → Smart model service → Custom API**, enable the model, set the base URL to your OpenAI-compatible DeepSeek endpoint, enter your API key, and select a model available to your account. Use **Test connection** before saving. Do not commit keys or post them in issues. Exact provider models and prices change; follow the provider's current console/documentation.
 
-Without a key, explicit deadlines, local OCR/parsing, deterministic planning, reminders, and the GOAI demo remain available. Complex semantics may have lower recall.
+Without a key, explicit deadlines, local OCR/parsing, deterministic planning, and reminders remain available. Complex semantics may have lower recall.
 
 ## Architecture and API
 
-Chroni is one hybrid Agent, not a claimed multi-Agent system. Models propose bounded candidates; local code controls evidence, validation, state transitions, planning constraints, tools, memory, and fallback. See [technical solution](./docs/goai/03-technical-solution.md), [capability contracts](./docs/goai/agent-capability-contracts.md), and [local API](./docs/local-api.md).
+Chroni is one hybrid Agent, not a claimed multi-Agent system. Models propose bounded candidates; local code controls evidence, validation, state transitions, planning constraints, tools, memory, and fallback. See [Agent design](./docs/agent-clarification-task-planning-memory.md), [local API](./docs/local-api.md), and [productization roadmap](./docs/productization-roadmap.md).
 
 ```bash
 pnpm run check
 pnpm run eval:smoke
-pnpm run eval:goai
-pnpm run build:goai
+pnpm run build
+pnpm run store:check
 pnpm run notices:generate
 ```
 
@@ -77,16 +75,16 @@ The 60-case report is machine-generated and includes known failures/unmeasured f
 
 ## Security, privacy, and asset rights
 
-Imported files and model output are untrusted data. The renderer has no direct Node access; typed IPC/local API routes validate state changes. Read the [security policy](./SECURITY.md), [threat model](./docs/security/threat-model.md), and [privacy explanation](./docs/goai/06-security-and-privacy.md).
+Imported files and model output are untrusted data. The renderer has no direct Node access; typed IPC/local API routes validate state changes. Read the [security policy](./SECURITY.md), [threat model](./docs/security/threat-model.md), and [privacy explanation](./docs/user/privacy.md).
 
-The MIT license covers Chroni first-party code, not every asset/dependency. Optional XIAOTONG character assets have separate additional terms and no separate GOAI/commercial authorization is claimed. Competition-safe builds use the first-party mark:
+Public packages include the full animated desktop companion. The MIT license covers Chroni first-party code; the companion visuals, fonts, and runtime dependencies remain subject to their own notices:
 
 ```bash
-pnpm run package:goai:windows
-# or pnpm run package:goai:macos
+pnpm run package:windows
+# or pnpm run package:macos
 ```
 
-See [IP boundary](./docs/goai/05-open-source-and-ip.md), [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md), and the generated dependency inventory.
+See [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) and the generated dependency inventory.
 
 ## Known limitations
 

@@ -162,7 +162,7 @@ Chroni Desktop -> Chroni Relay -> Model Provider
 | 命令或检查 | 结果 |
 | --- | --- |
 | `pnpm run check` | 通过：typecheck、Desktop tests、Gateway tests、production build |
-| Desktop tests | 248 项：247 pass、0 fail、1 skip |
+| Desktop tests | 250 项：249 pass、0 fail、1 skip |
 | Gateway tests | 4 pass、0 fail |
 | `pnpm run eval:goai` | 60 cases；离线成功率 100.0%；Mission 闭环门槛全部通过 |
 | `pnpm run site:check` | 下载链接、DOM 引用和安装包映射通过 |

@@ -10,6 +10,8 @@
 | Windows x64 | `Chroni-<version>-win-x64-portable.exe` | 不安装直接运行 |
 | macOS Universal | `Chroni-<version>-mac-universal.dmg` | Intel 与 Apple Silicon 通用安装镜像 |
 | macOS Universal | `Chroni-<version>-mac-universal.zip` | 应用内更新和手动解压 |
+| Microsoft Store | `Chroni-<version>-win-x64-store.appx` | Partner Center 提交包，由商店更新 |
+| Mac App Store | `Chroni-<version>-mac-universal.pkg` | App Store Connect 提交包，由商店更新 |
 | 全平台 | `latest*.yml`、`*.blockmap` | `electron-updater` 更新元数据 |
 | 全平台 | `SHA256SUMS.txt` | 发布文件完整性校验 |
 
@@ -92,3 +94,15 @@ VERSION="0.2.0"
 shasum -a 256 -c SHA256SUMS.txt
 gh attestation verify "Chroni-${VERSION}-win-x64-setup.exe" --repo miracle121388-a11y/chroni
 ```
+
+## 应用商店发布
+
+GitHub Release 与应用商店使用不同的签名、更新和审核通道。先运行结构检查：
+
+```bash
+npx pnpm@11.7.0 run store:check
+```
+
+取得 Partner Center 身份后，在 Windows 运行 `pnpm run package:windows:store`；取得 Apple Distribution 证书和 Mac App Store provisioning profile 后，在 macOS 运行 `pnpm run package:macos:store`。商店版会自动停用 GitHub 自更新，并显示由系统应用商店负责更新。
+
+完整变量、审核路径和发布限制见[应用商店发布资料](./store/README.md)。商店必须以免费方式发布；涉及收费、订阅、赞助或其他收入前，必须先取得桌面伙伴素材许可方的书面同意。

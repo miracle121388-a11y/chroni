@@ -61,6 +61,10 @@ test("Windows executables and development windows use the macOS hourglass artwor
   assert.match(windowsSource, /const icon = windowsAppIconPath\(\);/);
   assert.match(windowsSource, /app\.isPackaged[\s\S]*?process\.resourcesPath, "icon\.ico"/);
   assert.match(windowsSource, /app\.getAppPath\(\), "build", "icon\.ico"/);
+  assert.match(windowsSource, /win\.setIcon\(icon\)/);
+  assert.match(windowsSource, /win\.setAppDetails\(\{[\s\S]*?appId: "app\.chroni\.desktop"[\s\S]*?appIconPath: icon/);
+  assert.match(windowsSource, /relaunchCommand: windowsRelaunchCommand\(\)/);
+  assert.match(windowsSource, /relaunchDisplayName: "Chroni"/);
   assert.match(windowsSource, /const windowsIconPath = windowsAppIconPath\(\);[\s\S]*?nativeImage\.createFromPath\(windowsIconPath\)/);
 
   assert.deepEqual([...ico.subarray(0, 4)], [0, 0, 1, 0]);
@@ -122,6 +126,7 @@ test("renderer bundles local cross-platform fonts under the production CSP", asy
   assert.match(rendererSource, /document\.documentElement\.dataset\.platform = api\.platform/);
   assert.match(rendererSource, /document\.fonts\.load\(font, sample\)/);
   assert.match(rendererSource, /document\.documentElement\.dataset\.fonts = "ready"/);
+  assert.match(rendererSource, /import\.meta\.hot\.dispose\(\(\) => \{[\s\S]*?rendererDisposed = true;[\s\S]*?rendererRoot\.unmount\(\)/);
   assert.match(stylesSource, /select\s*\{[\s\S]*?appearance:\s*none[\s\S]*?background-image:\s*url\("data:image\/svg\+xml/);
   assert.match(stylesSource, /input:is\(\[type="date"\], \[type="datetime-local"\], \[type="time"\]\)::-webkit-calendar-picker-indicator/);
   assert.match(stylesSource, /\.ui-checkbox:checked\s*\{[\s\S]*?background-image:\s*url\("data:image\/svg\+xml/);
@@ -137,9 +142,16 @@ test("renderer bundles local cross-platform fonts under the production CSP", asy
   assert.match(uiIconSource, /export function UiIcon/);
   assert.doesNotMatch(dailyPlannerSource, />[‹›＋×]</);
   assert.match(dailyPlannerSource, /function PlannerIcon/);
-  assert.match(dailyPlannerSource, /className="daily-display-number"/);
+  assert.match(dailyPlannerSource, /function CalendarTimeGrid/);
+  assert.match(dailyPlannerSource, /calendarColumnMinimum\(row\.maxLaneCount, days\.length, row\.tasks\.length > 0\)/);
+  assert.match(dailyPlannerSource, /"--daily-calendar-columns": calendarColumns/);
+  assert.match(dailyPlannerSource, /"--daily-calendar-min-width": `\$\{calendarMinWidth\}px`/);
+  assert.match(dailyPlannerSource, /row\.maxLaneCount > 1 \? ` · \$\{row\.maxLaneCount\} 项并行`/);
+  assert.match(dailyPlannerSource, /className="daily-calendar-grid-head"/);
   assert.doesNotMatch(dailyPlannerSource, /<article[^>]+role=\{interactive \? "button"/);
   assert.match(dailyPlannerSource, /className="daily-task-open"/);
+  assert.match(dailyPlannerSource, /id="daily-task-editor-form"/);
+  assert.match(dailyPlannerSource, /form="daily-task-editor-form" type="submit"/);
   assert.doesNotMatch(compactCss, /\.control-shell\{[^}]*min-width:760px/);
   const controlShellRules = [...compactCss.matchAll(/\.control-shell\{([^}]*)\}/g)]
     .map((match) => match[1]);
@@ -147,21 +159,26 @@ test("renderer bundles local cross-platform fonts under the production CSP", asy
     controlShellRules.some((rule) => rule.includes("min-width:0") && rule.includes("width:100%")),
     "control shell must fit its content width without a fixed minimum",
   );
-  assert.match(stylesSource, /\.daily-workspace\.mode-day\s*\{[^}]*grid-template-columns:\s*218px minmax\(0, 1fr\)/);
-  assert.match(stylesSource, /\.daily-hour\s*\{[^}]*transform:\s*translateY\(-50%\)/);
+  assert.match(stylesSource, /\.daily-workspace,\s*\.daily-workspace\.mode-day\s*\{[^}]*grid-template-columns:\s*232px minmax\(0, 1fr\)/);
+  assert.match(stylesSource, /\.daily-time-gutter time\s*\{[^}]*transform:\s*translateY\(-50%\)/);
   assert.match(stylesSource, /\.daily-now\s*\{[^}]*height:\s*0/);
-  assert.match(stylesSource, /\.mode-week \.daily-compact-days\s*\{[^}]*min-width:\s*700px[^}]*repeat\(7, minmax\(100px, 1fr\)\)/);
+  assert.match(stylesSource, /\.daily-calendar-grid\.columns-7 \.daily-calendar-days\s*\{[^}]*grid-template-columns:\s*var\(--daily-calendar-columns\)/);
+  assert.match(stylesSource, /\.daily-calendar-body\s*\{[^}]*min-width:\s*var\(--daily-calendar-min-width\)/);
+  assert.match(stylesSource, /\.daily-calendar-grid \.daily-task-card\.density-regular b\s*\{[^}]*white-space:\s*normal[^}]*-webkit-line-clamp:\s*2/);
+  assert.match(stylesSource, /\.daily-workspace:is\(\.mode-multi, \.mode-week, \.mode-month\) > \.daily-planner-sidebar\s*\{[^}]*display:\s*none/);
   assert.match(stylesSource, /\.daily-editor input,\s*\.daily-editor select\s*\{[^}]*height:\s*42px/);
+  assert.match(stylesSource, /\.daily-editor\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto[^}]*overflow:\s*hidden/);
+  assert.match(stylesSource, /\.daily-editor > footer\s*\{[^}]*border-top:\s*1px solid #e3e7e5/);
   assert.match(stylesSource, /\.primary,\s*\.secondary,\s*\.danger,\s*\.agent-run\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center[^}]*justify-content:\s*center/);
   assert.match(stylesSource, /\.agent-memory-grid input,\s*\.agent-memory-grid select\s*\{[^}]*height:\s*40px[^}]*font-size:\s*var\(--text-control\)/);
   assert.match(rendererSource, /className="settings-group companion-settings-group"/);
   assert.match(stylesSource, /\.companion-settings-group \.toggle\s*\{[^}]*min-height:\s*52px[^}]*padding:\s*0/);
   assert.match(stylesSource, /@media \(max-width: 850px\)\s*\{[\s\S]*?\.daily-toolbar\s*\{[^}]*flex-wrap:\s*wrap/);
-  assert.match(stylesSource, /@media \(max-width: 850px\)\s*\{[\s\S]*?\.daily-timeline-panel\s*\{\s*min-width:\s*0;\s*min-height:\s*0;/);
+  assert.match(stylesSource, /@media \(max-width: 720px\)\s*\{[\s\S]*?\.daily-planner-sidebar\s*\{[^}]*display:\s*none/);
   assert.match(stylesSource, /\.content:has\(\.daily-planner\),\s*\.daily-workspace\.mode-day\s*\{\s*scrollbar-gutter:\s*auto;/);
   assert.match(stylesSource, /\.pet-body:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--focus-ring\)/);
   assert.match(stylesSource, /@media \(forced-colors: active\)\s*\{[\s\S]*?outline-color:\s*Highlight !important/);
-  assert.match(stylesSource, /@media \(max-width: 850px\) and \(max-height: 600px\)\s*\{[\s\S]*?\.daily-timeline-panel\s*\{[\s\S]*?min-height:\s*240px/);
+  assert.match(stylesSource, /@media \(max-width: 720px\) and \(max-height: 600px\)\s*\{[\s\S]*?\.daily-workspace\.mode-day\s*\{[^}]*min-height:\s*420px/);
   assert.match(stylesSource, /html::?-webkit-scrollbar-thumb|html::-webkit-scrollbar-thumb/);
   assert.match(stylesSource, /@media \(forced-colors: none\)\s*\{[\s\S]*?::-webkit-scrollbar-button/);
   assert.match(windowsSource, /if \(control\.isMinimized\(\)\) control\.restore\(\);/);

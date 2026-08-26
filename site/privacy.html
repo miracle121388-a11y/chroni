@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f7f3">
+    <meta name="description" content="Chroni 隐私说明：本地数据、可选模型调用、凭据保护和数据删除方式。">
+    <link rel="canonical" href="https://getchroni.zeabur.app/privacy.html">
+    <link rel="icon" href="./assets/chroni-icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+    <title>隐私说明 - Chroni</title>
+  </head>
+  <body class="privacy-page">
+    <a class="skip-link" href="#privacy-main">跳到主要内容</a>
+    <header class="site-header">
+      <a class="brand" href="./index.html" aria-label="返回 Chroni 首页">
+        <img src="./assets/chroni-icon.svg" width="30" height="30" alt="">
+        <span>Chroni</span>
+      </a>
+      <nav aria-label="隐私页导航">
+        <a href="./index.html#download">下载</a>
+        <a class="nav-source" href="https://github.com/miracle121388-a11y/chroni">GitHub</a>
+      </nav>
+    </header>
+
+    <main class="privacy-main" id="privacy-main">
+      <header class="privacy-hero">
+        <p class="overline">Privacy at Chroni</p>
+        <h1>你的学习过程，<br>默认留在你的电脑里。</h1>
+        <p>本说明适用于 Chroni 0.2.x。Chroni 是本地优先桌面应用，不提供账号系统、广告追踪或默认云同步。</p>
+        <span>更新日期：2026 年 8 月 26 日</span>
+      </header>
+
+      <div class="privacy-layout">
+        <aside aria-label="本页目录">
+          <a href="#local">本地数据</a>
+          <a href="#model">模型调用</a>
+          <a href="#credentials">凭据保护</a>
+          <a href="#delete">导出与删除</a>
+          <a href="#contact">联系与更新</a>
+        </aside>
+
+        <article class="privacy-content">
+          <section id="local">
+            <p class="privacy-index">01</p>
+            <h2>默认保存在本机</h2>
+            <p>学习任务、来源、计划、每日安排、执行记录、偏好、桌宠位置和成果证据元数据保存在操作系统为 Chroni 分配的应用数据目录。Chroni 不会在后台把这些内容同步到开发者服务器。</p>
+            <p>证据文件只登记显示名、类型、大小、修改时间和校验摘要；原始成果文件不会被 Chroni 网关接收。</p>
+          </section>
+
+          <section id="model">
+            <p class="privacy-index">02</p>
+            <h2>模型调用由你开启</h2>
+            <p>不配置模型或关闭 LLM 时，Chroni 不会调用模型服务。启用内测模型或自定义 API 后，本地解析或 OCR 得到的必要文本、来源名称及时间上下文会发送到所配置的模型服务，用于任务提取和规划。</p>
+            <p>Chroni 内测网关只记录请求标识、匿名访问码标识、状态、耗时和 token 数，不记录提示词正文。模型服务自身的数据处理规则同时适用。</p>
+          </section>
+
+          <section id="credentials">
+            <p class="privacy-index">03</p>
+            <h2>密钥不进入项目数据</h2>
+            <p>系统安全存储可用时，访问码与自定义 API Key 经 Electron safeStorage 加密后保存。公开状态快照、安装包资源和项目仓库不包含真实密钥；系统安全存储不可用时，凭据只在本次运行中使用。</p>
+            <p>本地 HTTP API 默认仅监听 127.0.0.1，并使用每次启动生成的会话令牌保护除健康检查外的接口。</p>
+          </section>
+
+          <section id="delete">
+            <p class="privacy-index">04</p>
+            <h2>你可以查看、导出和删除</h2>
+            <p>在“运行状态”中可以打开本地数据位置。完全退出 Chroni 后删除该目录，即可移除应用保存的任务、计划、偏好、缓存和备份；卸载程序默认不会擅自删除这些数据。</p>
+            <p>删除不可撤销，请先保留所需的日历或证据导出文件。</p>
+          </section>
+
+          <section id="contact">
+            <p class="privacy-index">05</p>
+            <h2>联系与政策更新</h2>
+            <p>隐私与安全问题可通过 GitHub Security 的私密漏洞报告提交。政策发生实质变化时，本页面与应用版本说明会同步更新。</p>
+            <div class="privacy-actions">
+              <a href="https://github.com/miracle121388-a11y/chroni/security/advisories/new">私密报告安全问题</a>
+              <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/privacy.md">查看完整技术说明</a>
+            </div>
+          </section>
+        </article>
+      </div>
+    </main>
+
+    <footer>
+      <div class="footer-brand"><strong>Chroni</strong><span>Local-first Learning Execution Agent</span></div>
+      <div class="footer-links">
+        <a href="./index.html">首页</a>
+        <a href="https://github.com/miracle121388-a11y/chroni">GitHub</a>
+        <a href="https://github.com/miracle121388-a11y/chroni/blob/main/LICENSE">MIT License</a>
+      </div>
+      <span>© 2026 Chroni</span>
+    </footer>
+  </body>
+</html>

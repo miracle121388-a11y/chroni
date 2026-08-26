@@ -7,6 +7,7 @@ type ChroniUpdaterOptions = {
   currentVersion: string;
   packaged: boolean;
   platform: NodeJS.Platform;
+  managedByStore?: boolean;
   onStatus: UpdateStatusListener;
   onDownloaded?: (status: ChroniUpdateStatus) => void;
 };
@@ -17,7 +18,7 @@ export class ChroniUpdater {
   #automaticCheckTimer?: ReturnType<typeof setTimeout>;
 
   constructor(private readonly options: ChroniUpdaterOptions) {
-    this.#status = initialUpdateStatus(options.currentVersion, options.packaged, options.platform);
+    this.#status = initialUpdateStatus(options.currentVersion, options.packaged, options.platform, options.managedByStore);
   }
 
   status(): ChroniUpdateStatus {
@@ -115,12 +116,20 @@ export class ChroniUpdater {
   }
 }
 
-export function initialUpdateStatus(currentVersion: string, packaged: boolean, platform: NodeJS.Platform): ChroniUpdateStatus {
+export function initialUpdateStatus(
+  currentVersion: string,
+  packaged: boolean,
+  platform: NodeJS.Platform,
+  managedByStore = false,
+): ChroniUpdateStatus {
   const supported = packaged && (platform === "win32" || platform === "darwin");
   return {
     currentVersion,
-    phase: supported ? "idle" : "unsupported",
-    message: supported
+    managedByStore,
+    phase: supported && !managedByStore ? "idle" : "unsupported",
+    message: managedByStore
+      ? "当前版本由系统应用商店负责更新。"
+      : supported
       ? "Chroni 会在后台检查 GitHub Releases 中的新版本。"
       : packaged
         ? "当前平台暂不支持应用内自动更新。"

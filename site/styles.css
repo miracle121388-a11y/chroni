@@ -2738,6 +2738,134 @@ footer > span {
   }
 }
 
+.privacy-main {
+  min-height: calc(100vh - 132px);
+  padding: 148px clamp(22px, 7vw, 112px) 96px;
+}
+
+.privacy-hero {
+  max-width: 960px;
+  padding-bottom: 62px;
+  border-bottom: 1px solid var(--line);
+}
+
+.privacy-hero h1 {
+  max-width: 960px;
+  margin: 16px 0 24px;
+  font-size: 82px;
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.privacy-hero > p:not(.overline) {
+  max-width: 700px;
+  color: #45514e;
+  font-size: 17px;
+  line-height: 1.8;
+}
+
+.privacy-hero > span {
+  display: block;
+  margin-top: 26px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.privacy-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 760px);
+  gap: clamp(48px, 8vw, 132px);
+  align-items: start;
+  max-width: 1120px;
+  padding-top: 64px;
+}
+
+.privacy-layout aside {
+  position: sticky;
+  top: 98px;
+  display: grid;
+  gap: 12px;
+}
+
+.privacy-layout aside a {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+  text-decoration: none;
+}
+
+.privacy-layout aside a:hover,
+.privacy-layout aside a:focus-visible {
+  color: var(--green);
+}
+
+.privacy-content section {
+  padding: 0 0 56px;
+  scroll-margin-top: 100px;
+}
+
+.privacy-content section + section {
+  padding-top: 56px;
+  border-top: 1px solid var(--line);
+}
+
+.privacy-index {
+  margin: 0 0 12px;
+  color: var(--green);
+  font: 700 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.privacy-content h2 {
+  margin: 0 0 22px;
+  font-size: 34px;
+  line-height: 1.16;
+}
+
+.privacy-content p:not(.privacy-index) {
+  margin: 0 0 18px;
+  color: #46524f;
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.privacy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin-top: 28px;
+}
+
+.privacy-actions a {
+  color: var(--green-deep);
+  font-size: 13px;
+  font-weight: 720;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+}
+
+@media (max-width: 760px) {
+  .privacy-main {
+    padding-top: 112px;
+  }
+
+  .privacy-hero h1 {
+    font-size: 34px;
+    line-height: 1.08;
+  }
+
+  .privacy-layout {
+    grid-template-columns: 1fr;
+    gap: 42px;
+  }
+
+  .privacy-layout aside {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-bottom: 30px;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

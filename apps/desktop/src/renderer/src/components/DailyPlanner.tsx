@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { layoutTimelineIntervals } from "../../../shared/daily-layout";
+import { calendarColumnMinimum, layoutTimelineIntervals } from "../../../shared/daily-layout";
 import type { ChroniSnapshot, DailyTask, DailyTaskColor, DailyTaskPatch, DailyTaskRecurrence, DailyTaskSubtask } from "../../../shared/types";
 import { UiDateTimeField } from "./UiDateTimeField";
 
 type DailyPlannerProps = {
   snapshot: ChroniSnapshot;
   setSnapshot: React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>;
+  onOpenSources(): void;
 };
 
 type PlannerMode = "day" | "multi" | "week" | "month";
@@ -57,7 +58,7 @@ function PlannerIcon({ name }: { name: PlannerIconName }) {
   );
 }
 
-export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
+export function DailyPlanner({ snapshot, setSnapshot, onOpenSources }: DailyPlannerProps) {
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
   const [mode, setMode] = useState<PlannerMode>("day");
   const [inboxText, setInboxText] = useState("");
@@ -73,12 +74,18 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
   const inbox = activeTasks.filter((task) => !task.scheduledStartAt);
   const selectedTask = newTaskDraft ?? activeTasks.find((task) => task.id === selectedTaskId);
   const selectedKey = dateKey(selectedDate);
-  const weekDays = useMemo(() => daysFrom(startOfWeek(selectedDate), 7), [selectedDate]);
+  const visibleDays = useMemo(
+    () => mode === "day"
+      ? [selectedDate]
+      : daysFrom(mode === "week" ? startOfWeek(selectedDate) : selectedDate, mode === "week" ? 7 : 3),
+    [mode, selectedDate],
+  );
   const selectedDayTasks = tasksForDate(snapshot.dailyTasks, selectedDate);
   const completedCount = selectedDayTasks.filter((task) => task.completedDates.includes(selectedKey)).length;
   const plannedMinutes = selectedDayTasks.reduce((sum, task) => sum + (task.allDay ? 0 : taskDuration(task)), 0);
   const completionPercent = selectedDayTasks.length ? Math.round(completedCount / selectedDayTasks.length * 100) : 0;
   const selectedDayRelation = compareDateKeys(selectedKey, dateKey(new Date()));
+  const firstRun = !snapshot.items.length && !snapshot.dailyTasks.length && !snapshot.sources.length;
 
   useEffect(() => {
     if (selectedTaskId && !selectedTask && !newTaskDraft) setSelectedTaskId(undefined);
@@ -126,13 +133,14 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
     });
   }
 
-  function createScheduled(): void {
+  function createScheduled(targetDate = selectedDate, startMinutes?: number): void {
     if (operationLockRef.current) return;
-    const start = defaultTaskStart(selectedDate);
+    const start = startMinutes === undefined ? defaultTaskStart(targetDate) : atMinutes(targetDate, startMinutes);
     const end = new Date(start.getTime() + 45 * 60_000);
     const now = new Date().toISOString();
+    setSelectedDate(startOfDay(targetDate));
     setSelectedTaskId(undefined);
-    setSelectedOccurrenceDate(startOfDay(selectedDate));
+    setSelectedOccurrenceDate(startOfDay(targetDate));
     setNewTaskDraft({
       id: `draft-${Date.now()}`,
       title: "",
@@ -198,16 +206,6 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
     });
   }
 
-  function dropOnTimeline(event: React.DragEvent<HTMLDivElement>): void {
-    event.preventDefault();
-    const taskId = event.dataTransfer.getData("application/x-chroni-daily-task");
-    const rect = timelineRef.current?.getBoundingClientRect();
-    if (!taskId || !rect) return;
-    const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-    const minutes = Math.round((dayStartMinutes + ratio * (dayEndMinutes - dayStartMinutes)) / 15) * 15;
-    void scheduleTask(taskId, selectedDate, minutes);
-  }
-
   return (
     <div className="daily-planner" aria-busy={!!busy}>
       <header className="daily-toolbar">
@@ -215,7 +213,7 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
           <button className="daily-today-button" type="button" onClick={() => setSelectedDate(startOfDay(new Date()))}>今天</button>
           <button className="daily-icon-button" type="button" title="上一段日期" aria-label="上一段日期" onClick={() => setSelectedDate(navigateDate(selectedDate, mode, -1))}><PlannerIcon name="chevron-left" /></button>
           <button className="daily-icon-button" type="button" title="下一段日期" aria-label="下一段日期" onClick={() => setSelectedDate(navigateDate(selectedDate, mode, 1))}><PlannerIcon name="chevron-right" /></button>
-          <div><h2>{formatMonth(selectedDate)}</h2><p>{formatLongDate(selectedDate)}</p></div>
+          <div><h2>{formatPlannerRange(selectedDate, mode)}</h2><p>{mode === "day" ? formatLongDate(selectedDate) : `${visibleDays.length} 天计划`}</p></div>
         </div>
         <div className="daily-toolbar-actions">
           <div className="daily-mode-switch" role="tablist" aria-label="每日任务视图">
@@ -223,18 +221,10 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
               <button key={value} type="button" role="tab" aria-selected={mode === value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>{modeLabel(value)}</button>
             ))}
           </div>
-          <button className="daily-agent-button" type="button" disabled={!!busy} onClick={() => void runAgent()}><PlannerIcon name="spark" />{busy === "agent" ? "规划中" : "Agent 排今日"}</button>
+          <button className="daily-agent-button secondary-action" type="button" disabled={!!busy} onClick={() => void runAgent()}><PlannerIcon name="spark" />{busy === "agent" ? "安排中" : "智能安排"}</button>
+          <button className="daily-create-button" type="button" disabled={!!busy} onClick={() => createScheduled()}><PlannerIcon name="add" />新建日程</button>
         </div>
       </header>
-
-      <div className="daily-week-strip" aria-label="选择日期">
-        {weekDays.map((date) => {
-          const key = dateKey(date);
-          const count = tasksForDate(snapshot.dailyTasks, date).length;
-          const active = key === selectedKey;
-          return <button key={key} type="button" className={active ? "active" : ""} aria-pressed={active} onClick={() => setSelectedDate(date)}><span>{weekday(date)}</span><b>{date.getDate()}</b><i>{count ? `${count} 项` : "空闲"}</i></button>;
-        })}
-      </div>
 
       <div className="daily-summary-band">
         <p><b>{selectedDayTasks.length}</b> 项安排</p>
@@ -247,35 +237,46 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
         {feedback && <span role="status">{feedback}</span>}
       </div>
 
+      {firstRun && (
+        <section className="daily-first-run" aria-labelledby="daily-first-run-title">
+          <span className="daily-first-run-mark" aria-hidden="true"><PlannerIcon name="spark" /></span>
+          <div><h3 id="daily-first-run-title">安排今天的第一件事</h3><p>导入通知，或直接建立一个时间块。</p></div>
+          <button type="button" onClick={onOpenSources}>导入任务</button>
+          <button type="button" className="primary" onClick={() => createScheduled()}>新建日程</button>
+        </section>
+      )}
+
       <div className={`daily-workspace mode-${mode}`}>
-        {mode === "day" && (
-          <>
-            <InboxPanel tasks={inbox} text={inboxText} busy={!!busy} onText={setInboxText} onCreate={createInbox} onOpen={(id) => openTask(id, selectedDate)} />
-            <DayTimeline
-              date={selectedDate}
-              tasks={selectedDayTasks}
+        <PlannerSidebar
+          selectedDate={selectedDate}
+          tasks={snapshot.dailyTasks}
+          inbox={inbox}
+          text={inboxText}
+          busy={!!busy}
+          onSelectDate={setSelectedDate}
+          onText={setInboxText}
+          onCreate={createInbox}
+          onOpen={(id) => openTask(id, selectedDate)}
+        />
+        <div className="daily-calendar-surface">
+          {mode !== "month" && (
+            <CalendarTimeGrid
+              days={visibleDays}
+              selectedDate={selectedDate}
+              tasks={snapshot.dailyTasks}
               timelineRef={timelineRef}
               zoom={timelineZoom}
-              onZoom={setTimelineZoom}
-              onDrop={dropOnTimeline}
               disabled={!!busy}
+              onZoom={setTimelineZoom}
+              onSelectDate={setSelectedDate}
+              onSchedule={scheduleTask}
+              onCreateAt={createScheduled}
               onOpen={openTask}
               onToggle={toggleComplete}
             />
-          </>
-        )}
-        {(mode === "multi" || mode === "week") && (
-          <CompactDays
-            days={daysFrom(mode === "week" ? startOfWeek(selectedDate) : selectedDate, mode === "week" ? 7 : 3)}
-            tasks={snapshot.dailyTasks}
-            onSelectDate={(date) => { setSelectedDate(date); setMode("day"); }}
-            disabled={!!busy}
-            onOpen={openTask}
-            onToggle={toggleComplete}
-          />
-        )}
-        {mode === "month" && <MonthView date={selectedDate} tasks={snapshot.dailyTasks} onSelectDate={(date) => { setSelectedDate(date); setMode("day"); }} />}
-        <button className="daily-floating-add" type="button" title="新建已排期任务" aria-label="新建已排期任务" disabled={!!busy} onClick={createScheduled}><PlannerIcon name="add" /></button>
+          )}
+          {mode === "month" && <MonthView date={selectedDate} tasks={snapshot.dailyTasks} onSelectDate={(date) => { setSelectedDate(date); setMode("day"); }} />}
+        </div>
       </div>
 
       {selectedTask && (
@@ -311,37 +312,83 @@ export function DailyPlanner({ snapshot, setSnapshot }: DailyPlannerProps) {
   );
 }
 
-function InboxPanel({ tasks, text, busy, onText, onCreate, onOpen }: { tasks: DailyTask[]; text: string; busy: boolean; onText(value: string): void; onCreate(event: React.FormEvent): void; onOpen(id: string): void }) {
+function PlannerSidebar({ selectedDate, tasks, inbox, text, busy, onSelectDate, onText, onCreate, onOpen }: { selectedDate: Date; tasks: DailyTask[]; inbox: DailyTask[]; text: string; busy: boolean; onSelectDate(value: Date): void; onText(value: string): void; onCreate(event: React.FormEvent): void; onOpen(id: string): void }) {
   return (
-    <aside className="daily-inbox">
-      <header><div><span className="daily-inbox-icon" aria-hidden="true"><PlannerIcon name="inbox" /></span><h3>待安排</h3></div><b>{tasks.length}</b></header>
-      <form onSubmit={onCreate}><input value={text} disabled={busy} onChange={(event) => onText(event.target.value)} placeholder="记录一个还没决定时间的任务..." aria-label="添加待安排任务" /><button type="submit" disabled={busy || !text.trim()} title="添加到待安排" aria-label="添加到待安排"><PlannerIcon name="add" /></button></form>
-      <div className="daily-inbox-list">
-        {tasks.map((task) => <button className={`daily-inbox-task color-${task.color}`} draggable={!busy} disabled={busy} key={task.id} type="button" onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)} onClick={() => onOpen(task.id)}><i aria-hidden="true" /><span><b>{task.title}</b><small>{task.origin === "agent" ? "Agent 规划" : "拖到时间轴排期"}</small></span><em aria-hidden="true"><PlannerIcon name="chevron-right" /></em></button>)}
-        {!tasks.length && <div className="daily-inbox-empty"><span aria-hidden="true"><svg className="inline-icon" viewBox="0 0 16 16" focusable="false"><path d="M2 8c2.1-3.4 3.8 3.4 6 0s3.9-3.4 6 0" /></svg></span><b>想法已经归位</b><p>新任务可以先留在这里，再拖到右侧安排。</p></div>}
-      </div>
+    <aside className="daily-planner-sidebar">
+      <MiniMonth selectedDate={selectedDate} tasks={tasks} onSelectDate={onSelectDate} />
+      <section className="daily-inbox">
+        <header><div><span className="daily-inbox-icon" aria-hidden="true"><PlannerIcon name="inbox" /></span><h3>待安排</h3></div><b>{inbox.length}</b></header>
+        <form onSubmit={onCreate}><input value={text} disabled={busy} onChange={(event) => onText(event.target.value)} placeholder="记录待安排任务" aria-label="添加待安排任务" /><button type="submit" disabled={busy || !text.trim()} title="添加到待安排" aria-label="添加到待安排"><PlannerIcon name="add" /></button></form>
+        <div className="daily-inbox-list">
+          {inbox.map((task) => <button className={`daily-inbox-task color-${task.color}`} draggable={!busy} disabled={busy} key={task.id} type="button" onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)} onClick={() => onOpen(task.id)}><i aria-hidden="true" /><span><b>{task.title}</b><small>{task.origin === "agent" ? "智能规划" : "待安排"}</small></span><em aria-hidden="true"><PlannerIcon name="chevron-right" /></em></button>)}
+          {!inbox.length && <div className="daily-inbox-empty"><span aria-hidden="true"><PlannerIcon name="check" /></span><b>待安排已清空</b><p>新任务会先出现在这里。</p></div>}
+        </div>
+      </section>
     </aside>
   );
 }
 
-function DayTimeline({ date, tasks, timelineRef, zoom, disabled, onZoom, onDrop, onOpen, onToggle }: { date: Date; tasks: DailyTask[]; timelineRef: React.RefObject<HTMLDivElement | null>; zoom: number; disabled: boolean; onZoom(value: number): void; onDrop(event: React.DragEvent<HTMLDivElement>): void; onOpen(id: string, date: Date): void; onToggle(task: DailyTask, date: Date): void }) {
-  const timed = tasks.filter((task) => !task.allDay);
-  const allDay = tasks.filter((task) => task.allDay);
+function MiniMonth({ selectedDate, tasks, onSelectDate }: { selectedDate: Date; tasks: DailyTask[]; onSelectDate(value: Date): void }) {
+  const first = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+  const days = daysFrom(startOfWeek(first), 42);
+  const selected = dateKey(selectedDate);
+  const today = dateKey(new Date());
+  return (
+    <section className="daily-mini-month" aria-label="迷你月历">
+      <header><b>{formatMonth(selectedDate)}</b><div><button type="button" title="上个月" aria-label="上个月" onClick={() => onSelectDate(addMonths(selectedDate, -1))}><PlannerIcon name="chevron-left" /></button><button type="button" title="下个月" aria-label="下个月" onClick={() => onSelectDate(addMonths(selectedDate, 1))}><PlannerIcon name="chevron-right" /></button></div></header>
+      <div className="daily-mini-weekdays" aria-hidden="true">{["一", "二", "三", "四", "五", "六", "日"].map((label) => <span key={label}>{label}</span>)}</div>
+      <div className="daily-mini-days">
+        {days.map((day) => {
+          const key = dateKey(day);
+          const count = tasksForDate(tasks, day).length;
+          const className = [day.getMonth() !== selectedDate.getMonth() ? "outside" : "", key === selected ? "selected" : "", key === today ? "today" : "", count ? "has-tasks" : ""].filter(Boolean).join(" ");
+          return <button key={key} type="button" className={className} aria-label={`${formatLongDate(day)}${count ? `，${count} 项安排` : ""}`} aria-pressed={key === selected} onClick={() => onSelectDate(day)}><span>{day.getDate()}</span>{count > 0 && <i aria-hidden="true" />}</button>;
+        })}
+      </div>
+    </section>
+  );
+}
+
+function CalendarTimeGrid({ days, selectedDate, tasks, timelineRef, zoom, disabled, onZoom, onSelectDate, onSchedule, onCreateAt, onOpen, onToggle }: { days: Date[]; selectedDate: Date; tasks: DailyTask[]; timelineRef: React.RefObject<HTMLDivElement | null>; zoom: number; disabled: boolean; onZoom(value: number): void; onSelectDate(date: Date): void; onSchedule(taskId: string, date: Date, startMinutes: number): Promise<void>; onCreateAt(date: Date, startMinutes?: number): void; onOpen(id: string, date: Date): void; onToggle(task: DailyTask, date: Date): void }) {
   const [now, setNow] = useState(() => new Date());
   const timelineHeight = timelineBaseHeight * zoom;
   const zoomIndex = Math.max(0, timelineZoomLevels.findIndex((value) => value === zoom));
-  const intervals = timed.map((task) => {
-    const start = occurrenceStart(task, date);
-    const rawStartMinutes = start.getHours() * 60 + start.getMinutes();
+  const todayKey = dateKey(now);
+  const selectedKey = dateKey(selectedDate);
+  const rows = days.map((date) => {
+    const daily = tasksForDate(tasks, date);
+    const timed = daily.filter((task) => !task.allDay);
+    const intervals = timed.map((task) => {
+      const start = occurrenceStart(task, date);
+      const rawStartMinutes = start.getHours() * 60 + start.getMinutes();
+      return {
+        id: task.id,
+        startMinutes: Math.max(dayStartMinutes, rawStartMinutes),
+        endMinutes: Math.min(dayEndMinutes, rawStartMinutes + taskDuration(task)),
+      };
+    });
+    const placementList = layoutTimelineIntervals(intervals);
     return {
-      id: task.id,
-      startMinutes: Math.max(dayStartMinutes, rawStartMinutes),
-      endMinutes: Math.min(dayEndMinutes, rawStartMinutes + taskDuration(task)),
+      date,
+      tasks: daily,
+      timed,
+      allDay: daily.filter((task) => task.allDay),
+      placements: new Map(placementList.map((placement) => [placement.id, placement])),
+      maxLaneCount: Math.max(1, ...placementList.map((placement) => placement.laneCount)),
+      colors: timelineDisplayColors(timed, date),
     };
   });
-  const placements = new Map(layoutTimelineIntervals(intervals).map((placement) => [placement.id, placement]));
-  const displayColors = timelineDisplayColors(timed, date);
-  const nowPosition = dateKey(now) === dateKey(date) ? timelinePosition(now.getHours() * 60 + now.getMinutes(), timelineHeight) : undefined;
+  const hasAllDay = rows.some((row) => row.allDay.length > 0);
+  const hasTasks = rows.some((row) => row.tasks.length > 0);
+  const nowPosition = days.some((date) => dateKey(date) === todayKey) ? timelinePosition(now.getHours() * 60 + now.getMinutes(), timelineHeight) : undefined;
+  const ticks = Array.from({ length: 25 }, (_, hour) => hour);
+  const columnMinimums = rows.map((row) => calendarColumnMinimum(row.maxLaneCount, days.length, row.tasks.length > 0));
+  const calendarColumns = columnMinimums.map((width) => `minmax(${width}px, 1fr)`).join(" ");
+  const calendarMinWidth = (days.length === 7 ? 82 : 94) + columnMinimums.reduce((sum, width) => sum + width, 0);
+  const calendarStyle = {
+    "--daily-calendar-columns": calendarColumns,
+    "--daily-calendar-min-width": `${calendarMinWidth}px`,
+  } as React.CSSProperties;
 
   useEffect(() => {
     const refresh = window.setInterval(() => setNow(new Date()), 60_000);
@@ -352,17 +399,19 @@ function DayTimeline({ date, tasks, timelineRef, zoom, disabled, onZoom, onDrop,
     let secondFrame = 0;
     const firstFrame = window.requestAnimationFrame(() => {
       secondFrame = window.requestAnimationFrame(() => {
-        const timeline = timelineRef.current;
-        const workspace = timeline?.closest<HTMLElement>(".daily-timeline-panel");
-        if (!timeline || !workspace) return;
+        const workspace = timelineRef.current;
+        if (!workspace) return;
         const current = new Date();
-        const focusMinutes = dateKey(date) === dateKey(current)
+        const focusMinutes = days.some((date) => dateKey(date) === dateKey(current))
           ? Math.max(dayStartMinutes, current.getHours() * 60 + current.getMinutes() - 60)
           : 8 * 60;
-        const workspaceRect = workspace.getBoundingClientRect();
-        const timelineRect = timeline.getBoundingClientRect();
-        const timelineOffset = timelineRect.top - workspaceRect.top + workspace.scrollTop;
-        workspace.scrollTop = Math.max(0, timelineOffset + timelinePosition(focusMinutes, timelineHeight) - 72);
+        workspace.scrollTop = Math.max(0, timelinePosition(focusMinutes, timelineHeight) - 72);
+        const selectedColumn = workspace.querySelector<HTMLElement>(`.daily-day-column[data-date="${selectedKey}"]`);
+        if (selectedColumn && workspace.scrollWidth > workspace.clientWidth) {
+          const gutter = days.length === 7 ? 82 : 94;
+          const targetLeft = gutter + selectedColumn.offsetLeft - (workspace.clientWidth - selectedColumn.offsetWidth) / 2;
+          workspace.scrollLeft = Math.max(0, Math.min(workspace.scrollWidth - workspace.clientWidth, targetLeft));
+        }
       });
     });
     return () => {
@@ -371,60 +420,70 @@ function DayTimeline({ date, tasks, timelineRef, zoom, disabled, onZoom, onDrop,
     };
     // Deliberately keyed only by the selected date: zoom keeps the user's current viewport.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date]);
+  }, [days.map(dateKey).join("|"), selectedKey]);
 
   function changeZoom(nextZoom: number): void {
     if (nextZoom === zoom) return;
-    const timeline = timelineRef.current;
-    const workspace = timeline?.closest<HTMLElement>(".daily-timeline-panel");
-    const workspaceRect = workspace?.getBoundingClientRect();
-    const timelineRect = timeline?.getBoundingClientRect();
-    const anchorY = workspaceRect ? workspaceRect.top + workspaceRect.height / 2 : 0;
-    const anchorRatio = timelineRect ? Math.max(0, Math.min(1, (anchorY - timelineRect.top) / timelineHeight)) : 0;
+    const workspace = timelineRef.current;
+    const anchorRatio = workspace ? Math.max(0, Math.min(1, (workspace.scrollTop + workspace.clientHeight / 2) / timelineHeight)) : 0;
     onZoom(nextZoom);
-    if (!workspace || !workspaceRect || !timelineRect) return;
+    if (!workspace) return;
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const nextTimelineRect = timelineRef.current?.getBoundingClientRect();
-      if (!nextTimelineRect) return;
-      workspace.scrollTop += nextTimelineRect.top + anchorRatio * timelineBaseHeight * nextZoom - anchorY;
+      workspace.scrollTop = Math.max(0, anchorRatio * timelineBaseHeight * nextZoom - workspace.clientHeight / 2);
     }));
   }
 
+  function minutesFromPointer(event: React.MouseEvent<HTMLDivElement> | React.DragEvent<HTMLDivElement>): number {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    return Math.max(dayStartMinutes, Math.min(dayEndMinutes - 30, Math.round((ratio * dayEndMinutes) / 15) * 15));
+  }
+
   return (
-    <section className="daily-timeline-panel">
-      <header><div><p>{weekday(date)}</p><h3><span className="daily-display-number">{date.getDate()}</span> 日的时间轴</h3></div><div className="daily-timeline-header-actions"><span>{tasks.length ? "拖动任务可重新排期" : "今天还没有安排"}</span><div className="daily-timeline-zoom" role="group" aria-label="时间轴缩放"><button type="button" title="缩小时间轴" aria-label="缩小时间轴" disabled={zoomIndex === 0} onClick={() => changeZoom(timelineZoomLevels[Math.max(0, zoomIndex - 1)])}><PlannerIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" title="放大时间轴" aria-label="放大时间轴" disabled={zoomIndex === timelineZoomLevels.length - 1} onClick={() => changeZoom(timelineZoomLevels[Math.min(timelineZoomLevels.length - 1, zoomIndex + 1)])}><PlannerIcon name="add" /></button></div></div></header>
-      {allDay.length > 0 && <div className="daily-all-day"><b>全天</b>{allDay.map((task) => <TimelineTask key={task.id} task={task} date={date} compact disabled={disabled} onOpen={onOpen} onToggle={onToggle} />)}</div>}
-      <div className="daily-timeline" ref={timelineRef} onDragOver={(event) => { if (!disabled) event.preventDefault(); }} onDrop={(event) => { if (!disabled) onDrop(event); }} style={{ height: timelineHeight }}>
-        {Array.from({ length: 13 }, (_, index) => index * 2).map((hour) => <div className="daily-hour" key={hour} style={{ top: timelinePosition(hour * 60, timelineHeight) }}><time>{String(hour).padStart(2, "0")}:00</time><span /></div>)}
-        <div className="daily-timeline-rail" />
-        {nowPosition !== undefined && nowPosition >= 0 && nowPosition <= timelineHeight && <div className="daily-now" style={{ top: nowPosition }}><i /><span>现在 {formatClock(now)}</span></div>}
-        <div className="daily-events-layer">
-          {timed.map((task) => {
-            const placement = placements.get(task.id);
-            if (!placement) return null;
-            const durationHeight = timelinePosition(placement.endMinutes, timelineHeight) - timelinePosition(placement.startMinutes, timelineHeight);
-            const visualHeight = Math.max(14, durationHeight - 4);
-            const density = visualHeight < 34 ? "micro" : visualHeight < 58 ? "short" : "regular";
-            const left = `calc(${placement.lane * 100 / placement.laneCount}% + ${placement.lane * timelineLaneGap / placement.laneCount}px)`;
-            const width = `calc(${100 / placement.laneCount}% - ${(placement.laneCount - 1) * timelineLaneGap / placement.laneCount}px)`;
-            return (
+    <section className={`daily-calendar-grid columns-${days.length}`} ref={timelineRef} style={calendarStyle}>
+      <header className="daily-calendar-grid-head">
+        <div className="daily-calendar-grid-tools"><span>{timezoneLabel()}</span><div className="daily-timeline-zoom" role="group" aria-label="时间轴缩放"><button type="button" title="缩小时间轴" aria-label="缩小时间轴" disabled={zoomIndex === 0} onClick={() => changeZoom(timelineZoomLevels[Math.max(0, zoomIndex - 1)])}><PlannerIcon name="minus" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" title="放大时间轴" aria-label="放大时间轴" disabled={zoomIndex === timelineZoomLevels.length - 1} onClick={() => changeZoom(timelineZoomLevels[Math.min(timelineZoomLevels.length - 1, zoomIndex + 1)])}><PlannerIcon name="add" /></button></div></div>
+        {rows.map((row) => { const key = dateKey(row.date); return <button type="button" className={`${key === todayKey ? "today" : ""} ${key === selectedKey ? "selected" : ""}`} key={key} onClick={() => onSelectDate(row.date)}><span>{weekday(row.date)}</span><b>{row.date.getDate()}</b><small>{row.tasks.length ? `${row.tasks.length} 项${row.maxLaneCount > 1 ? ` · ${row.maxLaneCount} 项并行` : ""}` : "空闲"}</small></button>; })}
+      </header>
+      {hasAllDay && <div className="daily-all-day-grid"><b>全天</b>{rows.map((row) => <div key={dateKey(row.date)}>{row.allDay.map((task) => <TimelineTask key={task.id} task={task} date={row.date} compact disabled={disabled} onOpen={onOpen} onToggle={onToggle} />)}</div>)}</div>}
+      <div className="daily-calendar-scroll">
+        <div className="daily-calendar-body" style={{ height: timelineHeight }}>
+          <div className="daily-time-gutter">
+            {ticks.map((hour) => <time key={hour} style={{ top: timelinePosition(hour * 60, timelineHeight) }}>{String(hour).padStart(2, "0")}:00</time>)}
+          </div>
+          <div className="daily-calendar-days">
+            <div className="daily-grid-lines" aria-hidden="true">{ticks.map((hour) => <i key={hour} style={{ top: timelinePosition(hour * 60, timelineHeight) }} />)}</div>
+            {rows.map((row) => (
               <div
-                className="daily-timeline-task-wrap"
-                data-lane={`${placement.lane + 1}/${placement.laneCount}`}
-                key={task.id}
-                style={{
-                  top: timelinePosition(placement.startMinutes, timelineHeight) + 2,
-                  height: visualHeight,
-                  left,
-                  width,
+                className={`daily-day-column ${dateKey(row.date) === todayKey ? "today" : ""} ${dateKey(row.date) === selectedKey ? "selected" : ""}`}
+                data-date={dateKey(row.date)}
+                key={dateKey(row.date)}
+                onClick={() => onSelectDate(row.date)}
+                onDoubleClick={(event) => { if (!disabled && !(event.target instanceof Element && event.target.closest(".daily-task-card"))) onCreateAt(row.date, minutesFromPointer(event)); }}
+                onDragOver={(event) => { if (!disabled) event.preventDefault(); }}
+                onDrop={(event) => {
+                  if (disabled) return;
+                  event.preventDefault();
+                  const taskId = event.dataTransfer.getData("application/x-chroni-daily-task");
+                  if (taskId) void onSchedule(taskId, row.date, minutesFromPointer(event));
                 }}
               >
-                <TimelineTask task={task} date={date} density={density} displayColor={displayColors.get(task.id)} disabled={disabled} onOpen={onOpen} onToggle={onToggle} />
+                {row.timed.map((task) => {
+                  const placement = row.placements.get(task.id);
+                  if (!placement) return null;
+                  const durationHeight = timelinePosition(placement.endMinutes, timelineHeight) - timelinePosition(placement.startMinutes, timelineHeight);
+                  const visualHeight = Math.max(14, durationHeight - 3);
+                  const density = visualHeight < 30 ? "micro" : visualHeight < 72 ? "short" : "regular";
+                  const left = `calc(${placement.lane * 100 / placement.laneCount}% + ${placement.lane * timelineLaneGap / placement.laneCount}px)`;
+                  const width = `calc(${100 / placement.laneCount}% - ${(placement.laneCount - 1) * timelineLaneGap / placement.laneCount}px)`;
+                  return <div className="daily-timeline-task-wrap" data-lane={`${placement.lane + 1}/${placement.laneCount}`} key={task.id} onDoubleClick={(event) => event.stopPropagation()} style={{ top: timelinePosition(placement.startMinutes, timelineHeight) + 1, height: visualHeight, left, width }}><TimelineTask task={task} date={row.date} compact={days.length > 1} density={density} displayColor={row.colors.get(task.id)} disabled={disabled} onOpen={onOpen} onToggle={onToggle} /></div>;
+                })}
               </div>
-            );
-          })}
+            ))}
+            {nowPosition !== undefined && nowPosition >= 0 && nowPosition <= timelineHeight && <div className="daily-now" style={{ top: nowPosition }}><i /><span>{formatClock(now)}</span></div>}
+            {!hasTasks && <div className="daily-timeline-empty"><span aria-hidden="true"><PlannerIcon name="spark" /></span><b>还没有时间安排</b><p>双击时间网格即可建立日程。</p></div>}
+          </div>
         </div>
-        {!tasks.length && <div className="daily-timeline-empty"><span aria-hidden="true"><PlannerIcon name="spark" /></span><b>留一段专注时间给重要的事</b><p>运行 Agent，或从 Inbox 拖一项到时间轴。</p></div>}
       </div>
     </section>
   );
@@ -441,19 +500,16 @@ function TimelineTask({ task, date, compact = false, density = "regular", displa
     <article
       className={`daily-task-card color-${displayColor ?? task.color} density-${density} ${complete ? "completed" : ""} ${compact ? "compact" : ""} ${archived ? "archived" : ""}`}
       draggable={interactive}
+      title={`${task.title} · ${scheduleLabel}`}
       onDragStart={(event) => event.dataTransfer.setData("application/x-chroni-daily-task", task.id)}
     >
       <button type="button" className="daily-check" disabled={!interactive} aria-label={complete ? `恢复 ${task.title}` : `完成 ${task.title}`} onClick={() => { if (interactive) onToggle(task, date); }}>{complete ? <PlannerIcon name="check" /> : null}</button>
       <button type="button" className="daily-task-open" disabled={!interactive} aria-label={`${task.title}，${scheduleLabel}${interactive ? "，编辑任务" : "，历史保留"}`} onClick={() => { if (interactive) onOpen(task.id, date); }}>
-        <span className="daily-task-copy"><time>{task.allDay ? "全天" : `${formatClock(start)} – ${formatClock(end)}`}</time><b>{task.title}</b><span>{archived ? "历史保留" : task.origin === "agent" ? "✦ Agent 规划" : task.recurrence !== "none" ? recurrenceLabel(task.recurrence) : formatDuration(taskDuration(task))}</span></span>
+        <span className="daily-task-copy"><time>{task.allDay ? "全天" : `${formatClock(start)} – ${formatClock(end)}`}</time><b>{task.title}</b><span>{archived ? "历史保留" : task.origin === "agent" ? "智能规划" : task.recurrence !== "none" ? recurrenceLabel(task.recurrence) : formatDuration(taskDuration(task))}</span></span>
         <i aria-hidden="true" />
       </button>
     </article>
   );
-}
-
-function CompactDays({ days, tasks, disabled, onSelectDate, onOpen, onToggle }: { days: Date[]; tasks: DailyTask[]; disabled: boolean; onSelectDate(date: Date): void; onOpen(id: string, date: Date): void; onToggle(task: DailyTask, date: Date): void }) {
-  return <section className="daily-compact-days">{days.map((date) => { const daily = tasksForDate(tasks, date); return <article className={dateKey(date) === dateKey(new Date()) ? "today" : ""} key={dateKey(date)}><button className="daily-column-head" type="button" onClick={() => onSelectDate(date)}><span>{weekday(date)}</span><b>{date.getDate()}</b><small>{daily.length} 项</small></button><div>{daily.sort(compareDailyTasks).map((task) => <TimelineTask key={task.id} task={task} date={date} compact disabled={disabled} onOpen={onOpen} onToggle={onToggle} />)}{!daily.length && <p className="daily-column-empty">暂无安排</p>}</div></article>; })}</section>;
 }
 
 function MonthView({ date, tasks, onSelectDate }: { date: Date; tasks: DailyTask[]; onSelectDate(date: Date): void }) {
@@ -567,7 +623,7 @@ function TaskEditor({ task, occurrenceDate, isNew, linkedTitle, onClose, onSave,
           </div>
           <button className="daily-editor-close" type="button" disabled={!!busy} onClick={onClose} aria-label="关闭任务编辑" title="关闭"><PlannerIcon name="close" /></button>
         </header>
-        <form onSubmit={(event) => void save(event)}>
+        <form id="daily-task-editor-form" onSubmit={(event) => void save(event)}>
           <label className="daily-editor-title-field">任务名称<input autoFocus value={draft.title} disabled={!!busy} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
           <div className="daily-editor-row">
             <label>安排状态<select value={draft.scheduled ? "scheduled" : "inbox"} disabled={!!busy} onChange={(event) => setDraft({ ...draft, scheduled: event.target.value === "scheduled" })}><option value="inbox">待安排</option><option value="scheduled">已排期</option></select></label>
@@ -580,11 +636,11 @@ function TaskEditor({ task, occurrenceDate, isNew, linkedTitle, onClose, onSave,
           <section className="daily-editor-subtasks"><h3>子任务 <span>{draft.subtasks.filter((item) => item.completed).length}/{draft.subtasks.length}</span></h3>{draft.subtasks.map((subtask) => <div key={subtask.id}><input className="ui-checkbox" type="checkbox" checked={subtask.completed} disabled={!!busy} aria-label={`完成 ${subtask.title}`} onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks.map((item) => item.id === subtask.id ? { ...item, completed: event.target.checked } : item) })} /><input value={subtask.title} disabled={!!busy} aria-label="子任务名称" onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks.map((item) => item.id === subtask.id ? { ...item, title: event.target.value } : item) })} /><button type="button" disabled={!!busy} aria-label={`删除 ${subtask.title}`} title="删除子任务" onClick={() => setDraft({ ...draft, subtasks: draft.subtasks.filter((item) => item.id !== subtask.id) })}><PlannerIcon name="close" /></button></div>)}<div className="daily-subtask-add"><input value={subtaskText} disabled={!!busy} placeholder="添加子任务" onChange={(event) => setSubtaskText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addSubtask(); } }} /><button type="button" onClick={addSubtask} disabled={!!busy || !subtaskText.trim()} aria-label="添加子任务"><PlannerIcon name="add" /></button></div></section>
           <label className="daily-editor-notes">备注<textarea rows={4} value={draft.notes} disabled={!!busy} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="补充上下文、链接或执行提示..." /></label>
           {error && <p className="daily-editor-error" role="alert">{error}</p>}
-          <footer>
-            {onDelete ? <button className="daily-delete-button" type="button" disabled={!!busy} onClick={() => void remove()} aria-label={recurringSeries ? "删除整个重复任务系列" : "删除任务"} title={recurringSeries ? "删除整个重复任务系列" : "删除任务"}>{busy === "delete" ? "删除中..." : recurringSeries ? "删除整个系列" : "删除任务"}</button> : <span />}
-            <button className="daily-save-button" type="submit" disabled={!!busy || !draft.title.trim()}>{busy === "save" ? "保存中..." : isNew ? "创建任务" : recurringSeries ? "保存整个系列" : "保存任务"}</button>
-          </footer>
         </form>
+        <footer>
+          {onDelete ? <button className="daily-delete-button" type="button" disabled={!!busy} onClick={() => void remove()} aria-label={recurringSeries ? "删除整个重复任务系列" : "删除任务"} title={recurringSeries ? "删除整个重复任务系列" : "删除任务"}>{busy === "delete" ? "删除中..." : recurringSeries ? "删除整个系列" : "删除任务"}</button> : <span />}
+          <button className="daily-save-button" form="daily-task-editor-form" type="submit" disabled={!!busy || !draft.title.trim()}>{busy === "save" ? "保存中..." : isNew ? "创建任务" : recurringSeries ? "保存整个系列" : "保存任务"}</button>
+        </footer>
       </aside>
     </div>
   );
@@ -703,6 +759,22 @@ function inputClock(value: Date): string { return `${String(value.getHours()).pa
 function formatClock(value: Date): string { return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(value); }
 function formatMonth(value: Date): string { return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(value); }
 function formatLongDate(value: Date): string { return new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(value); }
+function formatPlannerRange(value: Date, mode: PlannerMode): string {
+  if (mode === "day" || mode === "month") return formatMonth(value);
+  const days = daysFrom(mode === "week" ? startOfWeek(value) : value, mode === "week" ? 7 : 3);
+  const first = days[0];
+  const last = days[days.length - 1];
+  const sameMonth = first.getFullYear() === last.getFullYear() && first.getMonth() === last.getMonth();
+  if (sameMonth) return `${first.getFullYear()}年${first.getMonth() + 1}月${first.getDate()}日 - ${last.getDate()}日`;
+  return `${first.getFullYear()}年${first.getMonth() + 1}月${first.getDate()}日 - ${last.getMonth() + 1}月${last.getDate()}日`;
+}
+function timezoneLabel(): string {
+  const offset = -new Date().getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  const hours = Math.floor(Math.abs(offset) / 60);
+  const minutes = Math.abs(offset) % 60;
+  return `GMT${sign}${hours}${minutes ? `:${String(minutes).padStart(2, "0")}` : ""}`;
+}
 function weekday(value: Date): string { return new Intl.DateTimeFormat("zh-CN", { weekday: "short" }).format(value); }
 function formatDuration(minutes: number): string { if (minutes < 60) return `${minutes} 分钟`; const hours = Math.floor(minutes / 60); const rest = minutes % 60; return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`; }
 function modeLabel(mode: PlannerMode): string { return mode === "day" ? "日" : mode === "multi" ? "多日" : mode === "week" ? "周" : "月"; }

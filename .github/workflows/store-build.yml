@@ -1,0 +1,86 @@
+name: App Store Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Store package to build
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - windows
+          - macos
+
+concurrency:
+  group: chroni-store-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-store:
+    if: inputs.platform == 'both' || inputs.platform == 'windows'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      CHRONI_WINDOWS_STORE_IDENTITY_NAME: ${{ vars.CHRONI_WINDOWS_STORE_IDENTITY_NAME }}
+      CHRONI_WINDOWS_STORE_PUBLISHER: ${{ vars.CHRONI_WINDOWS_STORE_PUBLISHER }}
+      CHRONI_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.CHRONI_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run package:windows:store
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chroni-windows-store-${{ github.sha }}
+          path: apps/desktop/dist-electron/*.appx
+          if-no-files-found: error
+          retention-days: 14
+
+  macos-store:
+    if: inputs.platform == 'both' || inputs.platform == 'macos'
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    env:
+      CSC_LINK: ${{ secrets.MAC_STORE_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_STORE_CSC_KEY_PASSWORD }}
+      MAC_STORE_PROVISIONING_PROFILE: ${{ secrets.MAC_STORE_PROVISIONING_PROFILE }}
+      CHRONI_MAC_STORE_IDENTITY: ${{ vars.CHRONI_MAC_STORE_IDENTITY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Prepare Mac App Store provisioning profile
+        run: |
+          if [[ -z "${MAC_STORE_PROVISIONING_PROFILE:-}" ]]; then
+            echo "MAC_STORE_PROVISIONING_PROFILE is required" >&2
+            exit 1
+          fi
+          printf '%s' "$MAC_STORE_PROVISIONING_PROFILE" | base64 --decode > "$RUNNER_TEMP/Chroni.provisionprofile"
+          echo "CHRONI_MAC_STORE_PROVISIONING_PROFILE=$RUNNER_TEMP/Chroni.provisionprofile" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run package:macos:store
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chroni-macos-store-${{ github.sha }}
+          path: apps/desktop/dist-electron/*.pkg
+          if-no-files-found: error
+          retention-days: 14

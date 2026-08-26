@@ -518,7 +518,7 @@ def build_story(s):
     ])
     test_rows = [
         [para("门禁", s["table_bold"]), para("结果", s["table_bold"]), para("范围", s["table_bold"])],
-        [para("Desktop tests", s["table_bold"]), para("247 pass / 0 fail / 1 skip", s["table"]), para("共 248 项；抽取、Mission、证据/检查点、Store、Agent、Demo、UI、API 与打包。", s["table"])],
+        [para("Desktop tests", s["table_bold"]), para("249 pass / 0 fail / 1 skip", s["table"]), para("共 250 项；抽取、Mission、证据/检查点、Store、Agent、Demo、UI、API 与打包。", s["table"])],
         [para("Gateway tests", s["table_bold"]), para("4 pass / 0 fail", s["table"]), para("鉴权、限流、超时、上游错误和日志边界。", s["table"])],
         [para("GOAI build", s["table_bold"]), para("通过", s["table"]), para("Renderer 资源扫描无受限 XIAOTONG 路径或栅格素材。", s["table"])],
         [para("Windows package", s["table_bold"]), para("本机生成", s["table"]), para("NSIS 安装版和 portable；校验和以附件安装说明为准。", s["table"])],

@@ -4,7 +4,7 @@ import type { AgentEvidenceExportResult, AgentIcsExportResult, AgentMemoryPatch,
 
 declare global {
   type ChroniControlRoute = {
-    tab?: "missions" | "schedule" | "daily" | "agent" | "demo" | "preferences" | "services" | "about";
+    tab?: "missions" | "schedule" | "daily" | "agent" | "preferences" | "services";
     taskId?: string;
     focus?: "clarifications";
   };

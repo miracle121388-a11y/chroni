@@ -49,6 +49,7 @@ export type ChroniUpdatePhase =
 export type ChroniUpdateStatus = {
   currentVersion: string;
   phase: ChroniUpdatePhase;
+  managedByStore: boolean;
   availableVersion?: string;
   progressPercent?: number;
   checkedAt?: string;

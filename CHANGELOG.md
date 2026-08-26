@@ -6,6 +6,26 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 
 暂无未发布的用户可见变更。
 
+## [0.2.1] - 2026-08-26
+
+### Added
+
+- 新增 Microsoft Store AppX 与 Mac App Store MAS 构建入口、商店尺寸图标、Apple 隐私清单、MAS 沙盒权限和独立审核资料。
+- 新增公开隐私政策页面，并从下载站和应用“运行状态”直接提供入口。
+- 新增商店准备校验和手动商店构建工作流；缺失 Partner Center 或 Apple 签名身份时明确中止。
+
+### Changed
+
+- 控制中心恢复“今日执行、学习任务、任务来源、执行 Agent、偏好设置、运行状态”六个完整工作区，并优化窄窗口导航和中英文字体层级。
+- Microsoft Store 与 Mac App Store 安装版改由系统商店更新，直接分发版继续使用 GitHub Releases 自动更新。
+- 公共发布工作流统一使用包含完整桌面伙伴素材的标准产品构建，并在打包前校验动画帧数量和体积。
+
+### Fixed
+
+- 修复 Windows 开发窗口和安装版任务栏沿用 Electron 名称或图标的问题，显式设置 Chroni AppUserModelID、沙漏图标、重启命令和显示名。
+- 修复曾经的特殊构建路径只打入图标占位图、导致发布包缺少原桌面伙伴动画的问题。
+- 修复 600×360 等 Windows 窄窗口下侧栏标签重叠、内容横向溢出的问题。
+
 ## [0.2.0] - 2026-08-25
 
 ### Added
@@ -100,7 +120,8 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 发布标签现在必须与根工作区和桌面应用版本一致。
 - 生产包启用 Electron Fuses 和 ASAR 完整性校验。
 
-[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/miracle121388-a11y/chroni/releases/tag/v0.1.3

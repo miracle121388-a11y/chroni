@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { layoutTimelineIntervals } from "../dist/shared/daily-layout.js";
+import { calendarColumnMinimum, layoutTimelineIntervals } from "../dist/shared/daily-layout.js";
 
 test("adjacent timeline tasks share one lane without being treated as overlapping", () => {
   const placements = layoutTimelineIntervals([
@@ -41,4 +41,13 @@ test("a released lane is reused inside a connected overlap group", () => {
   assert.equal(placements.find((item) => item.id === "first")?.lane, 1);
   assert.equal(placements.find((item) => item.id === "second")?.lane, 1);
   assert.ok(placements.every((item) => item.laneCount === 2));
+});
+
+test("calendar columns expand with parallel lanes instead of squeezing task text", () => {
+  assert.equal(calendarColumnMinimum(1, 7, false), 104);
+  assert.equal(calendarColumnMinimum(1, 7, true), 156);
+  assert.equal(calendarColumnMinimum(2, 7, true), 320);
+  assert.equal(calendarColumnMinimum(3, 7, true), 484);
+  assert.equal(calendarColumnMinimum(2, 3, true), 352);
+  assert.equal(calendarColumnMinimum(3, 1, true), 420);
 });

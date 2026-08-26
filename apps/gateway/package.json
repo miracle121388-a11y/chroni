@@ -1,6 +1,6 @@
 {
   "name": "@chroni/gateway",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Managed DeepSeek gateway for the Chroni private beta.",
   "license": "MIT",

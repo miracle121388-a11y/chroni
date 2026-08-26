@@ -7,11 +7,18 @@ test("update status distinguishes development, unsupported, and packaged desktop
   assert.deepEqual(initialUpdateStatus("0.1.0", false, "win32"), {
     currentVersion: "0.1.0",
     phase: "unsupported",
+    managedByStore: false,
     message: "开发模式不会连接更新服务。",
   });
   assert.equal(initialUpdateStatus("0.1.0", true, "linux").phase, "unsupported");
   assert.equal(initialUpdateStatus("0.1.0", true, "win32").phase, "idle");
   assert.equal(initialUpdateStatus("0.1.0", true, "darwin").phase, "idle");
+  assert.deepEqual(initialUpdateStatus("0.1.0", true, "win32", true), {
+    currentVersion: "0.1.0",
+    phase: "unsupported",
+    managedByStore: true,
+    message: "当前版本由系统应用商店负责更新。",
+  });
 });
 
 test("updater exposes cloned state without contacting the release service before start", () => {

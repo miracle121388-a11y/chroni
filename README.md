@@ -24,7 +24,6 @@
 <p align="center">
   <a href="https://getchroni.zeabur.app/"><strong>产品主页与下载</strong></a> ·
   <a href="./README.en.md">English</a> ·
-  <a href="./docs/goai/00-submission-index.md">GOAI 评审入口</a> ·
   <a href="#3-分钟上手">快速上手</a> ·
   <a href="./docs/user/quick-start.md">用户指南</a> ·
   <a href="#核心能力">核心能力</a> ·
@@ -35,9 +34,9 @@
   <a href="#开发与验证">开发</a>
 </p>
 
-> **当前版本与评审路径：** 仓库版本为 `0.2.0`。打开控制中心的 **GOAI 演示**，无需 API Key 即可运行课程项目 Learning Mission、必要追问与多来源冲突三个隔离场景；三分钟操作、技术架构、机器生成评测和安全/IP 边界见 [GOAI 2026 评审索引](./docs/goai/00-submission-index.md)。安装包实际发布、签名与公证状态以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
+> **当前版本：** `0.2.1`。公开安装包包含完整的桌宠动画、控制中心与本地优先数据能力；签名、公证和可下载产物以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
 
-> **资产许可提示：** MIT 许可覆盖 Chroni 自研代码，并不自动覆盖仓库内全部字体、依赖和可选桌宠素材。GOAI 构建使用 `CHRONI_PET_ASSET_MODE=original`，不包含 XIAOTONG 帧或捐赠码；完整边界见 [第三方声明](./THIRD_PARTY_NOTICES.md) 与 [开源/IP 清单](./docs/goai/05-open-source-and-ip.md)。
+> **资产许可提示：** MIT 许可覆盖 Chroni 自研代码，不自动覆盖字体、运行依赖与桌宠视觉素材；完整边界见 [第三方声明](./THIRD_PARTY_NOTICES.md)。
 
 ![Chroni 学习任务控制台，展示目标、交付物、完成标准、里程碑与产出证据](./docs/assets/chroni-learning-mission-v0.2.0.png)
 
@@ -85,7 +84,7 @@ Chroni 不生成可冒充学生完成的作业，不把原始材料当成学习�
    如果当前时间已经超过 20:00，请把“今天”改成“明天”。
 3. Chroni 会建立一条 Learning Mission，并保留原始来源。标题与时间已经明确时，不会再次询问“任务叫什么”或“何时截止”。
 4. 在“学习任务”中检查目标、交付物、完成标准和里程碑；再打开“执行计划”确认步骤、耗时与缓冲。
-5. 进入“执行 Agent”点击“帮我安排今天”。Agent 会把当前可执行步骤写入每日时间轴，并标明高风险任务、覆盖率和规划来源。
+5. 进入“今日执行”点击“智能安排”。Chroni 会把当前可执行步骤写入每日时间轴，并标明高风险任务、覆盖率和规划来源。
 6. 完成一个阶段后，登记产出文件或文字证据，并提交一次阶段检查点。Chroni 会同步里程碑状态、任务进度和下一步；如果受阻，则保留原因供后续重排。
 
 这条体验路径不要求 API Key。完整的安装、桌宠入口、预览与填入区别、Demo 材料和退出方式见 [Chroni 3 分钟快速开始](./docs/user/quick-start.md)。
@@ -352,11 +351,14 @@ npx pnpm@11.7.0 run package:desktop
 # 应在对应原生平台或 CI runner 上执行
 npx pnpm@11.7.0 run package:windows
 npx pnpm@11.7.0 run package:macos
+
+# 检查应用商店图标、身份、隐私清单与 macOS 沙盒配置
+npx pnpm@11.7.0 run store:check
 ```
 
 | 验证层级 | 当前基线 |
 | --- | --- |
-| 自动化测试 | 当前 248 项：247 通过、0 失败、1 跳过；覆盖文件接收、中文相对时间、无效模型输出回退、主动追问、TaskPlan、Learning Mission、证据与检查点、学习执行 Agent、Memory、窗口交互、API 安全与打包配置。 |
+| 自动化测试 | 当前 250 项：249 通过、0 失败、1 跳过；覆盖文件接收、中文相对时间、无效模型输出回退、主动追问、TaskPlan、Learning Mission、证据与检查点、学习执行 Agent、Memory、日历并发排布、窗口交互、API 安全与打包配置。 |
 | 跨平台 CI | 每次提交在 Windows、macOS 和 Linux 上执行类型检查、测试及 Electron main / React renderer 生产构建。 |
 | 发布完整性 | Windows 安装版与便携版、macOS Universal DMG 与 ZIP 均由工作流构建，并附带 SHA-256 和 build provenance attestation。 |
 | 许可证交付 | 安装包包含 Chroni MIT、桌宠资产许可证与附加条款，以及字体 SIL OFL 1.1 和对应 Notice。 |
@@ -393,7 +395,9 @@ Chroni
 | [Agent 设计](./docs/agent-clarification-task-planning-memory.md) | 主动追问、TaskPlan、状态机和 Behavior Memory。 |
 | [本地 HTTP API](./docs/local-api.md) | 鉴权、端点、上传示例和安全边界。 |
 | [发布指南](./docs/releasing.md) | 版本、签名、公证、标签发布与发布后验证。 |
+| [应用商店发布资料](./docs/store/README.md) | Microsoft Store / Mac App Store 身份、沙盒、隐私、文案与审核检查。 |
 | [小红书发布计划](./docs/marketing/xiaohongshu-launch-plan.md) | 15/30/60 秒脚本、截图清单、隐私检查和发布模板。 |
+| [v0.2.1 发布说明](./docs/releases/v0.2.1.md) | Windows 应用身份、桌面伙伴打包、控制中心与商店准备。 |
 | [v0.2.0 发布说明](./docs/releases/v0.2.0.md) | 当前公开版本的功能、升级内容与交付边界。 |
 | [贡献指南](./CONTRIBUTING.md) | 开发约定、提交检查与 Pull Request 流程。 |
 | [安全策略](./SECURITY.md) | 漏洞报告方式与支持范围。 |
@@ -409,13 +413,11 @@ npx pnpm@11.7.0 run check
 
 涉及 UI 的改动请同时说明 Windows/macOS 表现，并附上相应截图；每个 Pull Request 尽量保持单一目标，写明用户场景、行为变化与验证方式。
 
-## 致谢与许可证
+## 许可证
 
 - Chroni 自研源代码使用 [MIT License](./LICENSE) 开源。
-- 桌宠视觉资产来自 [XIAOTONG Desktop Pet / 蓝色小嗵](https://github.com/gildingmazzonimo621-design/XIAOTONG-Desktop-pet)，依据 Apache License 2.0 与 [`ADDITIONAL_TERMS.md`](./apps/desktop/third_party/xiaotong/ADDITIONAL_TERMS.md) 使用；应用内“关于”保留原作版本、作者、联系方式、支持二维码与条款入口。
+- 正式发行版的桌宠视觉素材基于 [XIAOTONG Desktop Pet / 蓝色小嗵](https://github.com/gildingmazzonimo621-design/XIAOTONG-Desktop-pet)，依据 Apache License 2.0 与 [`ADDITIONAL_TERMS.md`](./apps/desktop/third_party/xiaotong/ADDITIONAL_TERMS.md) 使用；所需原作信息可在应用“运行状态 → 开源许可与素材信息”中查看。
 - Source Serif 4、Source Sans 3、Noto Serif SC 与 Noto Sans SC 字体依据 SIL Open Font License 1.1 分发。
-
-感谢所有参与测试、反馈和贡献的人。
 
 <p align="center">
   <strong>不替你完成作业，让每一次学习都真正落到执行与证据。</strong>

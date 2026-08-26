@@ -521,7 +521,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
 }
 
 function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
-  const [tab, setTab] = useState<ControlTab>("missions");
+  const [tab, setTab] = useState<ControlTab>("daily");
   const [navigation, setNavigation] = useState<{ route: ChroniControlRoute; sequence: number }>({ route: {}, sequence: 0 });
   const pendingCount = snapshot.items.filter((item) => !item.completed).length;
   const today = new Date();
@@ -550,18 +550,18 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
           </span>
           <div>
             <h1>Chroni</h1>
-            <p>学习执行 Agent</p>
+            <p>智能日程助手</p>
           </div>
         </div>
-        <nav aria-label="控制中心">
-          <button className={tab === "missions" ? "active" : ""} aria-current={tab === "missions" ? "page" : undefined} onClick={() => selectTab("missions")}>学习任务</button>
-          <button className={tab === "daily" ? "active" : ""} aria-current={tab === "daily" ? "page" : undefined} onClick={() => selectTab("daily")}>今日执行</button>
-          <button className={tab === "schedule" ? "active" : ""} aria-current={tab === "schedule" ? "page" : undefined} onClick={() => selectTab("schedule")}>任务来源</button>
-          <button className={tab === "agent" ? "active" : ""} aria-current={tab === "agent" ? "page" : undefined} onClick={() => selectTab("agent")}>执行 Agent</button>
-          <button className={tab === "demo" ? "active" : ""} aria-current={tab === "demo" ? "page" : undefined} onClick={() => selectTab("demo")}>GOAI 演示</button>
-          <button className={tab === "preferences" ? "active" : ""} aria-current={tab === "preferences" ? "page" : undefined} onClick={() => selectTab("preferences")}>偏好</button>
-          <button className={tab === "services" ? "active" : ""} aria-current={tab === "services" ? "page" : undefined} onClick={() => selectTab("services")}>运行状态</button>
-          <button className={tab === "about" ? "active" : ""} aria-current={tab === "about" ? "page" : undefined} onClick={() => selectTab("about")}>关于</button>
+        <nav className="sidebar-primary" aria-label="主要功能">
+          <button title="今日执行" className={tab === "daily" ? "active" : ""} aria-current={tab === "daily" ? "page" : undefined} onClick={() => selectTab("daily")}><UiIcon name="calendar" /><span>今日执行</span></button>
+          <button title="学习任务" className={tab === "missions" ? "active" : ""} aria-current={tab === "missions" ? "page" : undefined} onClick={() => selectTab("missions")}><UiIcon name="tasks" /><span>学习任务</span></button>
+          <button title="任务来源" className={tab === "schedule" ? "active" : ""} aria-current={tab === "schedule" ? "page" : undefined} onClick={() => selectTab("schedule")}><UiIcon name="inbox" /><span>任务来源</span></button>
+          <button title="执行 Agent" className={tab === "agent" ? "active" : ""} aria-current={tab === "agent" ? "page" : undefined} onClick={() => selectTab("agent")}><UiIcon name="spark" /><span>执行 Agent</span></button>
+        </nav>
+        <nav className="sidebar-utility" aria-label="设置与状态">
+          <button title="偏好设置" className={tab === "preferences" ? "active" : ""} aria-current={tab === "preferences" ? "page" : undefined} onClick={() => selectTab("preferences")}><UiIcon name="settings" /><span>偏好设置</span></button>
+          <button title="运行状态" className={tab === "services" ? "active" : ""} aria-current={tab === "services" ? "page" : undefined} onClick={() => selectTab("services")}><UiIcon name="clock" /><span>运行状态</span></button>
         </nav>
         <div className="sidebar-foot">
           <span>{todayDailyCount ? `今日 ${todayDailyCount} 项待完成` : "今日已清"}{pendingCount ? ` · ${pendingCount} 项进行中` : ""}{clarificationCount ? ` · ${clarificationCount} 项待确认` : ""}</span>
@@ -569,51 +569,31 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
       </aside>
       <section className="content">
         {tab === "missions" && <LearningMissionWorkspace snapshot={snapshot} setSnapshot={setSnapshot} />}
-        {tab === "daily" && <DailyPlanner snapshot={snapshot} setSnapshot={setSnapshot} />}
+        {tab === "daily" && <DailyPlanner snapshot={snapshot} setSnapshot={setSnapshot} onOpenSources={() => selectTab("schedule")} />}
         {tab === "schedule" && <CorrectionPane snapshot={snapshot} setSnapshot={setSnapshot} navigation={navigation} />}
         {tab === "agent" && <AgentPane snapshot={snapshot} setSnapshot={setSnapshot} />}
-        {tab === "demo" && <GoaiDemoPane setSnapshot={setSnapshot} />}
         {tab === "preferences" && <PreferencesPane preferences={snapshot.preferences} services={snapshot.services} setSnapshot={setSnapshot} />}
         {tab === "services" && <ServicesPane snapshot={snapshot} setSnapshot={setSnapshot} />}
-        {tab === "about" && <AboutPane />}
       </section>
     </main>
   );
 }
 
-function GoaiDemoPane({ setSnapshot }: Pick<ViewProps, "setSnapshot">) {
+function DemoDataTools({ setSnapshot }: Pick<ViewProps, "setSnapshot">) {
   const [status, setStatus] = useState<GoaiDemoStatus | null>(null);
   const [busy, setBusy] = useState<GoaiDemoScenario | "reset" | "clear" | "">("");
   const [feedback, setFeedback] = useState("");
-  const scenarios: Array<{ id: GoaiDemoScenario; code: string; title: string; summary: string; result: string }> = [
-    {
-      id: "clear",
-      code: "A",
-      title: "数据库项目学习任务",
-      summary: "从课程要求识别 PDF 报告与 SQL 文件，建立目标、里程碑、今日时间块和产出证据。",
-      result: "在学习任务中核对交付物、完成标准、检查点和可验证成果，再查看 Agent 闭环轨迹。",
-    },
-    {
-      id: "clarification",
-      code: "B",
-      title: "缺少具体截止时间",
-      summary: "保留创业比赛材料和演示视频，只针对无法安全推断的截止时间提问。",
-      result: "在日程的待确认区域补充日期，任务随后创建并进入规划。",
-    },
-    {
-      id: "conflict",
-      code: "C",
-      title: "多来源时间冲突",
-      summary: "同时展示周五与延期至周日的证据，不擅自覆盖原始截止时间。",
-      result: "选择可信来源后再创建任务，完整保留人类确认边界。",
-    },
+  const scenarios: Array<{ id: GoaiDemoScenario; title: string; summary: string }> = [
+    { id: "clear", title: "完整课程任务", summary: "载入包含交付物、里程碑、时间块与产出证据的示例。" },
+    { id: "clarification", title: "待补充截止时间", summary: "载入仅需确认关键日期的示例，检查主动追问流程。" },
+    { id: "conflict", title: "多来源时间冲突", summary: "载入存在不同截止时间证据的示例，检查人工确认边界。" },
   ];
 
   useEffect(() => {
     let active = true;
     void api.getGoaiDemoStatus()
       .then((next) => { if (active) setStatus(next); })
-      .catch((error) => { if (active) setFeedback(formatOperationError(error, "无法读取演示状态")); });
+      .catch((error) => { if (active) setFeedback(formatOperationError(error, "无法读取示例数据状态")); });
     return () => { active = false; };
   }, []);
 
@@ -627,7 +607,7 @@ function GoaiDemoPane({ setSnapshot }: Pick<ViewProps, "setSnapshot">) {
       setSnapshot(result.snapshot);
       setFeedback(result.message);
     } catch (error) {
-      setFeedback(formatOperationError(error, "演示场景加载失败"));
+      setFeedback(formatOperationError(error, "示例数据加载失败"));
     } finally {
       setBusy("");
     }
@@ -641,9 +621,9 @@ function GoaiDemoPane({ setSnapshot }: Pick<ViewProps, "setSnapshot">) {
       const result = await api.resetGoaiDemo();
       setStatus(result.status);
       setSnapshot(result.snapshot);
-      setFeedback("当前演示场景已恢复到初始状态。");
+      setFeedback("示例数据已恢复到初始状态。");
     } catch (error) {
-      setFeedback(formatOperationError(error, "演示重置失败"));
+      setFeedback(formatOperationError(error, "示例数据重置失败"));
     } finally {
       setBusy("");
     }
@@ -659,56 +639,33 @@ function GoaiDemoPane({ setSnapshot }: Pick<ViewProps, "setSnapshot">) {
       setSnapshot(result.snapshot);
       setFeedback(result.message);
     } catch (error) {
-      setFeedback(formatOperationError(error, "无法退出演示环境"));
+      setFeedback(formatOperationError(error, "无法清除示例数据"));
     } finally {
       setBusy("");
     }
   }
 
   return (
-    <div className="pane goai-demo-pane">
-      <header className="pane-head goai-demo-head">
-        <div>
-          <p>GOAI 2026 · 可复现演示环境</p>
-          <h2>从信息到行动的三条完整路径</h2>
-        </div>
-        <span className={`goai-demo-state ${status?.active ? "active" : ""}`}>{status?.active ? "演示环境运行中" : "正式数据环境"}</span>
-      </header>
-      <section className="goai-demo-guard" aria-label="演示环境说明">
-        <div><b>无需 API Key</b><span>固定合成输入与本地规则规划，现场断网仍可运行。</span></div>
-        <div><b>数据完全隔离</b><span>演示数据写入独立命名空间，退出后立即删除。</span></div>
-        <div><b>可审查轨迹</b><span>任务、计划、确认点与 Agent Trace 均可在产品内检查。</span></div>
-      </section>
-      <div className="goai-scenario-list">
+    <div className="demo-data-tools">
+      <p>用隔离的本地数据检查提取、确认、规划和回顾流程，不会覆盖正式数据。</p>
+      <div className="demo-data-list">
         {scenarios.map((scenario) => {
           const selected = status?.active && status.scenario === scenario.id;
           return (
-            <article className={`goai-scenario ${selected ? "selected" : ""}`} key={scenario.id}>
-              <span className="goai-scenario-code" aria-hidden="true">{scenario.code}</span>
-              <div className="goai-scenario-copy">
-                <h3>{scenario.title}</h3>
-                <p>{scenario.summary}</p>
-                <small>{scenario.result}</small>
-              </div>
-              <button className={selected ? "secondary slim" : "primary slim"} type="button" disabled={!!busy} onClick={() => void loadScenario(scenario.id)}>
-                {busy === scenario.id ? "正在准备" : selected ? "重新加载" : "运行场景"}
-              </button>
-            </article>
+            <div className={selected ? "selected" : ""} key={scenario.id}>
+              <span><b>{scenario.title}</b><small>{scenario.summary}</small></span>
+              <button className="secondary slim" type="button" disabled={!!busy} onClick={() => void loadScenario(scenario.id)}>{busy === scenario.id ? "准备中" : selected ? "重新载入" : "载入"}</button>
+            </div>
           );
         })}
       </div>
       {status?.active && (
-        <section className="goai-demo-actions" aria-label="演示操作">
-          <div>
-            <b>当前为合成演示数据</b>
-            <span>你可以自由修改、确认或完成任务，不会影响正式数据。</span>
-          </div>
-          <button className="secondary slim" type="button" disabled={!!busy} onClick={() => void api.openControlCenter({ tab: status.scenario === "clear" ? "missions" : "schedule", focus: status.scenario === "clear" ? undefined : "clarifications" })}>查看结果</button>
-          <button className="secondary slim" type="button" disabled={!!busy} onClick={() => void resetDemo()}>{busy === "reset" ? "重置中" : "重置场景"}</button>
-          <button className="danger slim" type="button" disabled={!!busy} onClick={() => void clearDemo()}>{busy === "clear" ? "正在退出" : "退出演示"}</button>
-        </section>
+        <div className="demo-data-actions">
+          <button className="secondary slim" type="button" disabled={!!busy} onClick={() => void resetDemo()}>{busy === "reset" ? "重置中" : "重置示例"}</button>
+          <button className="danger slim" type="button" disabled={!!busy} onClick={() => void clearDemo()}>{busy === "clear" ? "清除中" : "退出示例环境"}</button>
+        </div>
       )}
-      {feedback && <p className={`goai-demo-feedback ${/失败|无法/.test(feedback) ? "warn" : "ok"}`} role="status">{feedback}</p>}
+      {feedback && <p className="inline-feedback" role="status">{feedback}</p>}
     </div>
   );
 }
@@ -1344,8 +1301,8 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
     <div className="pane narrow settings-pane">
       <header className="pane-head">
         <div>
-          <p>让 Chroni 按你的方式陪伴</p>
-          <h2>偏好</h2>
+          <p>桌宠、提醒、快捷键与智能模型</p>
+          <h2>偏好设置</h2>
         </div>
       </header>
       <section className="settings-group companion-settings-group">
@@ -1495,7 +1452,7 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
     <div className="pane narrow service-pane">
       <header className="pane-head">
         <div>
-          <p>在本机安静运行</p>
+          <p>解析、模型、本地数据与版本</p>
           <h2>运行状态</h2>
         </div>
         <button className="secondary slim" type="button" disabled={refreshing} onClick={() => void refreshServices()}>{refreshing ? "检查中" : "重新检查"}</button>
@@ -1511,6 +1468,10 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
         <StatusRow label="本地数据" state={snapshot.services.storage} detail={snapshot.services.storageDiagnostic ? safeUserMessage(snapshot.services.storageDiagnostic, "本地数据已进入保护状态，请打开数据位置检查备份。") : "学习任务、产出证据、来源和偏好保存到本机应用数据目录"} />
         <StatusRow label="隐私状态" state="ready" detail={safeUserMessage(snapshot.services.privacy, "敏感配置仅保存在本机。") } />
       </div>
+      <p className="service-policy-links">
+        <a href="https://getchroni.zeabur.app/privacy.html" target="_blank" rel="noreferrer">查看隐私说明</a>
+        <a href="https://github.com/miracle121388-a11y/chroni/security" target="_blank" rel="noreferrer">安全与漏洞报告</a>
+      </p>
       {updateStatus && (
         <section className="update-panel" aria-live="polite">
           <div className="update-panel-head">
@@ -1524,81 +1485,60 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
           {updateStatus.phase === "downloading" && (
             <progress max="100" value={updateStatus.progressPercent ?? 0} aria-label="更新下载进度" />
           )}
-          <div className="update-actions">
-            <button className="secondary slim" type="button" disabled={updateStatus.phase === "checking" || updateStatus.phase === "downloading"} onClick={() => void checkForUpdates()}>
-              {updateStatus.phase === "checking" ? "检查中" : updateStatus.phase === "downloading" ? "下载中" : "检查更新"}
-            </button>
-            <button className="secondary slim" type="button" onClick={() => void api.openReleases()}>查看 GitHub 发布页</button>
-            {updateStatus.phase === "downloaded" && <button className="primary slim" type="button" onClick={() => void installUpdate()}>重启并安装</button>}
-          </div>
+          {!updateStatus.managedByStore && (
+            <div className="update-actions">
+              <button className="secondary slim" type="button" disabled={updateStatus.phase === "checking" || updateStatus.phase === "downloading"} onClick={() => void checkForUpdates()}>
+                {updateStatus.phase === "checking" ? "检查中" : updateStatus.phase === "downloading" ? "下载中" : "检查更新"}
+              </button>
+              <button className="secondary slim" type="button" onClick={() => void api.openReleases()}>查看 GitHub 发布页</button>
+              {updateStatus.phase === "downloaded" && <button className="primary slim" type="button" onClick={() => void installUpdate()}>重启并安装</button>}
+            </div>
+          )}
         </section>
       )}
       <details className="advanced-settings">
         <summary>排错说明</summary>
         <ul className="notes">{snapshot.services.notes.map((note) => <li key={note}>{safeUserMessage(note, "请检查相关服务配置。")}</li>)}</ul>
       </details>
-      <button className="secondary" type="button" onClick={() => void api.openStorage().then(() => setFeedback({ message: "已在文件管理器中打开本地数据位置。", tone: "ok" })).catch((error) => setFeedback({ message: formatOperationError(error, "暂时无法打开本地数据位置"), tone: "warn" }))}>打开本地数据位置</button>
-    </div>
-  );
-}
-
-function AboutPane() {
-  const [version, setVersion] = useState("");
-  useEffect(() => {
-    let active = true;
-    void api.getUpdateStatus()
-      .then((status) => {
-        if (active) setVersion(status.currentVersion);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
-  return (
-    <div className="pane narrow about-pane">
-      <header className="pane-head">
-        <div>
-          <p>项目、许可与第三方来源</p>
-          <h2>关于 Chroni</h2>
-        </div>
-      </header>
-      <section className="about-project" aria-labelledby="about-project-heading">
-        <h3 id="about-project-heading">Chroni{version ? ` ${version}` : ""}</h3>
-        <p>面向大学项目制学习的本地学习执行 Agent。Chroni 把课程要求转化为可执行、可验证、可调整的学习过程。</p>
+      <details className="advanced-settings">
+        <summary>示例数据工具</summary>
+        <DemoDataTools setSnapshot={setSnapshot} />
+      </details>
+      <details className="advanced-settings legal-notices">
+        <summary>开源许可与素材信息</summary>
         <div className="about-project-links">
-          <a href="https://github.com/miracle121388-a11y/chroni" target="_blank" rel="noreferrer">GitHub 项目仓库</a>
+          <a href="https://github.com/miracle121388-a11y/chroni" target="_blank" rel="noreferrer">Chroni 项目仓库</a>
           <a href="https://github.com/miracle121388-a11y/chroni/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT License</a>
         </div>
-      </section>
-      {petAssetMode === "original" ? (
-        <section className="third-party-credit" aria-labelledby="original-credit-heading">
-          <h3 id="original-credit-heading">GOAI 比赛安全视觉模式</h3>
-          <p>当前构建使用 Chroni 自有沙漏标识作为环境入口，不包含 XIAOTONG 桌宠帧、捐赠码或受其附加条款限制的视觉素材。</p>
-          <p>核心材料理解、学习任务规划、产出验证、提醒和 Agent 能力不依赖桌宠形象。</p>
-        </section>
-      ) : (
-      <section className="third-party-credit" aria-labelledby="xiaotong-credit-heading">
-        <h3 id="xiaotong-credit-heading">桌宠形象来源</h3>
-        <p>Chroni 的桌宠形象基于 XIAOTONG Desktop Pet / 蓝色小嗵。以下原作信息依照原项目附加条款保留。</p>
-        <div className="xiaotong-about">
-          <dl className="xiaotong-details">
-            <div><dt>原作版本</dt><dd>v1.0.1</dd></div>
-            <div><dt>原作者</dt><dd>WWW.没有COM</dd></div>
-            <div><dt>微信 / WeChat</dt><dd>xy12981118</dd></div>
-          </dl>
-          <figure className="xiaotong-donation">
-            <figcaption>☕ 请作者喝杯咖啡</figcaption>
-            {xiaotongDonationQr && <img src={xiaotongDonationQr} alt="XIAOTONG 原作者捐赠二维码" />}
-          </figure>
-        </div>
-        <div className="third-party-links">
-          <a href="https://github.com/gildingmazzonimo621-design/XIAOTONG-Desktop-pet" target="_blank" rel="noreferrer">原始项目仓库</a>
-          <a href="https://github.com/weidaozhong/Tongluv/blob/main/LICENSE" target="_blank" rel="noreferrer">Apache-2.0</a>
-          <a href="https://github.com/weidaozhong/Tongluv/blob/main/ADDITIONAL_TERMS.md" target="_blank" rel="noreferrer">附加条款</a>
-        </div>
-      </section>
-      )}
+        {petAssetMode === "xiaotong" && (
+          <section className="third-party-credit" aria-labelledby="xiaotong-credit-heading">
+            <h3 id="xiaotong-credit-heading">桌宠素材许可</h3>
+            <p>当前桌宠形象基于 XIAOTONG Desktop Pet / 蓝色小嗵，以下原作信息依照素材附加条款保留。</p>
+            <div className="xiaotong-about">
+              <dl className="xiaotong-details">
+                <div><dt>原作版本</dt><dd>v1.0.1</dd></div>
+                <div><dt>原作者</dt><dd>WWW.没有COM</dd></div>
+                <div><dt>微信 / WeChat</dt><dd>xy12981118</dd></div>
+              </dl>
+              <figure className="xiaotong-donation">
+                <figcaption>支持原作者</figcaption>
+                {xiaotongDonationQr && <img src={xiaotongDonationQr} alt="XIAOTONG 原作者捐赠二维码" />}
+              </figure>
+            </div>
+            <div className="third-party-links">
+              <a href="https://github.com/gildingmazzonimo621-design/XIAOTONG-Desktop-pet" target="_blank" rel="noreferrer">原始项目仓库</a>
+              <a href="https://github.com/weidaozhong/Tongluv/blob/main/LICENSE" target="_blank" rel="noreferrer">Apache-2.0</a>
+              <a href="https://github.com/weidaozhong/Tongluv/blob/main/ADDITIONAL_TERMS.md" target="_blank" rel="noreferrer">附加条款</a>
+            </div>
+          </section>
+        )}
+      </details>
+      <button className="secondary" type="button" onClick={() => void api.openStorage().then(() => setFeedback({ message: "已在文件管理器中打开本地数据位置。", tone: "ok" })).catch((error) => setFeedback({ message: formatOperationError(error, "暂时无法打开本地数据位置"), tone: "warn" }))}>打开本地数据位置</button>
+      <footer className="settings-product-footer">
+        <span>Chroni{updateStatus ? ` ${updateStatus.currentVersion}` : ""}</span>
+        <a href="https://github.com/miracle121388-a11y/chroni" target="_blank" rel="noreferrer">项目主页</a>
+        <a href="https://github.com/miracle121388-a11y/chroni/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noreferrer">开源许可</a>
+      </footer>
     </div>
   );
 }
@@ -2031,6 +1971,7 @@ function serviceStateLabel(state: string): string {
 }
 
 function updatePhaseLabel(status: ChroniUpdateStatus): string {
+  if (status.managedByStore) return "应用商店更新";
   if (status.phase === "checking") return "检查中";
   if (status.phase === "available" || status.phase === "downloading") return "正在更新";
   if (status.phase === "downloaded") return "可安装";
@@ -2080,7 +2021,7 @@ type ControlScheduleGroup = {
   items: DdlItem[];
 };
 
-type ControlTab = "missions" | "daily" | "schedule" | "agent" | "demo" | "preferences" | "services" | "about";
+type ControlTab = "missions" | "daily" | "schedule" | "agent" | "preferences" | "services";
 
 function agentStatusLabel(status: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["verification"]["status"]): string {
   return status === "healthy" ? "安排正常" : status === "critical" ? "需要立即处理" : "需要关注";
@@ -2463,8 +2404,18 @@ async function waitForRendererFonts(): Promise<void> {
 async function mountApp(): Promise<void> {
   document.documentElement.dataset.fonts = "loading";
   await waitForRendererFonts();
-  createRoot(document.getElementById("root")!).render(<App />);
+  if (rendererDisposed) return;
+  rendererRoot.render(<App />);
   document.documentElement.dataset.fonts = "ready";
+}
+
+const rendererRoot = createRoot(document.getElementById("root")!);
+let rendererDisposed = false;
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    rendererDisposed = true;
+    rendererRoot.unmount();
+  });
 }
 
 void mountApp();

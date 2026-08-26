@@ -58,7 +58,7 @@ GOAI SEMIFINAL BUILD: READY FOR SUBMISSION
 | 门禁 | 本机结果 |
 | --- | --- |
 | `pnpm run check` | 通过：typecheck、desktop tests、gateway tests、production build 均退出 0 |
-| Desktop tests | 248 项：247 pass、0 fail、1 skip |
+| Desktop tests | 250 项：249 pass、0 fail、1 skip |
 | Gateway tests | 4 pass、0 fail |
 | `pnpm run eval:goai` | 60 cases；Task F1 100.0%；Mission 闭环门槛全部通过；offline 100.0% |
 | `pnpm run site:check` | 44 ids、37 references、3 installers，全部通过 |

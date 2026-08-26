@@ -7,6 +7,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const output = join(root, "dist", "site");
 const html = readFileSync(join(output, "index.html"), "utf8");
 const script = readFileSync(join(output, "app.js"), "utf8");
+const privacy = readFileSync(join(output, "privacy.html"), "utf8");
 
 const ids = [...html.matchAll(/id="([^"]+)"/g)].map((match) => match[1]);
 const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
@@ -32,6 +33,10 @@ const requiredIds = [
 ];
 for (const id of requiredIds) {
   if (!ids.includes(id)) throw new Error(`Missing required site element: #${id}`);
+}
+if (!html.includes("./privacy.html")) throw new Error("Product site does not link to the privacy policy.");
+for (const requiredText of ["默认保存在本机", "模型调用由你开启", "密钥不进入项目数据"]) {
+  if (!privacy.includes(requiredText)) throw new Error(`Privacy page is missing: ${requiredText}`);
 }
 
 const requiredAssetPatterns = [

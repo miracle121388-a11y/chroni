@@ -10,6 +10,15 @@ export type TimelinePlacement = TimelineInterval & {
   group: number;
 };
 
+/** Keeps every parallel task lane readable, allowing the calendar itself to scroll when needed. */
+export function calendarColumnMinimum(laneCount: number, dayCount: number, hasTasks: boolean, laneGap = 8): number {
+  const lanes = Math.max(1, Math.floor(laneCount));
+  if (dayCount === 1) return 420;
+  if (dayCount === 3) return Math.max(190, lanes * 172 + Math.max(0, lanes - 1) * laneGap);
+  if (!hasTasks) return 104;
+  return Math.max(148, lanes * 156 + Math.max(0, lanes - 1) * laneGap);
+}
+
 /** Assigns overlapping intervals to separate lanes while keeping adjacent work in one lane. */
 export function layoutTimelineIntervals(intervals: TimelineInterval[]): TimelinePlacement[] {
   const sorted = intervals

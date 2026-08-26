@@ -14,10 +14,16 @@ const requireSigning = process.env.CHRONI_REQUIRE_SIGNING === "1";
 const requireNotarization = process.env.CHRONI_REQUIRE_NOTARIZATION === "1";
 const canNotarize = hasMacCertificate && (hasAppleApiCredentials || hasAppleIdCredentials);
 const petAssetMode = process.env.CHRONI_PET_ASSET_MODE === "original" ? "original" : "xiaotong";
+const windowsStoreIdentityName = process.env.CHRONI_WINDOWS_STORE_IDENTITY_NAME?.trim() || "Chroni";
+const windowsStorePublisher = process.env.CHRONI_WINDOWS_STORE_PUBLISHER?.trim() || undefined;
+const windowsStorePublisherDisplayName = process.env.CHRONI_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME?.trim() || "Chroni";
+const macStoreProvisioningProfile = process.env.CHRONI_MAC_STORE_PROVISIONING_PROFILE?.trim() || undefined;
+const macStoreIdentity = process.env.CHRONI_MAC_STORE_IDENTITY?.trim() || undefined;
 const licenseResources = [
   { from: "../../LICENSE", to: "licenses/CHRONI-MIT-LICENSE.txt" },
   { from: "../../THIRD_PARTY_NOTICES.md", to: "licenses/THIRD_PARTY_NOTICES.md" },
   { from: "../../THIRD_PARTY_DEPENDENCIES.md", to: "licenses/THIRD_PARTY_DEPENDENCIES.md" },
+  { from: "../../docs/user/privacy.md", to: "privacy/PRIVACY.md" },
   { from: "third_party/fonts/OFL-1.1.txt", to: "licenses/FONTS-SIL-OFL-1.1.txt" },
   { from: "third_party/fonts/NOTICE.md", to: "licenses/FONT-NOTICE.md" },
   ...(petAssetMode === "xiaotong" ? [
@@ -72,6 +78,9 @@ module.exports = {
     category: "public.app-category.productivity",
     minimumSystemVersion: "12.0",
     target: ["dmg", "zip"],
+    extraResources: [
+      { from: "build/PrivacyInfo.xcprivacy", to: "PrivacyInfo.xcprivacy" },
+    ],
     x64ArchFiles: "**/node_modules/@napi-rs/canvas-darwin-*/**",
     identity: hasMacCertificate ? undefined : "-",
     hardenedRuntime: hasMacCertificate,
@@ -79,6 +88,18 @@ module.exports = {
     notarize: canNotarize,
     entitlements: "build/entitlements.mac.plist",
     entitlementsInherit: "build/entitlements.mac.plist",
+  },
+  mas: {
+    icon: "build/icon.icns",
+    category: "public.app-category.productivity",
+    minimumSystemVersion: "12.0",
+    type: "distribution",
+    identity: macStoreIdentity,
+    provisioningProfile: macStoreProvisioningProfile,
+    entitlements: "build/entitlements.mas.plist",
+    entitlementsInherit: "build/entitlements.mas.inherit.plist",
+    hardenedRuntime: false,
+    gatekeeperAssess: false,
   },
   dmg: {
     title: "Chroni ${version}",
@@ -117,6 +138,17 @@ module.exports = {
   portable: {
     artifactName: "Chroni-${version}-win-${arch}-portable.${ext}",
     requestExecutionLevel: "user",
+  },
+  appx: {
+    artifactName: "Chroni-${version}-win-${arch}-store.${ext}",
+    applicationId: "Chroni",
+    identityName: windowsStoreIdentityName,
+    publisher: windowsStorePublisher,
+    publisherDisplayName: windowsStorePublisherDisplayName,
+    displayName: "Chroni",
+    backgroundColor: "#f7f7f3",
+    languages: ["zh-CN", "en-US"],
+    showNameOnTiles: true,
   },
   linux: {
     target: ["AppImage", "deb", "tar.gz"],

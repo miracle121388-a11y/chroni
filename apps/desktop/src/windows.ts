@@ -12,7 +12,7 @@ type WindowSet = {
 };
 
 export type ControlCenterRoute = {
-  tab?: "missions" | "schedule" | "daily" | "agent" | "demo" | "preferences" | "services" | "about";
+  tab?: "missions" | "schedule" | "daily" | "agent" | "preferences" | "services";
   taskId?: string;
   focus?: "clarifications";
 };
@@ -419,6 +419,16 @@ function createViewWindow(
     },
     ...options,
   });
+  if (process.platform === "win32" && icon) {
+    win.setIcon(icon);
+    win.setAppDetails({
+      appId: "app.chroni.desktop",
+      appIconPath: icon,
+      appIconIndex: 0,
+      relaunchCommand: windowsRelaunchCommand(),
+      relaunchDisplayName: "Chroni",
+    });
+  }
   configureRendererZoom(win.webContents);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedExternalUrl(url)) void shell.openExternal(url);
@@ -444,10 +454,15 @@ function windowsAppIconPath(): string | undefined {
     : join(app.getAppPath(), "build", "icon.ico");
 }
 
+function windowsRelaunchCommand(): string {
+  const executable = `"${process.execPath}"`;
+  return app.isPackaged ? executable : `${executable} "${app.getAppPath()}"`;
+}
+
 function isAllowedExternalUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && url.hostname === "github.com";
+    return url.protocol === "https:" && ["github.com", "getchroni.zeabur.app"].includes(url.hostname);
   } catch {
     return false;
   }
@@ -544,7 +559,7 @@ function appMenuTemplate(): MenuItemConstructorOptions[] {
   return [
     { label: "查看日程", click: () => showSchedule(true, true) },
     { label: "打开控制中心", click: () => showControlCenter() },
-    { label: "关于 Chroni", click: () => showControlCenter({ tab: "about" }) },
+    { label: "偏好设置", click: () => showControlCenter({ tab: "preferences" }) },
     { label: "检查更新", click: () => onCheckForUpdatesRequested?.() },
     { type: "separator" },
     { label: "显示桌宠", click: () => { if (onCompanionVisibilityRequested) onCompanionVisibilityRequested(true); else showPet(true); } },
