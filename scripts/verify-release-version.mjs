@@ -6,7 +6,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const rootPackage = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 const desktopPackage = JSON.parse(readFileSync(resolve(root, "apps/desktop/package.json"), "utf8"));
 const gatewayPackage = JSON.parse(readFileSync(resolve(root, "apps/gateway/package.json"), "utf8"));
-const requestedTag = (process.argv[2] || process.env.GITHUB_REF_NAME || "").trim();
+const requestedTag = (
+  process.argv[2]
+  || (process.env.GITHUB_REF_TYPE === "tag" ? process.env.GITHUB_REF_NAME : "")
+  || ""
+).trim();
 
 if (rootPackage.version !== desktopPackage.version || rootPackage.version !== gatewayPackage.version) {
   throw new Error(

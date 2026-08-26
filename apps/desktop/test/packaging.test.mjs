@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import builderConfig from "../electron-builder.config.cjs";
 
 const require = createRequire(import.meta.url);
@@ -20,6 +21,22 @@ const windowsSource = readFileSync(new URL("../src/windows.ts", import.meta.url)
 const workspaceConfig = readFileSync(new URL("../../../pnpm-workspace.yaml", import.meta.url), "utf8");
 const artifactVerifier = readFileSync(new URL("../../../scripts/verify-desktop-artifact.mjs", import.meta.url), "utf8");
 const afterPackSource = readFileSync(new URL("../scripts/after-pack.cjs", import.meta.url), "utf8");
+const releaseVerifierPath = fileURLToPath(new URL("../../../scripts/verify-release-version.mjs", import.meta.url));
+
+test("release version verification ignores branch names and validates tags", () => {
+  const runVerifier = (refType, refName) => execFileSync(process.execPath, [releaseVerifierPath], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      GITHUB_REF_NAME: refName,
+      GITHUB_REF_TYPE: refType,
+    },
+  });
+
+  assert.match(runVerifier("branch", "main"), /Chroni release version verified: v0\.2\.1/);
+  assert.throws(() => runVerifier("tag", "v9.9.9"));
+});
 
 test("packaging commands never publish before release artifacts are verified", () => {
   for (const name of ["package:inner", "package:win:inner", "package:mac:inner", "package:linux:inner", "package:win:store:inner", "package:mac:store:inner", "package:goai:win:inner", "package:goai:mac:inner"]) {
