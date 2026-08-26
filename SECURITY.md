@@ -22,6 +22,6 @@ Chroni 目前处于早期公开版本阶段，只为 GitHub Releases 中的最�
 - 仅从本仓库的 GitHub Releases 下载 Chroni，并核对 `SHA256SUMS.txt`。
 - 正式分发应使用 Windows 代码签名与 macOS Developer ID 签名、公证。
 - 不要把 DeepSeek 或其他模型 API Key 写入仓库、截图或 Issue。
-- Chroni 内测访问码不是 DeepSeek 主密钥，但仍应视为私密凭据；怀疑泄露时应立即联系维护者撤销。
-- 启用 LLM 后，抽取文本会发送到自定义模型服务，或经 Chroni 内测网关发送到 DeepSeek；敏感材料应遵循对应服务的隐私要求。
+- Chroni 服务访问码不是 DeepSeek 主密钥，但仍应视为私密凭据；怀疑泄露时应立即联系维护者撤销。
+- 启用 LLM 后，抽取文本会发送到自定义模型服务，或经 Chroni 托管网关发送到 DeepSeek；敏感材料应遵循对应服务的隐私要求。
 - 本地 HTTP API 默认只监听 `127.0.0.1`，不要把会话令牌暴露给不可信进程。

@@ -8,6 +8,7 @@
 | 副标题 | 本地优先的学习执行 Agent |
 | 类别 | 教育 / 效率 |
 | 年龄分级 | 4+ / Everyone |
+| 界面语言 | 简体中文（zh-CN） |
 | 支持网址 | https://github.com/miracle121388-a11y/chroni/issues |
 | 隐私政策 | https://getchroni.zeabur.app/privacy.html |
 | 产品主页 | https://getchroni.zeabur.app/ |
@@ -39,6 +40,8 @@ Chroni 不替用户完成或提交作业，也不会自动宣布学习成果已�
 2. 今日执行：时长正确的时间块、重叠分栏、缩放和智能安排。
 3. Agent 工作台：覆盖率、风险、今日工作块和下一步。
 4. 任务来源：多格式文件、OCR 状态与来源依据。
-5. 桌面伙伴：待机、阅读、规划、提醒与完成状态。
+5. 桌面伙伴：真实桌宠窗口与今日计划同屏，展示待机、阅读、提醒和完成状态的轻量入口。
 
 截图必须使用虚构内容，不得出现 API Key、访问码、真实姓名、学号、邮箱或本地用户名路径。
+
+提交文件位于 `docs/store/assets/screenshots/zh-CN/`，五张图片均为 `1440x900`。通过 `pnpm run store:screenshots` 可从当前产品构建重新生成。

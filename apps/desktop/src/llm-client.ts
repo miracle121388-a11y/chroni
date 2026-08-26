@@ -80,7 +80,7 @@ export async function testLlmConnection(settings: ChroniLlmSettings, options: Om
     return {
       ok: true,
       message: settings.mode === "managed"
-        ? "Chroni 内测智能服务可以正常响应。"
+        ? "Chroni 智能服务可以正常响应。"
         : `连接成功，模型 ${settings.model} 可以正常响应。`,
     };
   } catch (error) {
@@ -94,7 +94,7 @@ export async function testLlmConnection(settings: ChroniLlmSettings, options: Om
 function assertCompleteSettings(settings: ChroniLlmSettings): void {
   if (!settings.baseUrl.trim()) throw new LlmRequestError("configuration", "请先填写 API 地址。");
   if (!settings.apiKey.trim()) {
-    throw new LlmRequestError("configuration", settings.mode === "managed" ? "请先填写内测访问码。" : "请先填写 API Key。");
+    throw new LlmRequestError("configuration", settings.mode === "managed" ? "请先填写服务访问码。" : "请先填写 API Key。");
   }
   if (!settings.model.trim()) throw new LlmRequestError("configuration", "请先填写模型名称。");
 }
@@ -129,7 +129,7 @@ function connectionMessage(error: LlmRequestError, mode: ChroniLlmSettings["mode
   if (error.kind === "configuration") return error.message;
   if (error.kind === "authentication") {
     return mode === "managed"
-      ? "内测访问码无效或已失效，请检查后重试。"
+      ? "服务访问码无效或已失效，请检查后重试。"
       : "API Key 无效或没有模型访问权限，请检查后重试。";
   }
   if (error.kind === "model") return "API 地址或模型名称不可用，请检查后重试。";

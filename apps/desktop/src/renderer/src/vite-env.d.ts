@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AgentEvidenceExportResult, AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ChroniUpdateStatus, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, GoaiDemoResult, GoaiDemoScenario, GoaiDemoStatus, IntakePayload, IntakeResult, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, LlmConnectionResult, PetActionCommand, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
+import type { AgentEvidenceExportResult, AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ChroniUpdateStatus, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, LlmConnectionResult, PetActionCommand, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
 
 declare global {
   type ChroniControlRoute = {
@@ -12,6 +12,7 @@ declare global {
   interface Window {
     chroni: {
       platform: "darwin" | "win32" | "linux" | string;
+      storeManaged: boolean;
       getSnapshot(): Promise<ChroniSnapshot>;
       getUpdateStatus(): Promise<ChroniUpdateStatus>;
       checkForUpdates(): Promise<ChroniUpdateStatus>;
@@ -36,10 +37,10 @@ declare global {
       updateAgentMemory(patch: AgentMemoryPatch): Promise<ChroniSnapshot>;
       exportAgentIcs(): Promise<AgentIcsExportResult>;
       exportAgentEvidence(): Promise<AgentEvidenceExportResult>;
-      getGoaiDemoStatus(): Promise<GoaiDemoStatus>;
-      loadGoaiDemo(scenario: GoaiDemoScenario): Promise<GoaiDemoResult>;
-      resetGoaiDemo(): Promise<GoaiDemoResult>;
-      clearGoaiDemo(): Promise<GoaiDemoResult>;
+      getSampleDataStatus(): Promise<SampleDataStatus>;
+      loadSampleData(scenario: SampleDataScenario): Promise<SampleDataResult>;
+      resetSampleData(): Promise<SampleDataResult>;
+      clearSampleData(): Promise<SampleDataResult>;
       answerClarification(id: string, payload: ClarificationAnswerPayload): Promise<ClarificationResult>;
       dismissClarification(id: string): Promise<ChroniSnapshot>;
       cancelIntakeDraft(id: string): Promise<ChroniSnapshot>;

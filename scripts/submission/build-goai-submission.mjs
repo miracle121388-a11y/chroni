@@ -77,7 +77,7 @@ const copies = [
   ["benchmarks/goai-v1/run.mjs", "04_评测与运行证据/评测程序/run.mjs"],
   ["benchmarks/goai-v1/cases/index.mjs", "04_评测与运行证据/评测程序/cases/index.mjs"],
   ["benchmarks/goai-v1/schema/case.schema.json", "04_评测与运行证据/评测程序/schema/case.schema.json"],
-  ["apps/desktop/test/goai-demo.test.mjs", "04_评测与运行证据/关键测试/goai-demo.test.mjs"],
+  ["apps/desktop/test/sample-data.test.mjs", "04_评测与运行证据/关键测试/sample-data.test.mjs"],
   ["apps/desktop/test/learning-mission.test.mjs", "04_评测与运行证据/关键测试/learning-mission.test.mjs"],
 
   ["docs/goai/05-open-source-and-ip.md", "05_数据安全与合规/开源与知识产权.md"],

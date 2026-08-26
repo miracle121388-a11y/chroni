@@ -10,12 +10,12 @@ import { createAgentTools, type DeadlineAgentTools } from "./agent/agent-tools.j
 import { exportRedactedAgentEvidence } from "./agent/evidence-report.js";
 import { startChroniApiServer, type AgentApiOperations } from "./api-server.js";
 import { ensureTaskPlan, extractPayload, processIntake, reprocessSource } from "./intake.js";
-import { clearGoaiDemoStore, createGoaiDemoStore, GOAI_DEMO_NAMESPACE } from "./goai-demo.js";
+import { clearSampleDataStore, createSampleDataStore, SAMPLE_DATA_NAMESPACE } from "./sample-data.js";
 import { testLlmConnection } from "./llm-client.js";
 import { resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
-import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, GoaiDemoResult, GoaiDemoScenario, GoaiDemoStatus, IntakePayload, IntakeResult, ItemPatch, LearningMissionEvidenceInput, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, LearningMissionEvidenceInput, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { ChroniUpdater } from "./updater.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface, type ControlCenterRoute } from "./windows.js";
@@ -24,7 +24,7 @@ import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean,
 let store: ChroniStore;
 let primaryStore: ChroniStore;
 let storeSecretCodec: SecretCodec | undefined;
-let activeDemoScenario: GoaiDemoScenario | undefined;
+let activeSampleScenario: SampleDataScenario | undefined;
 let apiServer: ReturnType<typeof startChroniApiServer> | undefined;
 let deadlineAgent: DeadlineAgent;
 let agentTools: DeadlineAgentTools;
@@ -221,10 +221,10 @@ function installIpc(): void {
     return agentTools.exportIcs();
   });
   ipcMain.handle("chroni:agent-export-evidence", () => exportAgentEvidence());
-  ipcMain.handle("chroni:goai-demo-status", () => goaiDemoStatus());
-  ipcMain.handle("chroni:goai-demo-load", async (_event, scenario: GoaiDemoScenario) => activateGoaiDemo(validateGoaiDemoScenario(scenario)));
-  ipcMain.handle("chroni:goai-demo-reset", async () => activateGoaiDemo(activeDemoScenario ?? "clear"));
-  ipcMain.handle("chroni:goai-demo-clear", async () => deactivateGoaiDemo());
+  ipcMain.handle("chroni:sample-data-status", () => sampleDataStatus());
+  ipcMain.handle("chroni:sample-data-load", async (_event, scenario: SampleDataScenario) => activateSampleData(validateSampleDataScenario(scenario)));
+  ipcMain.handle("chroni:sample-data-reset", async () => activateSampleData(activeSampleScenario ?? "clear"));
+  ipcMain.handle("chroni:sample-data-clear", async () => deactivateSampleData());
   ipcMain.handle("chroni:clarification-answer", async (_event, id: string, payload: ClarificationAnswerPayload) => {
     const result = store.answerClarification(validateIdentifier(id, "clarification id"), validateClarificationAnswer(payload));
     const complete = await completeClarificationPlanning(result);
@@ -379,14 +379,14 @@ async function switchActiveStore(nextStore: ChroniStore): Promise<void> {
   startLocalApiServer();
   applyPreferences(store.snapshot().preferences);
   registerHotkey();
-  if (!activeDemoScenario) agentScheduler.startDailyChecks();
+  if (!activeSampleScenario) agentScheduler.startDailyChecks();
   broadcast("chroni:snapshot-updated", store.snapshot());
   refreshScheduleAfterUpdate();
 }
 
-async function activateGoaiDemo(scenario: GoaiDemoScenario): Promise<GoaiDemoResult> {
-  activeDemoScenario = scenario;
-  const demoStore = createGoaiDemoStore(app.getPath("userData"), storeSecretCodec, scenario);
+async function activateSampleData(scenario: SampleDataScenario): Promise<SampleDataResult> {
+  activeSampleScenario = scenario;
+  const demoStore = createSampleDataStore(app.getPath("userData"), storeSecretCodec, scenario);
   await switchActiveStore(demoStore);
   if (scenario === "clear") {
     for (const item of store.snapshot().items) {
@@ -414,41 +414,41 @@ async function activateGoaiDemo(scenario: GoaiDemoScenario): Promise<GoaiDemoRes
   const snapshot = store.snapshot();
   broadcast("chroni:snapshot-updated", snapshot);
   return {
-    status: goaiDemoStatus(),
+    status: sampleDataStatus(),
     snapshot,
     message: scenario === "clear"
-      ? "场景 A 已完成本地提取、任务拆解、排期与 Agent 验证。"
+      ? "完整课程任务示例已进入提取、拆解、排期与执行状态。"
       : scenario === "clarification"
-        ? "场景 B 已停在必要截止时间确认，其他可识别信息均已保留。"
-        : "场景 C 已保留冲突证据，等待用户选择可信截止时间。",
+        ? "待补充示例已停在必要截止时间确认，其他可识别信息均已保留。"
+        : "多来源示例已保留冲突证据，等待你选择可信截止时间。",
   };
 }
 
-async function deactivateGoaiDemo(): Promise<GoaiDemoResult> {
-  activeDemoScenario = undefined;
+async function deactivateSampleData(): Promise<SampleDataResult> {
+  activeSampleScenario = undefined;
   await switchActiveStore(primaryStore);
-  clearGoaiDemoStore(app.getPath("userData"));
+  clearSampleDataStore(app.getPath("userData"));
   const snapshot = store.snapshot();
   return {
-    status: goaiDemoStatus(),
+    status: sampleDataStatus(),
     snapshot,
     message: "演示数据已清除，已返回你的正式本地数据。",
   };
 }
 
-function goaiDemoStatus(): GoaiDemoStatus {
+function sampleDataStatus(): SampleDataStatus {
   return {
-    active: !!activeDemoScenario,
-    scenario: activeDemoScenario,
-    namespace: GOAI_DEMO_NAMESPACE,
+    active: !!activeSampleScenario,
+    scenario: activeSampleScenario,
+    namespace: SAMPLE_DATA_NAMESPACE,
     synthetic: true,
     noKeyRequired: true,
   };
 }
 
-function validateGoaiDemoScenario(value: unknown): GoaiDemoScenario {
+function validateSampleDataScenario(value: unknown): SampleDataScenario {
   if (value === "clear" || value === "clarification" || value === "conflict") return value;
-  throw new Error("Unsupported GOAI demo scenario.");
+  throw new Error("不支持的示例数据类型。");
 }
 
 function createApplicationUpdater(): ChroniUpdater {
@@ -567,7 +567,7 @@ function exportAgentEvidence() {
       platform: process.platform,
       architecture: process.arch,
       petAssetMode: process.env.CHRONI_PET_ASSET_MODE === "original" ? "original" : "xiaotong",
-      demoScenario: activeDemoScenario,
+      demoScenario: activeSampleScenario,
     },
   );
 }

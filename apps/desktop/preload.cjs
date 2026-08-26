@@ -9,6 +9,7 @@ ipcRenderer.on("chroni:control-navigate", (_event, route) => {
 
 contextBridge.exposeInMainWorld("chroni", {
   platform: process.platform,
+  storeManaged: Boolean(process.mas || process.windowsStore),
   getSnapshot: () => ipcRenderer.invoke("chroni:snapshot"),
   getUpdateStatus: () => ipcRenderer.invoke("chroni:update-status"),
   checkForUpdates: () => ipcRenderer.invoke("chroni:update-check"),
@@ -33,10 +34,10 @@ contextBridge.exposeInMainWorld("chroni", {
   updateAgentMemory: (patch) => ipcRenderer.invoke("chroni:agent-memory-update", patch),
   exportAgentIcs: () => ipcRenderer.invoke("chroni:agent-export-ics"),
   exportAgentEvidence: () => ipcRenderer.invoke("chroni:agent-export-evidence"),
-  getGoaiDemoStatus: () => ipcRenderer.invoke("chroni:goai-demo-status"),
-  loadGoaiDemo: (scenario) => ipcRenderer.invoke("chroni:goai-demo-load", scenario),
-  resetGoaiDemo: () => ipcRenderer.invoke("chroni:goai-demo-reset"),
-  clearGoaiDemo: () => ipcRenderer.invoke("chroni:goai-demo-clear"),
+  getSampleDataStatus: () => ipcRenderer.invoke("chroni:sample-data-status"),
+  loadSampleData: (scenario) => ipcRenderer.invoke("chroni:sample-data-load", scenario),
+  resetSampleData: () => ipcRenderer.invoke("chroni:sample-data-reset"),
+  clearSampleData: () => ipcRenderer.invoke("chroni:sample-data-clear"),
   answerClarification: (id, payload) => ipcRenderer.invoke("chroni:clarification-answer", id, payload),
   dismissClarification: (id) => ipcRenderer.invoke("chroni:clarification-dismiss", id),
   cancelIntakeDraft: (id) => ipcRenderer.invoke("chroni:intake-draft-cancel", id),

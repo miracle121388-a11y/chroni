@@ -105,7 +105,7 @@ test("testLlmConnection rejects incomplete settings without making a request", a
   assert.equal(called, false);
 });
 
-test("managed connections use beta-specific status messages", async () => {
+test("managed connections use service-specific status messages", async () => {
   const managed = {
     ...settings,
     mode: "managed",
@@ -117,10 +117,10 @@ test("managed connections use beta-specific status messages", async () => {
     fetchImpl: async () => new Response(null, { status: 401 }),
   });
   assert.equal(failed.ok, false);
-  assert.match(failed.message, /内测访问码/);
+  assert.match(failed.message, /服务访问码/);
 
   const succeeded = await testLlmConnection(managed, {
     fetchImpl: async () => new Response(JSON.stringify({ choices: [{ message: { content: "OK" } }] }), { status: 200 }),
   });
-  assert.deepEqual(succeeded, { ok: true, message: "Chroni 内测智能服务可以正常响应。" });
+  assert.deepEqual(succeeded, { ok: true, message: "Chroni 智能服务可以正常响应。" });
 });

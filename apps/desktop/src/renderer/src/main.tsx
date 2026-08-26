@@ -12,7 +12,7 @@ import {
   CHRONI_MANAGED_LLM_BASE_URL,
   CHRONI_MANAGED_LLM_MODEL,
 } from "../../shared/types";
-import type { AgentMemory, CompanionState, DailyTask, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ChroniUpdateStatus, ExtractResult, GoaiDemoScenario, GoaiDemoStatus, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
+import type { AgentMemory, CompanionState, DailyTask, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ChroniUpdateStatus, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, SampleDataScenario, SampleDataStatus, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
 import { DailyPlanner } from "./components/DailyPlanner";
 import { LearningMissionWorkspace } from "./components/LearningMissionWorkspace";
@@ -580,10 +580,10 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
 }
 
 function DemoDataTools({ setSnapshot }: Pick<ViewProps, "setSnapshot">) {
-  const [status, setStatus] = useState<GoaiDemoStatus | null>(null);
-  const [busy, setBusy] = useState<GoaiDemoScenario | "reset" | "clear" | "">("");
+  const [status, setStatus] = useState<SampleDataStatus | null>(null);
+  const [busy, setBusy] = useState<SampleDataScenario | "reset" | "clear" | "">("");
   const [feedback, setFeedback] = useState("");
-  const scenarios: Array<{ id: GoaiDemoScenario; title: string; summary: string }> = [
+  const scenarios: Array<{ id: SampleDataScenario; title: string; summary: string }> = [
     { id: "clear", title: "完整课程任务", summary: "载入包含交付物、里程碑、时间块与产出证据的示例。" },
     { id: "clarification", title: "待补充截止时间", summary: "载入仅需确认关键日期的示例，检查主动追问流程。" },
     { id: "conflict", title: "多来源时间冲突", summary: "载入存在不同截止时间证据的示例，检查人工确认边界。" },
@@ -591,18 +591,18 @@ function DemoDataTools({ setSnapshot }: Pick<ViewProps, "setSnapshot">) {
 
   useEffect(() => {
     let active = true;
-    void api.getGoaiDemoStatus()
+    void api.getSampleDataStatus()
       .then((next) => { if (active) setStatus(next); })
       .catch((error) => { if (active) setFeedback(formatOperationError(error, "无法读取示例数据状态")); });
     return () => { active = false; };
   }, []);
 
-  async function loadScenario(scenario: GoaiDemoScenario): Promise<void> {
+  async function loadScenario(scenario: SampleDataScenario): Promise<void> {
     if (busy) return;
     setBusy(scenario);
     setFeedback("");
     try {
-      const result = await api.loadGoaiDemo(scenario);
+      const result = await api.loadSampleData(scenario);
       setStatus(result.status);
       setSnapshot(result.snapshot);
       setFeedback(result.message);
@@ -618,7 +618,7 @@ function DemoDataTools({ setSnapshot }: Pick<ViewProps, "setSnapshot">) {
     setBusy("reset");
     setFeedback("");
     try {
-      const result = await api.resetGoaiDemo();
+      const result = await api.resetSampleData();
       setStatus(result.status);
       setSnapshot(result.snapshot);
       setFeedback("示例数据已恢复到初始状态。");
@@ -634,7 +634,7 @@ function DemoDataTools({ setSnapshot }: Pick<ViewProps, "setSnapshot">) {
     setBusy("clear");
     setFeedback("");
     try {
-      const result = await api.clearGoaiDemo();
+      const result = await api.clearSampleData();
       setStatus(result.status);
       setSnapshot(result.snapshot);
       setFeedback(result.message);
@@ -1355,16 +1355,16 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
         <details className="advanced-settings">
           <summary>智能模型服务</summary>
           <div className="llm-mode-picker" aria-label="模型连接方式">
-            <button type="button" className={llmDraft.mode === "managed" ? "active" : ""} onClick={() => changeLlmMode("managed")}>Chroni 内测</button>
+            <button type="button" className={llmDraft.mode === "managed" ? "active" : ""} onClick={() => changeLlmMode("managed")}>Chroni 智能服务</button>
             <button type="button" className={llmDraft.mode === "custom" ? "active" : ""} onClick={() => changeLlmMode("custom")}>自定义 API</button>
           </div>
           {llmDraft.mode === "managed" ? (
             <>
               <div className="managed-llm-note">
                 <strong>DeepSeek V4 Flash</strong>
-                <span>主密钥由 Chroni 服务端托管，应用只保存可撤销的内测访问码。</span>
+                <span>主密钥由 Chroni 服务端托管，应用只保存可撤销的服务访问码。</span>
               </div>
-              <label className="text-field">内测访问码<input type="password" value={llmDraft.apiKey} placeholder={services.model === "ready" && preferences.llm.mode === "managed" ? "已配置，输入新值可替换" : "输入邀请中提供的访问码"} autoComplete="off" onChange={(event) => updateLlmDraft("apiKey", event.target.value)} /></label>
+              <label className="text-field">服务访问码<input type="password" value={llmDraft.apiKey} placeholder={services.model === "ready" && preferences.llm.mode === "managed" ? "已配置，输入新值可替换" : "输入服务方提供的访问码"} autoComplete="off" onChange={(event) => updateLlmDraft("apiKey", event.target.value)} /></label>
             </>
           ) : (
             <>
@@ -1525,10 +1525,11 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
                 {xiaotongDonationQr && <img src={xiaotongDonationQr} alt="XIAOTONG 原作者捐赠二维码" />}
               </figure>
             </div>
+            <p>二维码仅用于向素材原作者自愿赠与；Chroni 不参与收款，赠与不会解锁功能、数字内容或服务。</p>
             <div className="third-party-links">
               <a href="https://github.com/gildingmazzonimo621-design/XIAOTONG-Desktop-pet" target="_blank" rel="noreferrer">原始项目仓库</a>
-              <a href="https://github.com/weidaozhong/Tongluv/blob/main/LICENSE" target="_blank" rel="noreferrer">Apache-2.0</a>
-              <a href="https://github.com/weidaozhong/Tongluv/blob/main/ADDITIONAL_TERMS.md" target="_blank" rel="noreferrer">附加条款</a>
+              <a href="https://github.com/miracle121388-a11y/chroni/blob/main/apps/desktop/third_party/xiaotong/LICENSE" target="_blank" rel="noreferrer">Apache-2.0</a>
+              <a href="https://github.com/miracle121388-a11y/chroni/blob/main/apps/desktop/third_party/xiaotong/ADDITIONAL_TERMS.md" target="_blank" rel="noreferrer">附加条款</a>
             </div>
           </section>
         )}
@@ -2274,6 +2275,7 @@ async function filesFromFileList(fileList: FileList | File[] | null): Promise<Ch
 }
 
 function safeFilePath(file: File): string {
+  if (api.storeManaged && api.platform === "darwin") return "";
   try {
     return api.filePath(file);
   } catch {

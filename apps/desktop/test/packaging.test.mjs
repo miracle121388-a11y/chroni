@@ -9,8 +9,10 @@ const require = createRequire(import.meta.url);
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const builderSchema = JSON.parse(readFileSync(require.resolve("app-builder-lib/scheme.json"), "utf8"));
 const releaseWorkflow = readFileSync(new URL("../../../.github/workflows/release-build.yml", import.meta.url), "utf8");
+const storeWorkflow = readFileSync(new URL("../../../.github/workflows/store-build.yml", import.meta.url), "utf8");
 const rendererSource = readFileSync(new URL("../src/renderer/src/main.tsx", import.meta.url), "utf8");
 const rendererTypes = readFileSync(new URL("../src/renderer/src/vite-env.d.ts", import.meta.url), "utf8");
+const preloadSource = readFileSync(new URL("../preload.cjs", import.meta.url), "utf8");
 const mainSource = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
 const windowsSource = readFileSync(new URL("../src/windows.ts", import.meta.url), "utf8");
 
@@ -26,6 +28,7 @@ test("packaging commands never publish before release artifacts are verified", (
   for (const name of ["package:win:store", "package:mac:store"]) {
     assert.match(packageJson.scripts[name], /verify:product-assets/);
     assert.match(packageJson.scripts[name], /verify-store-readiness\.mjs/);
+    assert.match(packageJson.scripts[name], /verify-store-artifact\.mjs/);
   }
 });
 
@@ -39,14 +42,22 @@ test("Store packages keep Chroni identity, sandbox permissions, and system-manag
   assert.equal(builderConfig.executableName, "Chroni");
   assert.equal(builderConfig.appx.applicationId, "Chroni");
   assert.equal(builderConfig.appx.displayName, "Chroni");
-  assert.deepEqual(builderConfig.appx.languages, ["zh-CN", "en-US"]);
+  assert.deepEqual(builderConfig.appx.languages, ["zh-CN"]);
   const validAppxKeys = new Set(Object.keys(builderSchema.definitions.AppXOptions.properties));
   assert.deepEqual(Object.keys(builderConfig.appx).filter((key) => !validAppxKeys.has(key)), []);
+  assert.equal(builderConfig.mas.type, "distribution");
   assert.equal(builderConfig.mas.entitlements, "build/entitlements.mas.plist");
   assert.equal(builderConfig.mas.entitlementsInherit, "build/entitlements.mas.inherit.plist");
+  assert.deepEqual(builderConfig.mac.extendInfo.CFBundleLocalizations, ["zh_CN"]);
   assert.equal(builderConfig.mac.extraResources.some((entry) => entry.to === "PrivacyInfo.xcprivacy"), true);
   assert.match(mainSource, /managedByStore: Boolean\(process\.mas \|\| process\.windowsStore\)/);
+  assert.match(preloadSource, /storeManaged: Boolean\(process\.mas \|\| process\.windowsStore\)/);
+  assert.match(rendererSource, /api\.storeManaged && api\.platform === "darwin"/);
   assert.match(rendererSource, /updateStatus\.managedByStore/);
+  assert.match(storeWorkflow, /store-verification-windows\.json/);
+  assert.match(storeWorkflow, /store-verification-macos\.json/);
+  assert.match(storeWorkflow, /MAC_STORE_INSTALLER_CSC_LINK/);
+  assert.match(storeWorkflow, /MAC_STORE_INSTALLER_CSC_KEY_PASSWORD/);
 });
 
 test("release packaging removes empty certificate variables", () => {

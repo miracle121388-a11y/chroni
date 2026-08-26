@@ -203,18 +203,18 @@ export type AgentEvidenceExportResult = {
   integritySha256: string;
 };
 
-export type GoaiDemoScenario = "clear" | "clarification" | "conflict";
+export type SampleDataScenario = "clear" | "clarification" | "conflict";
 
-export type GoaiDemoStatus = {
+export type SampleDataStatus = {
   active: boolean;
-  scenario?: GoaiDemoScenario;
-  namespace: "goai-demo";
+  scenario?: SampleDataScenario;
+  namespace: "sample-data";
   synthetic: true;
   noKeyRequired: true;
 };
 
-export type GoaiDemoResult = {
-  status: GoaiDemoStatus;
+export type SampleDataResult = {
+  status: SampleDataStatus;
   snapshot: ChroniSnapshot;
   message: string;
 };

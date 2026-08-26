@@ -1,13 +1,13 @@
-# Chroni 内测 LLM 网关
+# Chroni LLM 网关
 
 ## 目标与链路
 
-内测阶段不能把 DeepSeek 主密钥写入安装包、前端代码或公开仓库。Chroni 使用独立的 Zeabur 服务托管密钥：
+不能把 DeepSeek 主密钥写入安装包、前端代码或公开仓库。Chroni 使用独立的 Zeabur 服务托管密钥：
 
 ```text
 桌面端
   -> 本地解析 PDF / DOCX / XLSX / 图片 OCR
-  -> 使用内测访问码请求 Chroni Gateway
+  -> 使用服务访问码请求 Chroni Gateway
   -> 网关鉴权、限流、裁剪参数并注入 DeepSeek Key
   -> DeepSeek /chat/completions
   -> 结构化候选返回桌面端
@@ -38,7 +38,7 @@
 | `DEEPSEEK_MODEL` | `deepseek-v4-flash` | 网关唯一允许的上游模型 |
 | `CHRONI_GATEWAY_ACCESS_KEYS_JSON` | `{"tester-a":"...","tester-b":"..."}` | 推荐，每个测试者独立访问码 |
 
-也可以在极小规模测试中设置单个 `CHRONI_GATEWAY_ACCESS_TOKEN`。不要同时依赖共享码做长期内测，因为无法单独撤销某位测试者。
+也可以在极小规模部署中设置单个 `CHRONI_GATEWAY_ACCESS_TOKEN`。不要依赖共享码做长期服务，因为无法单独撤销某位用户。
 
 PowerShell 生成 32 字节随机访问码：
 
@@ -72,7 +72,7 @@ $bytes = New-Object byte[] 32
 Invoke-RestMethod https://api-getchroni.zeabur.app/healthz
 ```
 
-配置完成后应返回 `status: ok`。然后使用一个真实内测访问码验证：
+配置完成后应返回 `status: ok`。然后使用一个真实服务访问码验证：
 
 ```powershell
 $headers = @{ Authorization = "Bearer 你的访问码" }

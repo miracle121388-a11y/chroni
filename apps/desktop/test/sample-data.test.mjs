@@ -4,16 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { exportRedactedAgentEvidence } from "../dist/agent/evidence-report.js";
-import { clearGoaiDemoStore, createGoaiDemoStore, GOAI_DEMO_NAMESPACE } from "../dist/goai-demo.js";
+import { clearSampleDataStore, createSampleDataStore, SAMPLE_DATA_NAMESPACE } from "../dist/sample-data.js";
 import { ensureTaskPlan } from "../dist/intake.js";
 import { ChroniStore } from "../dist/store.js";
 
 const now = new Date("2026-08-06T10:00:00+08:00");
 
-test("GOAI scenario A creates a no-key task, evidence, and executable plan", async () => {
-  const root = mkdtempSync(join(tmpdir(), "chroni-goai-clear-"));
+test("complete sample data creates a no-key task, evidence, and executable plan", async () => {
+  const root = mkdtempSync(join(tmpdir(), "chroni-sample-clear-"));
   try {
-    const store = createGoaiDemoStore(root, undefined, "clear", now);
+    const store = createSampleDataStore(root, undefined, "clear", now);
     const snapshot = store.snapshot();
     assert.equal(snapshot.preferences.llm.enabled, false);
     assert.equal(store.llmSettings().apiKey, "");
@@ -32,14 +32,14 @@ test("GOAI scenario A creates a no-key task, evidence, and executable plan", asy
   }
 });
 
-test("GOAI scenario B preserves known deliverables and asks only for the missing due time", () => {
-  const root = mkdtempSync(join(tmpdir(), "chroni-goai-clarification-"));
+test("clarification sample preserves known deliverables and asks only for the missing due time", () => {
+  const root = mkdtempSync(join(tmpdir(), "chroni-sample-clarification-"));
   try {
-    const store = createGoaiDemoStore(root, undefined, "clarification", now);
+    const store = createSampleDataStore(root, undefined, "clarification", now);
     let snapshot = store.snapshot();
     assert.equal(snapshot.items.length, 0);
-    assert.equal(snapshot.intakeDrafts[0].candidate.title, "创业比赛材料提交");
-    assert.deepEqual(snapshot.intakeDrafts[0].candidate.deliverables, ["比赛材料", "演示视频"]);
+    assert.equal(snapshot.intakeDrafts[0].candidate.title, "课程展示材料提交");
+    assert.deepEqual(snapshot.intakeDrafts[0].candidate.deliverables, ["展示材料", "演示视频"]);
     assert.equal(snapshot.clarifications.length, 1);
     assert.equal(snapshot.clarifications[0].field, "dueAt");
     assert.equal(snapshot.clarifications[0].required, true);
@@ -47,16 +47,16 @@ test("GOAI scenario B preserves known deliverables and asks only for the missing
     const result = store.answerClarification(snapshot.clarifications[0].id, { value: "2026-08-14T10:00:00+08:00" });
     snapshot = result.snapshot;
     assert.equal(snapshot.items.length, 1);
-    assert.equal(snapshot.items[0].title, "创业比赛材料提交");
+    assert.equal(snapshot.items[0].title, "课程展示材料提交");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("GOAI scenario C retains conflicting evidence until the user chooses a source", () => {
-  const root = mkdtempSync(join(tmpdir(), "chroni-goai-conflict-"));
+test("conflict sample retains conflicting evidence until the user chooses a source", () => {
+  const root = mkdtempSync(join(tmpdir(), "chroni-sample-conflict-"));
   try {
-    const store = createGoaiDemoStore(root, undefined, "conflict", now);
+    const store = createSampleDataStore(root, undefined, "conflict", now);
     const pending = store.snapshot().clarifications[0];
     assert.equal(pending.options.length, 2);
     assert.match(pending.reason, /不会自行覆盖原始截止时间/);
@@ -72,8 +72,8 @@ test("GOAI scenario C retains conflicting evidence until the user chooses a sour
   }
 });
 
-test("GOAI demo namespace never changes the primary store and is removable", () => {
-  const root = mkdtempSync(join(tmpdir(), "chroni-goai-isolation-"));
+test("sample data namespace never changes the primary store and is removable", () => {
+  const root = mkdtempSync(join(tmpdir(), "chroni-sample-isolation-"));
   try {
     const primary = new ChroniStore(root);
     primary.addItems([{
@@ -88,13 +88,13 @@ test("GOAI demo namespace never changes the primary store and is removable", () 
     }], "已添加正式任务");
     const before = readFileSync(primary.filePath, "utf8");
 
-    createGoaiDemoStore(root, undefined, "clear", now);
+    createSampleDataStore(root, undefined, "clear", now);
     assert.equal(readFileSync(primary.filePath, "utf8"), before);
     assert.equal(new ChroniStore(root).snapshot().items[0].title, "用户正式任务");
-    assert.equal(existsSync(join(root, GOAI_DEMO_NAMESPACE, "chroni-state.json")), true);
+    assert.equal(existsSync(join(root, SAMPLE_DATA_NAMESPACE, "chroni-state.json")), true);
 
-    clearGoaiDemoStore(root);
-    assert.equal(existsSync(join(root, GOAI_DEMO_NAMESPACE)), false);
+    clearSampleDataStore(root);
+    assert.equal(existsSync(join(root, SAMPLE_DATA_NAMESPACE)), false);
     assert.equal(readFileSync(primary.filePath, "utf8"), before);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -102,9 +102,9 @@ test("GOAI demo namespace never changes the primary store and is removable", () 
 });
 
 test("redacted evidence export is reproducible and excludes private task content", async () => {
-  const root = mkdtempSync(join(tmpdir(), "chroni-goai-evidence-"));
+  const root = mkdtempSync(join(tmpdir(), "chroni-sample-evidence-"));
   try {
-    const store = createGoaiDemoStore(root, undefined, "clear", now);
+    const store = createSampleDataStore(root, undefined, "clear", now);
     const task = store.snapshot().items[0];
     const plan = await ensureTaskPlan(task.id, store, true, "rules-only");
     store.activateTaskPlan(task.id, plan.id);
@@ -127,7 +127,7 @@ test("redacted evidence export is reproducible and excludes private task content
     assert.match(json, /"missionCheckpointCount": 1/);
     assert.match(markdown, /Integrity SHA-256/);
     assert.equal(json.includes("数据库系统课程作业三"), false);
-    assert.equal(json.includes("GOAI-A-数据库作业通知.txt"), false);
+    assert.equal(json.includes("示例-A-数据库作业通知.txt"), false);
     assert.equal(json.includes("apiKey"), false);
     assert.equal(json.includes("private evidence title"), false);
     assert.equal(json.includes("private checkpoint summary"), false);

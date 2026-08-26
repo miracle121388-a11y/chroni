@@ -1096,7 +1096,7 @@ export class ChroniStore {
       storagePath: this.filePath,
       privacy: modelEnabled
         ? managedModel
-          ? "学习任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用内测智能服务时，理解课程要求所需的文本片段和选中的结构化偏好会经 Chroni 网关发送到 DeepSeek，二进制原文件与成果文件不会直接上传。"
+          ? "学习任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用 Chroni 智能服务时，理解课程要求所需的文本片段和选中的结构化偏好会经 Chroni 网关发送到 DeepSeek，二进制原文件与成果文件不会直接上传。"
           : "学习任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用 LLM 时，会把理解课程要求所需的文本片段（长文档可能分块覆盖全文）和选中的结构化偏好发送到自定义模型服务。"
         : "学习任务、来源、产出证据元数据和复盘保存在本机，未启用 LLM 时不会发送到模型服务。",
       notes: [
@@ -1104,11 +1104,11 @@ export class ChroniStore {
         ...(this.#unreadableApiKeyProtected ? ["已保留暂时无法解密的 LLM API Key 密文；在系统安全存储恢复前不会覆盖。"] : []),
         "已支持文本、PDF、DOCX、XLSX、CSV、网页/结构化文本和图片 OCR 的本地抽取。",
         modelReady
-          ? `${managedModel ? "Chroni 内测智能服务" : "LLM 智能抽取"}已启用，当前模型：${resolvedLlm.model || "未设置"}${environmentConfigured ? "（环境变量优先）" : ""}。`
-          : `未配置${managedModel ? "内测访问码" : " LLM API Key"}时会使用本地规则抽取；配置后优先使用大模型抽取并自动回退。`,
+          ? `${managedModel ? "Chroni 智能服务" : "LLM 智能抽取"}已启用，当前模型：${resolvedLlm.model || "未设置"}${environmentConfigured ? "（环境变量优先）" : ""}。`
+          : `未配置${managedModel ? "服务访问码" : " LLM API Key"}时会使用本地规则抽取；配置后优先使用大模型抽取并自动回退。`,
         this.secretCodec
-          ? `${managedModel ? "内测访问码" : "LLM API Key"}使用操作系统安全存储加密。`
-          : `当前系统安全存储不可用，界面填写的${managedModel ? "内测访问码" : " LLM API Key"}仅在本次运行有效；可改用 CHRONI_LLM_API_KEY。`,
+          ? `${managedModel ? "服务访问码" : "LLM API Key"}使用操作系统安全存储加密。`
+          : `当前系统安全存储不可用，界面填写的${managedModel ? "服务访问码" : " LLM API Key"}仅在本次运行有效；可改用 CHRONI_LLM_API_KEY。`,
         `${this.#state.sources.length} 条输入来源保存在本机，可在控制中心重新识别。`,
         `${this.#state.learningMissions.length} 条学习任务档案保存在本机，成果文件仅记录名称、大小和校验值，不复制文件内容或公开本地路径。`,
         this.#state.preferences.remindersEnabled

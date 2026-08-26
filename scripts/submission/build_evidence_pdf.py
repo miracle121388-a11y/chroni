@@ -485,7 +485,7 @@ def build_story(s):
         ),
         para("开源仓库中的核心实现", s["h2"]),
         para(
-            "完整源码在开源仓库中提供。核心实现包括 intake.ts、learning-mission.ts、goai-demo.ts、deadline-agent.ts、agent-tools.ts、task-plan-agent.ts、evidence-report.ts、store.ts、api-server.ts，以及 LearningMission/Agent/DailyPlanner 前端组件和 CI/Release 工作流。",
+            "完整源码在开源仓库中提供。核心实现包括 intake.ts、learning-mission.ts、sample-data.ts、deadline-agent.ts、agent-tools.ts、task-plan-agent.ts、evidence-report.ts、store.ts、api-server.ts，以及 LearningMission/Agent/DailyPlanner 前端组件和 CI/Release 工作流。",
             s["body"],
         ),
         PageBreak(),
@@ -538,7 +538,7 @@ def build_story(s):
 
     story.extend([
         section_title("05", "三分钟演示证明", s["h1"]),
-        para("GOAI 演示使用独立 userData/goai-demo Store；加载场景会重建合成状态，退出会删除演示目录并恢复主 Store。全程不需要 API Key。", s["body"]),
+        para("隔离示例使用独立 userData/sample-data Store；加载场景会重建合成状态，退出会删除示例目录并恢复主 Store。全程不需要 API Key。", s["body"]),
     ])
     demo_rows = [
         [para("场景", s["table_bold"]), para("输入证据", s["table_bold"]), para("应观察到的行为", s["table_bold"])],

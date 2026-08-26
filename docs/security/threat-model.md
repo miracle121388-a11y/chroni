@@ -44,7 +44,7 @@ Custom model keys are encoded through Electron `safeStorage` when supported. The
 
 ## Deletion and isolation
 
-Normal state is stored in the Electron user-data directory as `chroni-state.json`. The GOAI demo uses the separate `goai-demo` namespace; loading a scenario recreates only that directory, and exiting deletes it before returning to the primary Store. Users can open the storage directory from the app and remove local state after quitting Chroni. Managed-provider deletion and retention are governed by the selected provider.
+Normal state is stored in the Electron user-data directory as `chroni-state.json`. The sample-data tool uses the separate `sample-data` namespace; loading a sample recreates only that directory, and exiting deletes it before returning to the primary Store. Users can open the storage directory from the app and remove local state after quitting Chroni. Managed-provider deletion and retention are governed by the selected provider.
 
 ## Security test backlog
 

@@ -88,6 +88,11 @@ module.exports = {
     notarize: canNotarize,
     entitlements: "build/entitlements.mac.plist",
     entitlementsInherit: "build/entitlements.mac.plist",
+    extendInfo: {
+      CFBundleDevelopmentRegion: "zh_CN",
+      CFBundleLocalizations: ["zh_CN"],
+      NSHumanReadableCopyright: "Copyright © 2026 Chroni contributors",
+    },
   },
   mas: {
     icon: "build/icon.icns",
@@ -147,7 +152,7 @@ module.exports = {
     publisherDisplayName: windowsStorePublisherDisplayName,
     displayName: "Chroni",
     backgroundColor: "#f7f7f3",
-    languages: ["zh-CN", "en-US"],
+    languages: ["zh-CN"],
     showNameOnTiles: true,
   },
   linux: {

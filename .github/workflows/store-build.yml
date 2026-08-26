@@ -43,7 +43,13 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: chroni-windows-store-${{ github.sha }}
-          path: apps/desktop/dist-electron/*.appx
+          path: |
+            apps/desktop/dist-electron/*.appx
+            apps/desktop/dist-electron/store-verification-windows.json
+            docs/store/assets/screenshots/zh-CN/*.png
+            docs/store/listing.zh-CN.md
+            docs/store/privacy-declarations.md
+            docs/store/review-notes.md
           if-no-files-found: error
           retention-days: 14
 
@@ -55,6 +61,8 @@ jobs:
     env:
       CSC_LINK: ${{ secrets.MAC_STORE_CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.MAC_STORE_CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.MAC_STORE_INSTALLER_CSC_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.MAC_STORE_INSTALLER_CSC_KEY_PASSWORD }}
       MAC_STORE_PROVISIONING_PROFILE: ${{ secrets.MAC_STORE_PROVISIONING_PROFILE }}
       CHRONI_MAC_STORE_IDENTITY: ${{ vars.CHRONI_MAC_STORE_IDENTITY }}
     steps:
@@ -81,6 +89,12 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: chroni-macos-store-${{ github.sha }}
-          path: apps/desktop/dist-electron/*.pkg
+          path: |
+            apps/desktop/dist-electron/*.pkg
+            apps/desktop/dist-electron/store-verification-macos.json
+            docs/store/assets/screenshots/zh-CN/*.png
+            docs/store/listing.zh-CN.md
+            docs/store/privacy-declarations.md
+            docs/store/review-notes.md
           if-no-files-found: error
           retention-days: 14

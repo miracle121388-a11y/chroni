@@ -68,7 +68,7 @@ export function createGatewayServer(config: GatewayConfig, dependencies: Gateway
 
     const accessKey = authenticate(request, config.accessKeys);
     if (!accessKey) {
-      sendError(response, 401, requestId, "invalid_access_token", "内测访问码无效或已失效。");
+      sendError(response, 401, requestId, "invalid_access_token", "服务访问码无效或已失效。");
       return;
     }
 
@@ -235,7 +235,7 @@ function acquireRateSlot(
     };
   }
   if (state.dayCount >= config.requestsPerDay) {
-    return { ok: false, code: "daily_limit", message: "今日内测额度已用完，请明天继续。", retryAfterSeconds: 3_600 };
+    return { ok: false, code: "daily_limit", message: "今日服务额度已用完，请明天继续。", retryAfterSeconds: 3_600 };
   }
   state.active += 1;
   state.minuteCount += 1;
@@ -273,7 +273,7 @@ async function readJsonBody(request: IncomingMessage, maximumBytes: number): Pro
 function validateChatRequest(value: unknown, config: GatewayConfig): ValidatedChatRequest {
   const body = plainRecord(value);
   if (!body) throw new RequestError(400, "invalid_request", "请求体必须是对象。");
-  if (body.stream === true) throw new RequestError(400, "stream_not_supported", "内测服务暂不支持流式响应。");
+  if (body.stream === true) throw new RequestError(400, "stream_not_supported", "托管服务暂不支持流式响应。");
   if (!Array.isArray(body.messages) || body.messages.length < 1 || body.messages.length > 32) {
     throw new RequestError(400, "invalid_messages", "messages 必须包含 1 至 32 条消息。");
   }
