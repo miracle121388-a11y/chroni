@@ -12,7 +12,7 @@ type WindowSet = {
 };
 
 export type ControlCenterRoute = {
-  tab?: "missions" | "schedule" | "daily" | "agent" | "preferences" | "services";
+  tab?: "missions" | "schedule" | "daily" | "review" | "agent" | "preferences" | "services";
   taskId?: string;
   focus?: "clarifications";
 };
@@ -559,6 +559,7 @@ function appMenuTemplate(): MenuItemConstructorOptions[] {
   return [
     { label: "查看日程", click: () => showSchedule(true, true) },
     { label: "打开控制中心", click: () => showControlCenter() },
+    { label: "每日回顾", click: () => showControlCenter({ tab: "review" }) },
     { label: "偏好设置", click: () => showControlCenter({ tab: "preferences" }) },
     { label: "检查更新", click: () => onCheckForUpdatesRequested?.() },
     { type: "separator" },

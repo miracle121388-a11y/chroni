@@ -15,7 +15,7 @@ import {
   CHRONI_MANAGED_LLM_MODEL,
 } from "./shared/types.js";
 import { InputValidationError } from "./validation.js";
-import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyTask, DailyTaskColor, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, LearningMission, LearningMissionCheckpointInput, LearningMissionEvidence, LearningMissionEvidenceInput, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyReview, DailyReviewInput, DailyTask, DailyTaskColor, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, LearningMission, LearningMissionCheckpointInput, LearningMissionEvidence, LearningMissionEvidenceInput, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
 
 export type SecretCodec = {
   encrypt(value: string): string;
@@ -29,6 +29,7 @@ type PersistedLlmSettings = Partial<ChroniPreferences["llm"]> & {
 type StoredState = {
   items: DdlItem[];
   dailyTasks: DailyTask[];
+  dailyReviews: DailyReview[];
   sources: SourceRecord[];
   intakeDrafts: IntakeDraft[];
   clarifications: PendingClarification[];
@@ -72,6 +73,7 @@ export class ChroniStore {
     return {
       items: [...this.#state.items].sort(compareDdlItems),
       dailyTasks: structuredClone(this.#state.dailyTasks),
+      dailyReviews: structuredClone(this.#state.dailyReviews),
       sources: [...this.#state.sources].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
       intakeDrafts: structuredClone(this.#state.intakeDrafts),
       clarifications: structuredClone(this.#state.clarifications),
@@ -652,6 +654,33 @@ export class ChroniStore {
     return this.snapshot();
   }
 
+  saveDailyReview(input: DailyReviewInput): ChroniSnapshot {
+    if (!isCalendarDateKey(input.date)) throw new InputValidationError("daily review.date must be a valid date.");
+    if (!input.summary.trim()) throw new InputValidationError("daily review.summary cannot be empty.");
+    if (!Number.isInteger(input.totalTasks) || !Number.isInteger(input.completedTasks) || input.completedTasks < 0 || input.completedTasks > input.totalTasks) {
+      throw new InputValidationError("daily review task counts are invalid.");
+    }
+    const now = new Date().toISOString();
+    const existing = this.#state.dailyReviews.find((review) => review.date === input.date);
+    const review: DailyReview = {
+      date: input.date,
+      summary: input.summary.trim().slice(0, 2_000),
+      note: input.note.trim().slice(0, 4_000),
+      totalTasks: input.totalTasks,
+      completedTasks: input.completedTasks,
+      plannedMinutes: input.plannedMinutes,
+      completedMinutes: input.completedMinutes,
+      unfinishedTaskTitles: [...new Set(input.unfinishedTaskTitles.map((title) => title.trim()).filter(Boolean))].slice(0, 100),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.#state.dailyReviews = [review, ...this.#state.dailyReviews.filter((candidate) => candidate.date !== review.date)]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 730);
+    this.#save();
+    return this.snapshot();
+  }
+
   #syncLinkedStepCompletion(task: DailyTask): void {
     if (!task.linkedTaskId || !task.linkedStepId) return;
     const linkedBlocks = this.#state.dailyTasks.filter((candidate) => candidate.linkedTaskId === task.linkedTaskId
@@ -1190,6 +1219,7 @@ export class ChroniStore {
     const draftIds = new Set(normalizedDrafts.values.map((draft) => draft.id));
     const itemIds = new Set(items.map((item) => item.id));
     const normalizedDailyTasks = normalizeDailyTasks(parsed.dailyTasks, itemIds);
+    const normalizedDailyReviews = normalizeDailyReviews(parsed.dailyReviews);
     const normalizedClarifications = normalizePendingClarifications(parsed.clarifications, draftIds, validSourceIds, itemIds);
     const clarificationIdsByDraft = new Map<string, string[]>();
     for (const clarification of normalizedClarifications.values) {
@@ -1239,6 +1269,7 @@ export class ChroniStore {
     const recoveryDetails = [
       normalizationDetail("待确认草稿", normalizedDrafts, repairedDraftLinks),
       normalizationDetail("每日任务", normalizedDailyTasks),
+      normalizationDetail("日程总结", normalizedDailyReviews),
       normalizationDetail("追问信息", normalizedClarifications),
       normalizationDetail("任务计划", normalizedPlans),
       normalizationDetail("计划版本", normalizedRevisions),
@@ -1251,6 +1282,7 @@ export class ChroniStore {
     return synchronizeStateSourceItemIds({
       items,
       dailyTasks: normalizedDailyTasks.values,
+      dailyReviews: normalizedDailyReviews.values,
       sources,
       intakeDrafts,
       clarifications: normalizedClarifications.values,
@@ -1353,6 +1385,7 @@ function createDefaultState(): StoredState {
   return {
     items: [],
     dailyTasks: [],
+    dailyReviews: [],
     sources: [],
     intakeDrafts: [],
     clarifications: [],
@@ -2449,6 +2482,54 @@ function normalizeDailyTasks(value: unknown, validTaskIds: Set<string>): Normali
   const bounded = boundDailyTasks(values);
   dropped += Math.max(0, value.length - bounded.length);
   return { values: bounded, dropped, repaired };
+}
+
+function normalizeDailyReviews(value: unknown): NormalizedCollection<DailyReview> {
+  if (!Array.isArray(value)) return { values: [], dropped: value === undefined ? 0 : 1, repaired: 0 };
+  const values: DailyReview[] = [];
+  const dates = new Set<string>();
+  let dropped = 0;
+  let repaired = 0;
+  for (const entry of value.slice(0, 5_000)) {
+    const input = plainRecord(entry);
+    const date = safeNonEmptyString(input?.date, 10);
+    const summary = safeNonEmptyString(input?.summary, 2_000);
+    if (!input || !date || !isCalendarDateKey(date) || !summary || dates.has(date)) {
+      dropped += 1;
+      continue;
+    }
+    dates.add(date);
+    const totalTasks = isBoundedInteger(input.totalTasks, 0, 10_000) ? Number(input.totalTasks) : 0;
+    const completedTasks = isBoundedInteger(input.completedTasks, 0, totalTasks) ? Number(input.completedTasks) : 0;
+    const plannedMinutes = isBoundedInteger(input.plannedMinutes, 0, 100_800) ? Number(input.plannedMinutes) : 0;
+    const completedMinutes = isBoundedInteger(input.completedMinutes, 0, 100_800) ? Number(input.completedMinutes) : 0;
+    if (totalTasks !== input.totalTasks || completedTasks !== input.completedTasks || plannedMinutes !== input.plannedMinutes || completedMinutes !== input.completedMinutes) repaired += 1;
+    const unfinishedTaskTitles = Array.isArray(input.unfinishedTaskTitles)
+      ? [...new Set(input.unfinishedTaskTitles.flatMap((title) => {
+          const normalized = safeNonEmptyString(title, 120);
+          return normalized ? [normalized] : [];
+        }))].slice(0, 100)
+      : [];
+    if (!Array.isArray(input.unfinishedTaskTitles) || unfinishedTaskTitles.length !== input.unfinishedTaskTitles.length) repaired += 1;
+    const createdAt = normalizedDate(input.createdAt) ?? new Date().toISOString();
+    const updatedAt = normalizedDate(input.updatedAt) ?? createdAt;
+    values.push({
+      date,
+      summary,
+      note: typeof input.note === "string" ? input.note.trim().slice(0, 4_000) : "",
+      totalTasks,
+      completedTasks,
+      plannedMinutes,
+      completedMinutes,
+      unfinishedTaskTitles,
+      createdAt,
+      updatedAt,
+    });
+  }
+  values.sort((a, b) => b.date.localeCompare(a.date));
+  if (values.length > 730) dropped += values.length - 730;
+  dropped += Math.max(0, value.length - 5_000);
+  return { values: values.slice(0, 730), dropped, repaired };
 }
 
 function normalizeExtractionContext(value: unknown): DdlItem["extraction"] | undefined {

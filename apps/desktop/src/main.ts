@@ -15,11 +15,11 @@ import { testLlmConnection } from "./llm-client.js";
 import { resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
-import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, LearningMissionEvidenceInput, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyReviewInput, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, LearningMissionEvidenceInput, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { ChroniUpdater } from "./updater.js";
 import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface, type ControlCenterRoute } from "./windows.js";
-import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLearningMissionCheckpointInput, validateLearningMissionFileInput, validateLearningMissionNoteInput, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
+import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateDailyReviewInput, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLearningMissionCheckpointInput, validateLearningMissionFileInput, validateLearningMissionNoteInput, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
 
 let store: ChroniStore;
 let primaryStore: ChroniStore;
@@ -171,6 +171,7 @@ function installIpc(): void {
     if (taskFingerprint(snapshot) !== previousFingerprint) scheduleAgentForTaskChange();
     return publishStoreSnapshot(snapshot);
   });
+  ipcMain.handle("chroni:daily-review-save", (_event, input: DailyReviewInput) => publishStoreSnapshot(store.saveDailyReview(validateDailyReviewInput(input))));
   ipcMain.handle("chroni:learning-mission-file", async (_event, missionId: string, rawInput: unknown) => {
     const input = validateLearningMissionFileInput(rawInput);
     const evidence = await localFileEvidence(input.path, input.linkedDeliverable);
@@ -727,7 +728,7 @@ function controlCenterRoute(value: unknown): ControlCenterRoute | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const candidate = value as Record<string, unknown>;
   const route: ControlCenterRoute = {};
-  if (candidate.tab === "missions" || candidate.tab === "schedule" || candidate.tab === "daily" || candidate.tab === "agent" || candidate.tab === "preferences" || candidate.tab === "services") route.tab = candidate.tab;
+  if (candidate.tab === "missions" || candidate.tab === "schedule" || candidate.tab === "daily" || candidate.tab === "review" || candidate.tab === "agent" || candidate.tab === "preferences" || candidate.tab === "services") route.tab = candidate.tab;
   if (candidate.tab === "settings") route.tab = "preferences";
   if (candidate.tab === "demo" || candidate.tab === "about") route.tab = "services";
   if (typeof candidate.taskId === "string" && candidate.taskId.trim()) route.taskId = candidate.taskId.trim().slice(0, 200);

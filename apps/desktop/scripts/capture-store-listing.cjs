@@ -98,11 +98,47 @@ app.whenReady().then(async () => {
     await resetScrollPositions(controlWindow);
     await capture(controlWindow, "02-learning-mission.png", ".mission-workspace");
 
-    await selectNavigation(controlWindow, "执行 Agent");
-    await capture(controlWindow, "03-agent.png", ".agent-pane");
+    await selectNavigation(controlWindow, "智能整理");
+    await capture(controlWindow, "03-smart-organize.png", ".smart-workspace");
+    controlWindow.setContentSize(900, 700);
+    await waitForStableFrame(controlWindow);
+    const compactWorkspace = await controlWindow.webContents.executeJavaScript(`(() => {
+      const workspace = document.querySelector('.smart-workspace');
+      const intake = document.querySelector('.smart-intake');
+      if (!(workspace instanceof HTMLElement) || !(intake instanceof HTMLElement)) return null;
+      const workspaceRect = workspace.getBoundingClientRect();
+      const intakeRect = intake.getBoundingClientRect();
+      return {
+        bodyOverflow: document.documentElement.scrollWidth > window.innerWidth,
+        intakeInside: intakeRect.left >= workspaceRect.left && intakeRect.right <= workspaceRect.right + 1,
+        columns: getComputedStyle(intake).gridTemplateColumns,
+      };
+    })()`);
+    assert(compactWorkspace && !compactWorkspace.bodyOverflow && compactWorkspace.intakeInside, `Compact smart workspace overflowed: ${JSON.stringify(compactWorkspace)}`);
+    controlWindow.setContentSize(screenshotSize.width, screenshotSize.height);
+    await waitForStableFrame(controlWindow);
 
-    await selectNavigation(controlWindow, "任务来源");
-    await capture(controlWindow, "04-sources.png", ".upload-box");
+    await selectNavigation(controlWindow, "每日回顾");
+    await waitForSelector(controlWindow, ".daily-review-workspace");
+    await capture(controlWindow, "04-daily-review.png", ".daily-review-workspace");
+    controlWindow.setContentSize(900, 700);
+    await waitForStableFrame(controlWindow);
+    const compactReview = await controlWindow.webContents.executeJavaScript(`(() => {
+      const workspace = document.querySelector('.daily-review-workspace');
+      const rows = [...document.querySelectorAll('.review-activity-row')];
+      if (!(workspace instanceof HTMLElement) || !rows.length) return null;
+      const titles = rows.map((row) => row.querySelector('h4')).filter((title) => title instanceof HTMLElement);
+      return {
+        bodyOverflow: document.documentElement.scrollWidth > window.innerWidth,
+        workspaceOverflow: workspace.scrollWidth > workspace.clientWidth + 1,
+        clippedTitle: titles.some((title) => title.scrollWidth > title.clientWidth + 1 || title.scrollHeight > title.clientHeight + 1),
+        hasHistory: Boolean(document.querySelector('.review-history-list')),
+        hasWriting: Boolean(document.querySelector('.review-writing-panel')),
+      };
+    })()`);
+    assert(compactReview && !compactReview.bodyOverflow && !compactReview.workspaceOverflow && !compactReview.clippedTitle && compactReview.hasHistory && compactReview.hasWriting, `Compact daily review overflowed or clipped content: ${JSON.stringify(compactReview)}`);
+    controlWindow.setContentSize(screenshotSize.width, screenshotSize.height);
+    await waitForStableFrame(controlWindow);
 
     petWindow = new BrowserWindow({
       width: 360,
@@ -274,6 +310,51 @@ function seedDailyTasks(store, now) {
   });
   const completed = store.snapshot().dailyTasks.find((task) => task.title === "梳理课程项目要求");
   if (completed) store.updateDailyTask(completed.id, { completedDates: [todayKey] });
+  const reviewTasks = store.snapshot().dailyTasks.filter((task) => task.scheduledStartAt && localDateKey(new Date(task.scheduledStartAt)) === todayKey && !task.dismissed);
+  const completedReviewTasks = reviewTasks.filter((task) => task.completedDates.includes(todayKey));
+  const reviewMinutes = (task) => task.allDay ? 0 : task.scheduledStartAt && task.scheduledEndAt
+    ? Math.max(15, Math.round((new Date(task.scheduledEndAt).getTime() - new Date(task.scheduledStartAt).getTime()) / 60_000))
+    : 30;
+  store.saveDailyReview({
+    date: todayKey,
+    summary: "今天已完成课程项目要求梳理，明确了核心 SQL 查询和实验截图两条主线。报告核对、查询验证与结果整理仍需按时间块继续推进。",
+    note: "先完成查询验证，再集中处理截图与报告排版。",
+    totalTasks: reviewTasks.length,
+    completedTasks: completedReviewTasks.length,
+    plannedMinutes: reviewTasks.reduce((sum, task) => sum + reviewMinutes(task), 0),
+    completedMinutes: completedReviewTasks.reduce((sum, task) => sum + reviewMinutes(task), 0),
+    unfinishedTaskTitles: reviewTasks.filter((task) => !task.completedDates.includes(todayKey)).map((task) => task.title),
+  });
+  const previousDay = new Date(now);
+  previousDay.setDate(previousDay.getDate() - 1);
+  const previousKey = `${previousDay.getFullYear()}-${String(previousDay.getMonth() + 1).padStart(2, "0")}-${String(previousDay.getDate()).padStart(2, "0")}`;
+  store.saveDailyReview({
+    date: previousKey,
+    summary: "完成资料归档与需求核对，为今天的课程项目推进腾出了连续时间。",
+    note: "上午专注度更好，复杂任务优先放在第一段时间。",
+    totalTasks: 5,
+    completedTasks: 4,
+    plannedMinutes: 280,
+    completedMinutes: 220,
+    unfinishedTaskTitles: ["补充边界测试数据"],
+  });
+  const earlierDay = new Date(now);
+  earlierDay.setDate(earlierDay.getDate() - 3);
+  const earlierKey = `${earlierDay.getFullYear()}-${String(earlierDay.getMonth() + 1).padStart(2, "0")}-${String(earlierDay.getDate()).padStart(2, "0")}`;
+  store.saveDailyReview({
+    date: earlierKey,
+    summary: "完成论文阅读和展示结构初稿，保留了需要进一步验证的可用性问题。",
+    note: "阅读与输出交替进行比连续阅读更有效。",
+    totalTasks: 4,
+    completedTasks: 3,
+    plannedMinutes: 240,
+    completedMinutes: 180,
+    unfinishedTaskTitles: ["验证展示流程"],
+  });
+}
+
+function localDateKey(value) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
 function createTask(now, fixture) {

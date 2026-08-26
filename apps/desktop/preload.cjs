@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("chroni", {
   createDailyTask: (input) => ipcRenderer.invoke("chroni:daily-task-create", input),
   updateDailyTask: (id, patch) => ipcRenderer.invoke("chroni:daily-task-update", id, patch),
   deleteDailyTask: (id) => ipcRenderer.invoke("chroni:daily-task-delete", id),
+  saveDailyReview: (input) => ipcRenderer.invoke("chroni:daily-review-save", input),
   attachLearningMissionFile: (missionId, input) => ipcRenderer.invoke("chroni:learning-mission-file", missionId, input),
   addLearningMissionNote: (missionId, input) => ipcRenderer.invoke("chroni:learning-mission-note", missionId, input),
   recordLearningMissionCheckpoint: (missionId, input) => ipcRenderer.invoke("chroni:learning-mission-checkpoint", missionId, input),

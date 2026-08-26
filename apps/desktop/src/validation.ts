@@ -1,4 +1,4 @@
-import type { AgentMemory, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniInputFile, ChroniLlmSettings, DailyTaskCreateInput, DailyTaskPatch, DailyTaskSubtask, ExplicitPreferenceInput, ChroniPreferencesPatch, IntakePayload, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, PlanningPreferenceKey, TaskPlanStep, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentMemory, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniInputFile, ChroniLlmSettings, DailyReviewInput, DailyTaskCreateInput, DailyTaskPatch, DailyTaskSubtask, ExplicitPreferenceInput, ChroniPreferencesPatch, IntakePayload, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, PlanningPreferenceKey, TaskPlanStep, TaskPlanUpdatePayload } from "./shared/types.js";
 
 const MAX_TEXT_LENGTH = 2 * 1024 * 1024;
 const MAX_FILES = 32;
@@ -106,6 +106,29 @@ export function validateDailyTaskPatch(value: unknown): DailyTaskPatch {
   }
   validateDailyTaskRange(result.scheduledStartAt ?? undefined, result.scheduledEndAt ?? undefined);
   return result;
+}
+
+export function validateDailyReviewInput(value: unknown, dateOverride?: string): DailyReviewInput {
+  const input = record(value, "daily review");
+  knownKeys(input, ["date", "summary", "note", "totalTasks", "completedTasks", "plannedMinutes", "completedMinutes", "unfinishedTaskTitles"], "daily review");
+  const date = dateOverride ?? input.date;
+  if (typeof date !== "string" || !isCalendarDateKey(date)) fail("daily review.date must be a valid YYYY-MM-DD date.");
+  if (dateOverride && input.date !== undefined && input.date !== dateOverride) fail("daily review.date must match the route date.");
+  const totalTasks = boundedNumber(input.totalTasks, 0, 10_000, "daily review.totalTasks", true);
+  const completedTasks = boundedNumber(input.completedTasks, 0, 10_000, "daily review.completedTasks", true);
+  if (completedTasks > totalTasks) fail("daily review.completedTasks cannot exceed totalTasks.");
+  if (!Array.isArray(input.unfinishedTaskTitles) || input.unfinishedTaskTitles.length > 100) fail("daily review.unfinishedTaskTitles must be an array with at most 100 entries.");
+  const unfinishedTaskTitles = input.unfinishedTaskTitles.map((title, index) => nonEmptyString(title, `daily review.unfinishedTaskTitles[${index}]`, 120).trim());
+  return {
+    date,
+    summary: nonEmptyString(input.summary, "daily review.summary", 2_000).trim(),
+    note: boundedString(input.note, "daily review.note", 4_000).trim(),
+    totalTasks,
+    completedTasks,
+    plannedMinutes: boundedNumber(input.plannedMinutes, 0, 100_800, "daily review.plannedMinutes", true),
+    completedMinutes: boundedNumber(input.completedMinutes, 0, 100_800, "daily review.completedMinutes", true),
+    unfinishedTaskTitles: [...new Set(unfinishedTaskTitles)],
+  };
 }
 
 export function validateLearningMissionFileInput(value: unknown): LearningMissionFileInput {

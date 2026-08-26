@@ -12,6 +12,7 @@ const builderSchema = JSON.parse(readFileSync(electronBuilderRequire.resolve("ap
 const releaseWorkflow = readFileSync(new URL("../../../.github/workflows/release-build.yml", import.meta.url), "utf8");
 const storeWorkflow = readFileSync(new URL("../../../.github/workflows/store-build.yml", import.meta.url), "utf8");
 const rendererSource = readFileSync(new URL("../src/renderer/src/main.tsx", import.meta.url), "utf8");
+const dailyReviewSource = readFileSync(new URL("../src/renderer/src/components/DailyReviewWorkspace.tsx", import.meta.url), "utf8");
 const rendererTypes = readFileSync(new URL("../src/renderer/src/vite-env.d.ts", import.meta.url), "utf8");
 const preloadSource = readFileSync(new URL("../preload.cjs", import.meta.url), "utf8");
 const mainSource = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
@@ -101,14 +102,23 @@ test("public UI restores the animated companion without dedicated competition or
   assert.doesNotMatch(rendererSource, /selectTab\("demo"\)|selectTab\("about"\)|>GOAI 演示<|>关于</);
 });
 
-test("control center keeps all six product workspaces directly accessible", () => {
-  for (const label of ["今日执行", "学习任务", "任务来源", "执行 Agent", "偏好设置", "运行状态"]) assert.match(rendererSource, new RegExp(`>${label}<`));
+test("control center keeps the six core product workspaces directly accessible", () => {
+  for (const label of ["今日执行", "每日回顾", "学习任务", "智能整理", "偏好设置", "运行状态"]) assert.match(rendererSource, new RegExp(`>${label}<`));
   assert.match(rendererSource, /useState<ControlTab>\("daily"\)/);
+  assert.match(rendererSource, /\{tab === "review" && <DailyReviewWorkspace/);
   assert.match(rendererSource, /\{tab === "preferences" && <PreferencesPane/);
   assert.match(rendererSource, /\{tab === "services" && <ServicesPane/);
   assert.match(rendererSource, /<DemoDataTools setSnapshot=\{setSnapshot\}/);
   assert.match(rendererSource, /api\.getUpdateStatus\(\)/);
   assert.match(windowsSource, /label: "偏好设置", click: \(\) => showControlCenter\(\{ tab: "preferences" \}\)/);
-  assert.match(mainSource, /candidate\.tab === "preferences".*candidate\.tab === "services"/);
-  assert.match(rendererTypes, /"agent" \| "preferences" \| "services"/);
+  assert.match(mainSource, /candidate\.tab === "review".*candidate\.tab === "preferences".*candidate\.tab === "services"/);
+  assert.match(rendererTypes, /"daily" \| "review" \| "agent"/);
+  assert.match(windowsSource, /label: "每日回顾", click: \(\) => showControlCenter\(\{ tab: "review" \}\)/);
+});
+
+test("daily review is a date-based persisted workspace instead of a blocking dialog", () => {
+  for (const marker of ["回顾日历", "最近回顾", "活动轨迹", "整理与反思", "待延续到后续计划", "saveDailyReview"]) assert.match(dailyReviewSource, new RegExp(marker));
+  assert.match(dailyReviewSource, /unsavedDrafts/);
+  assert.match(dailyReviewSource, /snapshot\.dailyReviews/);
+  assert.doesNotMatch(dailyReviewSource, /aria-modal|daily-review-dialog|daily-review-backdrop/);
 });

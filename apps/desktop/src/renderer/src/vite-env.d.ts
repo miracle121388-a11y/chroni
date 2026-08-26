@@ -1,10 +1,10 @@
 /// <reference types="vite/client" />
 
-import type { AgentEvidenceExportResult, AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ChroniUpdateStatus, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, LlmConnectionResult, PetActionCommand, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
+import type { AgentEvidenceExportResult, AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ChroniUpdateStatus, DailyReviewInput, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, LlmConnectionResult, PetActionCommand, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
 
 declare global {
   type ChroniControlRoute = {
-    tab?: "missions" | "schedule" | "daily" | "agent" | "preferences" | "services";
+    tab?: "missions" | "schedule" | "daily" | "review" | "agent" | "preferences" | "services";
     taskId?: string;
     focus?: "clarifications";
   };
@@ -27,6 +27,7 @@ declare global {
       createDailyTask(input: DailyTaskCreateInput): Promise<ChroniSnapshot>;
       updateDailyTask(id: string, patch: DailyTaskPatch): Promise<ChroniSnapshot>;
       deleteDailyTask(id: string): Promise<ChroniSnapshot>;
+      saveDailyReview(input: DailyReviewInput): Promise<ChroniSnapshot>;
       attachLearningMissionFile(missionId: string, input: LearningMissionFileInput): Promise<ChroniSnapshot>;
       addLearningMissionNote(missionId: string, input: LearningMissionNoteInput): Promise<ChroniSnapshot>;
       recordLearningMissionCheckpoint(missionId: string, input: LearningMissionCheckpointInput): Promise<ChroniSnapshot>;

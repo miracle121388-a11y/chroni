@@ -174,7 +174,7 @@ app.whenReady().then(async () => {
     console.log(`Daily capture viewport: ${JSON.stringify(dailyScroll)}`);
     console.log(`Daily capture visible labels: ${JSON.stringify(dailyVisible)}`);
     writeFileSync(dailyOutputPath, (await window.webContents.capturePage()).toPNG());
-    await selectNavigation(window, "执行 Agent");
+    await selectNavigation(window, "智能整理");
     writeFileSync(agentOutputPath, (await window.webContents.capturePage()).toPNG());
 
     await selectNavigation(window, "学习任务");
@@ -191,7 +191,7 @@ app.whenReady().then(async () => {
     window.destroy();
     console.log(`Learning Mission screenshot written to ${outputPath}`);
     console.log(`Daily execution screenshot written to ${dailyOutputPath}`);
-    console.log(`Learning execution Agent screenshot written to ${agentOutputPath}`);
+    console.log(`Smart organization workspace screenshot written to ${agentOutputPath}`);
     console.log(`Narrow layout screenshot written to ${narrowOutputPath}`);
     console.log(`Compact layout screenshot written to ${compactOutputPath}`);
   } finally {

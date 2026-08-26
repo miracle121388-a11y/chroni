@@ -271,6 +271,23 @@ export type DailyTaskPatch = Partial<Pick<DailyTask, "title" | "notes" | "color"
   recurrenceEndsAt?: string | null;
 };
 
+export type DailyReview = {
+  date: string;
+  summary: string;
+  note: string;
+  totalTasks: number;
+  completedTasks: number;
+  plannedMinutes: number;
+  completedMinutes: number;
+  unfinishedTaskTitles: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DailyReviewInput = Pick<DailyReview,
+  "date" | "summary" | "note" | "totalTasks" | "completedTasks" | "plannedMinutes" | "completedMinutes" | "unfinishedTaskTitles"
+>;
+
 export type DdlExtractionContext = {
   contextExcerpt: string;
   deliverables: string[];
@@ -636,6 +653,7 @@ export type ServiceStatus = {
 export type ChroniSnapshot = {
   items: DdlItem[];
   dailyTasks: DailyTask[];
+  dailyReviews: DailyReview[];
   learningMissions: LearningMission[];
   sources: SourceRecord[];
   intakeDrafts: IntakeDraft[];

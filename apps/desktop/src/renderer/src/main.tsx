@@ -12,9 +12,10 @@ import {
   CHRONI_MANAGED_LLM_BASE_URL,
   CHRONI_MANAGED_LLM_MODEL,
 } from "../../shared/types";
-import type { AgentMemory, CompanionState, DailyTask, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ChroniUpdateStatus, ExtractResult, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, SampleDataScenario, SampleDataStatus, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
+import type { AgentMemory, CompanionState, DailyTask, DdlItem, ChroniInputFile, ChroniLlmSettings, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ChroniUpdateStatus, Importance, IntakePayload, IntakeResult, ItemPatch, PetAction, PetActionCommand, SampleDataScenario, SampleDataStatus, ServiceStatus, SourceRecord, TaskPlan } from "../../shared/types";
 import { BehaviorMemoryPane, ClarificationPanel, TaskDetailPane } from "./components/AgentWorkspace";
 import { DailyPlanner } from "./components/DailyPlanner";
+import { DailyReviewWorkspace } from "./components/DailyReviewWorkspace";
 import { LearningMissionWorkspace } from "./components/LearningMissionWorkspace";
 import { UiDateTimeField } from "./components/UiDateTimeField";
 import { UiIcon } from "./components/UiIcon";
@@ -522,6 +523,8 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
 
 function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
   const [tab, setTab] = useState<ControlTab>("daily");
+  const [plannerDate, setPlannerDate] = useState(() => dailyDateKey(new Date()));
+  const [reviewDate, setReviewDate] = useState(() => dailyDateKey(new Date()));
   const [navigation, setNavigation] = useState<{ route: ChroniControlRoute; sequence: number }>({ route: {}, sequence: 0 });
   const pendingCount = snapshot.items.filter((item) => !item.completed).length;
   const today = new Date();
@@ -529,7 +532,8 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
   const todayDailyCount = snapshot.dailyTasks.filter((task) => !task.dismissed && dailyTaskOccursOn(task, today) && !task.completedDates.includes(todayKey)).length;
   const clarificationCount = snapshot.clarifications.filter((item) => item.status === "pending" && item.required).length;
   useEffect(() => api.onControlNavigate((route) => {
-    if (route.tab) setTab(route.tab);
+    if (route.tab === "agent") setTab("schedule");
+    else if (route.tab) setTab(route.tab);
     else if (route.taskId || route.focus === "clarifications") setTab("schedule");
     setNavigation((current) => ({ route, sequence: current.sequence + 1 }));
   }), []);
@@ -555,9 +559,9 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
         </div>
         <nav className="sidebar-primary" aria-label="主要功能">
           <button title="今日执行" className={tab === "daily" ? "active" : ""} aria-current={tab === "daily" ? "page" : undefined} onClick={() => selectTab("daily")}><UiIcon name="calendar" /><span>今日执行</span></button>
+          <button title="每日回顾" className={tab === "review" ? "active" : ""} aria-current={tab === "review" ? "page" : undefined} onClick={() => selectTab("review")}><UiIcon name="review" /><span>每日回顾</span></button>
           <button title="学习任务" className={tab === "missions" ? "active" : ""} aria-current={tab === "missions" ? "page" : undefined} onClick={() => selectTab("missions")}><UiIcon name="tasks" /><span>学习任务</span></button>
-          <button title="任务来源" className={tab === "schedule" ? "active" : ""} aria-current={tab === "schedule" ? "page" : undefined} onClick={() => selectTab("schedule")}><UiIcon name="inbox" /><span>任务来源</span></button>
-          <button title="执行 Agent" className={tab === "agent" ? "active" : ""} aria-current={tab === "agent" ? "page" : undefined} onClick={() => selectTab("agent")}><UiIcon name="spark" /><span>执行 Agent</span></button>
+          <button title="智能整理" className={tab === "schedule" ? "active" : ""} aria-current={tab === "schedule" ? "page" : undefined} onClick={() => selectTab("schedule")}><UiIcon name="spark" /><span>智能整理</span></button>
         </nav>
         <nav className="sidebar-utility" aria-label="设置与状态">
           <button title="偏好设置" className={tab === "preferences" ? "active" : ""} aria-current={tab === "preferences" ? "page" : undefined} onClick={() => selectTab("preferences")}><UiIcon name="settings" /><span>偏好设置</span></button>
@@ -569,7 +573,8 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
       </aside>
       <section className="content">
         {tab === "missions" && <LearningMissionWorkspace snapshot={snapshot} setSnapshot={setSnapshot} />}
-        {tab === "daily" && <DailyPlanner snapshot={snapshot} setSnapshot={setSnapshot} onOpenSources={() => selectTab("schedule")} />}
+        {tab === "daily" && <DailyPlanner snapshot={snapshot} setSnapshot={setSnapshot} initialDate={plannerDate} onOpenSources={() => selectTab("schedule")} onOpenReview={(date) => { setPlannerDate(date); setReviewDate(date); selectTab("review"); }} />}
+        {tab === "review" && <DailyReviewWorkspace snapshot={snapshot} setSnapshot={setSnapshot} initialDate={reviewDate} onOpenPlanner={(date) => { setPlannerDate(date); selectTab("daily"); }} />}
         {tab === "schedule" && <CorrectionPane snapshot={snapshot} setSnapshot={setSnapshot} navigation={navigation} />}
         {tab === "agent" && <AgentPane snapshot={snapshot} setSnapshot={setSnapshot} />}
         {tab === "preferences" && <PreferencesPane preferences={snapshot.preferences} services={snapshot.services} setSnapshot={setSnapshot} />}
@@ -921,8 +926,6 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
 function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { navigation: { route: ChroniControlRoute; sequence: number } }) {
   const scheduleClock = useScheduleClock();
   const [manual, setManual] = useState("");
-  const [preview, setPreview] = useState<ExtractResult | null>(null);
-  const [previewPayload, setPreviewPayload] = useState<IntakePayload | null>(null);
   const [feedback, setFeedback] = useState("");
   const [itemFilter, setItemFilter] = useState<"active" | "completed" | "all">("active");
   const [draggingFiles, setDraggingFiles] = useState(false);
@@ -930,17 +933,17 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const manualInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const fileImportMode = useRef<"preview" | "fill">("preview");
   const fileOperationRef = useRef(false);
   const clarificationRef = useRef<HTMLDivElement>(null);
   const isBusy = !!busyMessage;
-  const isFirstRun = !snapshot.items.length && !snapshot.sources.length && !preview;
   const summary = useMemo(() => fullScheduleSummary(snapshot.items, new Date(scheduleClock)), [scheduleClock, snapshot.items]);
   const actionableSummary = useMemo(() => visibleScheduleSummary(snapshot.items, new Date(scheduleClock)), [scheduleClock, snapshot.items]);
   const snoozedCount = summary.active - actionableSummary.active;
   const itemGroups = useMemo(() => buildControlScheduleGroups(snapshot.items, itemFilter, new Date(scheduleClock)), [itemFilter, scheduleClock, snapshot.items]);
   const filteredCount = itemGroups.reduce((count, group) => count + group.items.length, 0);
   const selectedTask = snapshot.items.find((item) => item.id === selectedTaskId);
+  const latest = snapshot.agent.latestRun;
+  const dashboard = buildAgentDashboard(latest);
 
   useEffect(() => {
     if (!navigation.sequence) return;
@@ -972,8 +975,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
     setFeedback("");
     try {
       const result = await api.quickAdd(manual);
-      setSnapshot(result.snapshot);
-      setFeedback(intakeResultMessage(result));
+      await finishIntake(result);
       if (result.ok) setManual("");
     } catch (error) {
       setFeedback(formatOperationError(error, "识别失败"));
@@ -982,7 +984,37 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
     }
   }
 
-  async function extractFiles(fileList: FileList | null, fill: boolean) {
+  async function finishIntake(result: IntakeResult): Promise<void> {
+    setSnapshot(result.snapshot);
+    const intakeMessage = intakeResultMessage(result);
+    if (!result.ok || !result.created.length) {
+      setFeedback(intakeMessage);
+      return;
+    }
+    setBusyMessage("正在整理今日安排...");
+    try {
+      setSnapshot(await api.runDeadlineAgent());
+      setFeedback(`${intakeMessage} 今日安排已同步更新。`);
+    } catch (error) {
+      setFeedback(`${intakeMessage} ${formatOperationError(error, "今日安排稍后会自动更新")}`);
+    }
+  }
+
+  async function runOrganizer(): Promise<void> {
+    if (isBusy) return;
+    setBusyMessage("正在检查任务与可用时间...");
+    setFeedback("");
+    try {
+      setSnapshot(await api.runDeadlineAgent());
+      setFeedback("今日安排已更新，手动调整过的时间保持不变。");
+    } catch (error) {
+      setFeedback(formatOperationError(error, "暂时无法更新今日安排"));
+    } finally {
+      setBusyMessage("");
+    }
+  }
+
+  async function extractFiles(fileList: FileList | null) {
     if (fileOperationRef.current) {
       setFeedback("上一批文件仍在处理中，请稍候。");
       return;
@@ -999,18 +1031,9 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
       const payload: IntakePayload = { kind: "files", files };
       const usingLlm = snapshot.services.model === "ready";
       setBusyMessage(usingLlm
-        ? (fill ? "正在解析文件并交给大模型..." : "正在解析文件并由大模型抽取...")
-        : (fill ? "正在填入日程..." : "正在预览抽取..."));
-      if (fill) {
-        const result = await api.intake(payload);
-        setSnapshot(result.snapshot);
-        setFeedback(intakeResultMessage(result));
-        setPreview(null);
-        setPreviewPayload(null);
-      } else {
-        setPreview(await api.extract(payload));
-        setPreviewPayload(payload);
-      }
+        ? "正在读取文件并智能整理..."
+        : "正在读取文件并整理日程...");
+      await finishIntake(await api.intake(payload));
     } catch (error) {
       setFeedback(formatOperationError(error, "文件处理失败"));
     } finally {
@@ -1023,145 +1046,82 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
   async function previewDroppedFiles(event: React.DragEvent) {
     event.preventDefault();
     setDraggingFiles(false);
-    await extractFiles(event.dataTransfer.files, false);
-  }
-
-  async function commitPreview(): Promise<void> {
-    if (!preview || !previewPayload || fileOperationRef.current) {
-      if (fileOperationRef.current) setFeedback("上一批文件仍在处理中，请稍候。");
-      return;
-    }
-    fileOperationRef.current = true;
-    setBusyMessage("正在重新读取并处理文件...");
-    setFeedback("");
-    try {
-      const result = await api.intake(previewPayload);
-      setSnapshot(result.snapshot);
-      setFeedback(intakeResultMessage(result));
-      setPreview(null);
-      setPreviewPayload(null);
-    } catch (error) {
-      setFeedback(formatOperationError(error, "文件处理失败"));
-    } finally {
-      fileOperationRef.current = false;
-      setBusyMessage("");
-    }
+    await extractFiles(event.dataTransfer.files);
   }
 
   if (selectedTask) return <TaskDetailPane task={selectedTask} snapshot={snapshot} setSnapshot={setSnapshot} onBack={() => setSelectedTaskId("")} />;
 
   return (
-    <div className="pane">
-      <header className="pane-head">
+    <div className="pane smart-workspace">
+      <header className="pane-head smart-workspace-head">
         <div>
-          <p>{formatCalendarHeading(scheduleClock)}</p>
-          <h2>日程</h2>
+          <p>智能整理 · {formatCalendarHeading(scheduleClock)}</p>
+          <h2>收集与安排</h2>
         </div>
+        <button className="smart-organize-button" type="button" disabled={isBusy} onClick={() => void runOrganizer()}><UiIcon name="spark" />{busyMessage.includes("今日安排") || busyMessage.includes("可用时间") ? "整理中" : "更新今日安排"}</button>
       </header>
-      <div className="summary-line">
+      <div className="summary-line smart-summary-line">
         <span>{summary.active} 待处理</span>
         <span className={actionableSummary.overdue ? "alert" : ""}>{actionableSummary.overdue} 逾期</span>
         <span>{actionableSummary.today} 今日</span>
         {snoozedCount > 0 && <span>{snoozedCount} 稍后</span>}
       </div>
-      {isFirstRun && (
-        <section className="start-panel">
-          <div>
-            <h3>从一件要紧的事开始</h3>
-            <p>写下一句截止时间，或把课程通知、截图和 PDF 交给 Chroni。</p>
-          </div>
-          <div className="start-actions">
-            <button type="button" disabled={isBusy} onClick={() => manualInputRef.current?.focus()}>写一句</button>
-            <button type="button" disabled={isBusy} onClick={() => { fileImportMode.current = "preview"; fileInputRef.current?.click(); }}>选择文件</button>
-          </div>
-        </section>
-      )}
-      <div className="manual-row">
-        <input
-          ref={manualInputRef}
-          value={manual}
-          disabled={isBusy}
-          aria-label="快速添加日程"
-          onChange={(event) => setManual(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void addManual();
+      <section className="smart-intake" aria-label="添加材料">
+        <div className="manual-row smart-manual-row">
+          <input
+            ref={manualInputRef}
+            value={manual}
+            disabled={isBusy}
+            aria-label="快速添加任务"
+            onChange={(event) => setManual(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void addManual();
+            }}
+            placeholder="输入一句话，例如：明天 18:00 交实验报告"
+          />
+          <button type="button" disabled={isBusy || !manual.trim()} onClick={() => void addManual()}><UiIcon name="spark" />整理</button>
+        </div>
+        <div
+          className={`upload-box smart-upload-box ${draggingFiles ? "dragging" : ""} ${isBusy ? "busy" : ""}`}
+          aria-busy={isBusy}
+          onDragOver={(event) => {
+            event.preventDefault();
+            if (!draggingFiles && !isBusy) setDraggingFiles(true);
           }}
-          placeholder="快速添加或重新识别：明天 18:00 交实验报告"
-        />
-        <button type="button" disabled={isBusy || !manual.trim()} onClick={() => void addManual()}>识别</button>
-      </div>
+          onDragLeave={() => setDraggingFiles(false)}
+          onDrop={(event) => void previewDroppedFiles(event)}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            disabled={isBusy}
+            onChange={(event) => {
+              const input = event.currentTarget;
+              void extractFiles(input.files).finally(() => { input.value = ""; });
+            }}
+            accept={acceptedFileTypes()}
+          />
+          <div className="upload-copy">
+            <span className="smart-upload-icon" aria-hidden="true"><UiIcon name="inbox" /></span>
+            <div><b>{draggingFiles ? "松开并自动整理" : "拖入材料"}</b><p>文档、表格、PDF 与图片</p></div>
+          </div>
+          <div className="upload-actions">
+            <button type="button" disabled={isBusy} onClick={() => fileInputRef.current?.click()}>选择文件</button>
+          </div>
+        </div>
+      </section>
       {busyMessage && <p className="inline-feedback info" role="status" aria-live="polite">{busyMessage}</p>}
       {feedback && <p className={`inline-feedback ${isPositiveFeedback(feedback) ? "ok" : "warn"}`} role={isPositiveFeedback(feedback) ? "status" : "alert"} aria-live="polite">{feedback}</p>}
       <div ref={clarificationRef}><ClarificationPanel snapshot={snapshot} setSnapshot={setSnapshot} /></div>
-      <div
-        className={`upload-box ${draggingFiles ? "dragging" : ""} ${isBusy ? "busy" : ""}`}
-        aria-busy={isBusy}
-        onDragOver={(event) => {
-          event.preventDefault();
-          if (!draggingFiles && !isBusy) setDraggingFiles(true);
-        }}
-        onDragLeave={() => setDraggingFiles(false)}
-        onDrop={(event) => void previewDroppedFiles(event)}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          hidden
-          disabled={isBusy}
-          onChange={(event) => {
-            const input = event.currentTarget;
-            void extractFiles(input.files, fileImportMode.current === "fill").finally(() => { input.value = ""; });
-          }}
-          accept={acceptedFileTypes()}
-        />
-        <div className="upload-copy">
-          <b>{draggingFiles ? "松开后开始预览" : "把文件交给 Chroni"}</b>
-          <p>支持 TXT、MD、CSV、JSON、ICS、HTML、DOCX、PDF、XLSX、PNG/JPG/WEBP/TIFF；可先预览，也可直接填入日程。</p>
-        </div>
-        <div className="upload-actions">
-          <button type="button" disabled={isBusy} onClick={() => { fileImportMode.current = "preview"; fileInputRef.current?.click(); }}>预览抽取</button>
-          <button type="button" disabled={isBusy} onClick={() => { fileImportMode.current = "fill"; fileInputRef.current?.click(); }}>直接填入</button>
-        </div>
-      </div>
-      {preview && (
-        <div className="extract-preview">
-          <h3>抽取预览</h3>
-          <p className="preview-note">预览仅用于核对，不会保存日程；继续处理时会重新读取原文件，最终结果以处理后的日程或待确认项为准。</p>
-          {!preview.ok && <p className="preview-error">{safeUserMessage(preview.reason, "未能完成抽取，请检查文件内容后重试。")}</p>}
-          {preview.ok && <p className={`inline-feedback ${isPositiveFeedback(preview.message) ? "ok" : "warn"}`}>{safeUserMessage(preview.message, "预览已完成，请核对下面的内容。")}</p>}
-          {preview.extracted.map((input, index) => (
-            <article key={`${input.sourceName}-${input.sourceType}-${index}`}>
-              <b>{input.sourceName}</b>
-              <span>{sourceTypeLabel(input.sourceType)}，抽取 {input.text.length} 字</span>
-            </article>
-          ))}
-          {preview.failures.map((failure, index) => (
-            <article key={`${failure.sourceName}-${failure.sourceType}-failed-${index}`} className="preview-failure">
-              <b>{failure.sourceName}</b>
-              <span>{safeUserMessage(failure.reason, "这个文件未能可靠读取，请检查格式或系统权限。")}</span>
-            </article>
-          ))}
-          {preview.items.map((item) => (
-            <article key={item.id}>
-              <b>{item.title}</b>
-              <span>{importanceLabel(item.importance)} · {formatDue(item.dueAt)} · {remainingText(item.dueAt)}</span>
-            </article>
-          ))}
-          {preview.pendingItems.map((item, index) => (
-            <article key={`${item.sourceName}-${item.title}-pending-${index}`} className="preview-failure">
-              <b>{item.title} · {preview.items.length ? "可稍后完善" : "待确认"}</b>
-              <span>{safeUserMessage(preview.items.length ? item.reason : item.question, preview.items.length ? "不会阻止已识别任务和规划。" : "请补充任务标题或明确的截止时间。")}</span>
-            </article>
-          ))}
-          {!!preview.extracted.length && previewPayload && (
-            <button type="button" disabled={isBusy} onClick={() => void commitPreview()}>{preview.ok ? "确认并处理" : "继续识别并处理"}</button>
-          )}
-        </div>
-      )}
+      <section className="smart-agent-result" aria-label="智能整理状态">
+        <header><div><p>{latest ? `更新于 ${formatAgentTime(latest.completedAt)}` : "尚未生成今日安排"}</p><h3>{latest ? agentStatusLabel(latest.verification.status) : "准备就绪"}</h3></div>{latest && <span>{agentTriggerLabel(latest.trigger)}</span>}</header>
+        {latest ? <><div className="smart-agent-metrics"><div><b>{dashboard.todayBlocks.length}</b><span>今日时间块</span></div><div><b>{formatAgentMinutes(latest.plan.plannedMinutes)}</b><span>已安排</span></div><div><b>{dashboard.highRiskCount}</b><span>高风险</span></div></div>{dashboard.suggestions[0] && <p className="smart-agent-advice"><UiIcon name="spark" /><span>{safeUserMessage(dashboard.suggestions[0], "优先推进临近截止且风险较高的任务。")}</span></p>}</> : <p className="smart-agent-empty">添加任务或材料后，今日安排会在这里更新。</p>}
+      </section>
       <div className="list-toolbar">
         <div>
-          <h3>日程列表</h3>
+          <h3>已整理任务</h3>
           <p>{filteredCount} 条</p>
         </div>
         <div className="segmented">
@@ -1194,7 +1154,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
       ) : (
         <div className="empty">{itemFilter === "completed" ? "完成一件事情后，记录会留在这里。" : "眼下没有待处理的截止事项，可以安心做手头的事。"}</div>
       )}
-      <SourceHistory sources={snapshot.sources} setSnapshot={setSnapshot} />
+      {!!snapshot.sources.length && <details className="smart-source-history"><summary><span>最近导入</span><b>{snapshot.sources.length}</b></summary><SourceHistory sources={snapshot.sources} setSnapshot={setSnapshot} /></details>}
     </div>
   );
 }
@@ -2022,7 +1982,7 @@ type ControlScheduleGroup = {
   items: DdlItem[];
 };
 
-type ControlTab = "missions" | "daily" | "schedule" | "agent" | "preferences" | "services";
+type ControlTab = "missions" | "daily" | "review" | "schedule" | "agent" | "preferences" | "services";
 
 function agentStatusLabel(status: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["verification"]["status"]): string {
   return status === "healthy" ? "安排正常" : status === "critical" ? "需要立即处理" : "需要关注";

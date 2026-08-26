@@ -97,7 +97,7 @@ for (const [file, width, height] of appxAssets) {
 }
 
 const screenshotDirectory = join(root, "docs", "store", "assets", "screenshots", "zh-CN");
-for (const name of ["00-first-run.png", "01-today.png", "02-learning-mission.png", "03-agent.png", "04-sources.png", "05-companion.png"]) {
+for (const name of ["00-first-run.png", "01-today.png", "02-learning-mission.png", "03-smart-organize.png", "04-daily-review.png", "05-companion.png"]) {
   const filePath = join(screenshotDirectory, name);
   assert(existsSync(filePath), `Missing Store screenshot: ${name}. Run pnpm run store:screenshots.`);
   await assertImageSize(filePath, 1440, 900, name);

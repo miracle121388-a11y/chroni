@@ -2,9 +2,9 @@
 
 # Chroni
 
-**A local-first learning execution Agent for evidence-led project-based learning.**
+**A local-first learning execution Agent that turns course material into work you can do today and review at the end of the day.**
 
-Chroni does not complete coursework for students. It turns course requirements into grounded goals, deliverables, success criteria, milestones, daily actions, output evidence, and checkpoints. Optional OpenAI-compatible models such as DeepSeek improve semantic understanding, while local validation, persistence, tools, and fallback retain authority.
+Chroni does not complete coursework for students. It turns course requirements into grounded goals, deliverables, success criteria, milestones, daily actions, output evidence, checkpoints, and a persistent daily review. Optional OpenAI-compatible models such as DeepSeek improve semantic understanding, while local validation, persistence, tools, and fallback retain authority.
 
 ![Chroni Learning Mission workspace](./docs/assets/chroni-learning-mission-v0.2.0.png)
 
@@ -17,9 +17,9 @@ _Actual product UI with isolated synthetic demo data._
 The repository package version is `0.2.1`. Public installer availability, signatures, and notarization status must be checked on [GitHub Releases](https://github.com/miracle121388-a11y/chroni/releases).
 
 1. Install and start Chroni. The **Today** timeline is the default workspace.
-2. Drop a course file onto the companion or import it from **Task Sources**.
+2. Drop a course file onto the companion or import it from **Smart Organize**.
 3. Review grounded goals and milestones in **Learning Tasks**, then choose **Smart plan** in **Today** to place realistic work blocks on the timeline.
-4. Complete a block, record output evidence, and let Chroni adjust the remaining plan.
+4. Complete a block, record output evidence, and let Chroni adjust the remaining plan. At the end of the day, open **Daily Review** to keep the activity trail, reflection, and carry-over items under that date.
 
 ## Capabilities
 
@@ -31,6 +31,7 @@ The repository package version is `0.2.1`. Public installer availability, signat
 | Verification | Local file metadata and SHA-256 or note evidence, milestone-bound checkpoints, actual effort, blockers, and evidence coverage. |
 | Learning execution Agent | Ground, Plan, Act, Verify, Adapt loop with risk/slack/capacity scheduling, local tools, and structured trace. |
 | Daily execution | Day/multi-day/week/month views, overlapping lanes, duration-aware blocks, zoom, drag/replan, history and future dates. |
+| Daily review | A dedicated date-based workspace for completion metrics, the full activity trail, editable summaries, reflections, and unfinished carry-over items. |
 | Local-first | Local state and memory, OS-backed key encoding where available, loopback bearer-token API, no hidden analytics. |
 | Auditability | On-screen operational trace plus default-redacted JSON/Markdown export with mission inventory and SHA-256. |
 

@@ -1,6 +1,6 @@
 # Chroni 本地 HTTP API
 
-Chroni 桌面应用会启动一个仅监听本机回环地址的 HTTP JSON API。它适合连接受信任的本地脚本、快捷指令和自动化工具，用于预览或写入课程任务、读取 Learning Mission、登记证据说明与阶段检查点、管理每日任务、运行学习执行 Agent，以及处理待确认草稿和任务规划。
+Chroni 桌面应用会启动一个仅监听本机回环地址的 HTTP JSON API。它适合连接受信任的本地脚本、快捷指令和自动化工具，用于预览或写入课程任务、读取 Learning Mission、登记证据说明与阶段检查点、管理每日任务与日程总结、运行学习执行 Agent，以及处理待确认草稿和任务规划。
 
 本 API 不是远程服务接口。调用前必须先启动完整的 Chroni 桌面应用；关闭应用后，API 也会停止。
 
@@ -358,6 +358,29 @@ Learning Mission 由课程任务、来源和当前 TaskPlan 自动同步生成�
 - 全天或重复任务必须提供开始时间；`recurrenceEndsAt` 只能与非 `none` 的重复规则一起使用。
 - `subtasks` 最多 30 项，ID 必须唯一。
 - 更新时还可以提交 `completedDates: ["YYYY-MM-DD"]`；日期必须真实有效。排期字段和 `recurrenceEndsAt` 可用 `null` 清除。
+
+### 每日日程总结
+
+| 方法与路径 | 请求体 | 响应与说明 |
+| --- | --- | --- |
+| `GET /api/daily-reviews` | 无 | 返回按日期倒序排列的 `{ ok: true, dailyReviews }`。 |
+| `PUT /api/daily-reviews/:date` | `DailyReviewInput` | 新增或覆盖该自然日的总结，返回更新后的 `snapshot`。 |
+
+日期路径使用真实的 `YYYY-MM-DD`。保存示例：
+
+```json
+{
+  "summary": "完成了实验报告初稿，数据校验需要明天继续。",
+  "note": "先补异常值说明，再统一排版。",
+  "totalTasks": 4,
+  "completedTasks": 3,
+  "plannedMinutes": 240,
+  "completedMinutes": 180,
+  "unfinishedTaskTitles": ["补充异常值说明"]
+}
+```
+
+`summary` 必填，最多 2000 字；`note` 最多 4000 字。任务数和分钟数必须是非负整数，`completedTasks` 不能超过 `totalTasks`。同一日期再次 `PUT` 会保留原始创建时间并更新内容。
 
 ### 学习执行 Agent
 

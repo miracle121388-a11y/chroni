@@ -6,7 +6,9 @@ import { UiDateTimeField } from "./UiDateTimeField";
 type DailyPlannerProps = {
   snapshot: ChroniSnapshot;
   setSnapshot: React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>;
+  initialDate: string;
   onOpenSources(): void;
+  onOpenReview(date: string): void;
 };
 
 type PlannerMode = "day" | "multi" | "week" | "month";
@@ -40,7 +42,7 @@ const colors: Array<{ value: DailyTaskColor; label: string }> = [
   { value: "plum", label: "梅紫" },
 ];
 
-type PlannerIconName = "add" | "check" | "chevron-left" | "chevron-right" | "circle" | "close" | "inbox" | "minus" | "spark";
+type PlannerIconName = "add" | "check" | "chevron-left" | "chevron-right" | "circle" | "close" | "inbox" | "minus" | "review" | "spark";
 
 function PlannerIcon({ name }: { name: PlannerIconName }) {
   return (
@@ -53,13 +55,14 @@ function PlannerIcon({ name }: { name: PlannerIconName }) {
       {name === "check" && <path d="m3.5 8.2 2.8 2.8 6.2-6.2" />}
       {name === "circle" && <circle cx="8" cy="8" r="5" />}
       {name === "inbox" && <rect x="3" y="3" width="10" height="10" rx="1.8" />}
+      {name === "review" && <><path d="M4 2.5h8a1 1 0 0 1 1 1v10H3v-10a1 1 0 0 1 1-1Z" /><path d="M5.3 5.2h5.4M5.3 7.8h5.4m-5.4 2.6h3.2" /></>}
       {name === "spark" && <path className="planner-icon-fill" d="M8 1.8c.45 3.55 2.15 5.25 5.7 5.7C10.15 7.95 8.45 9.65 8 13.2 7.55 9.65 5.85 7.95 2.3 7.5 5.85 7.05 7.55 5.35 8 1.8Z" />}
     </svg>
   );
 }
 
-export function DailyPlanner({ snapshot, setSnapshot, onOpenSources }: DailyPlannerProps) {
-  const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+export function DailyPlanner({ snapshot, setSnapshot, initialDate, onOpenSources, onOpenReview }: DailyPlannerProps) {
+  const [selectedDate, setSelectedDate] = useState(() => fromDateKey(initialDate));
   const [mode, setMode] = useState<PlannerMode>("day");
   const [inboxText, setInboxText] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<string>();
@@ -222,6 +225,7 @@ export function DailyPlanner({ snapshot, setSnapshot, onOpenSources }: DailyPlan
             ))}
           </div>
           <button className="daily-agent-button secondary-action" type="button" disabled={!!busy} onClick={() => void runAgent()}><PlannerIcon name="spark" />{busy === "agent" ? "安排中" : "智能安排"}</button>
+          <button className="daily-review-button secondary-action" type="button" title="每日回顾" aria-label="打开每日回顾" disabled={!!busy} onClick={() => onOpenReview(selectedKey)}><PlannerIcon name="review" /><span>{snapshot.dailyReviews.some((review) => review.date === selectedKey) ? "查看回顾" : "每日回顾"}</span></button>
           <button className="daily-create-button" type="button" disabled={!!busy} onClick={() => createScheduled()}><PlannerIcon name="add" />新建日程</button>
         </div>
       </header>

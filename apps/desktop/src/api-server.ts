@@ -6,7 +6,7 @@ import type { AgentEvidenceExportResult, AgentIcsExportResult, AgentMemoryPatch,
 import { extractPayload, processIntake, reprocessSource } from "./intake.js";
 import type { ChroniStore } from "./store.js";
 import { formatOperationError } from "./shared/errors.js";
-import { InputValidationError, validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLearningMissionCheckpointInput, validateLearningMissionNoteInput, validatePlanActivation, validatePreferenceStatusPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "./validation.js";
+import { InputValidationError, validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateDailyReviewInput, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLearningMissionCheckpointInput, validateLearningMissionNoteInput, validatePlanActivation, validatePreferenceStatusPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "./validation.js";
 
 type SnapshotUpdateReason = "data" | "preferences";
 type SnapshotCallback = (snapshot: ChroniSnapshot, reason: SnapshotUpdateReason) => void;
@@ -150,6 +150,18 @@ async function route(request: IncomingMessage, response: ServerResponse, store: 
   }
   if (request.method === "GET" && pathname === "/api/daily-tasks") {
     sendJson(response, 200, { ok: true, dailyTasks: store.snapshot().dailyTasks.filter((task) => !task.dismissed) });
+    return;
+  }
+  if (request.method === "GET" && pathname === "/api/daily-reviews") {
+    sendJson(response, 200, { ok: true, dailyReviews: store.snapshot().dailyReviews });
+    return;
+  }
+  const dailyReviewRoute = pathname.match(/^\/api\/daily-reviews\/([^/]+)$/);
+  if (request.method === "PUT" && dailyReviewRoute) {
+    const date = decodeURIComponent(dailyReviewRoute[1]);
+    const snapshot = store.saveDailyReview(validateDailyReviewInput(await readJson(request), date));
+    onSnapshot(snapshot, "data");
+    sendJson(response, 200, { ok: true, snapshot });
     return;
   }
   if (request.method === "POST" && pathname === "/api/daily-tasks") {
@@ -406,6 +418,8 @@ function apiEndpoints(): string[] {
     "GET /api/snapshot",
     "GET|POST /api/daily-tasks",
     "PATCH|DELETE /api/daily-tasks/:id",
+    "GET /api/daily-reviews",
+    "PUT /api/daily-reviews/:date",
     "GET /api/learning-missions",
     "GET /api/learning-missions/:id",
     "POST /api/learning-missions/:id/notes",

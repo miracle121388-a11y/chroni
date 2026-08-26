@@ -32,7 +32,7 @@ const searchable = files
   .map((file) => readFileSync(file, "utf8"))
   .join("\n");
 
-for (const marker of ["今日执行", "学习任务", "任务来源", "执行 Agent", "偏好设置", "运行状态", "智能安排"]) {
+for (const marker of ["今日执行", "每日回顾", "学习任务", "智能整理", "偏好设置", "运行状态", "智能安排", "活动轨迹", "整理与反思"]) {
   if (!searchable.includes(marker)) throw new Error(`Product build is missing required UI marker: ${marker}`);
 }
 
@@ -57,7 +57,7 @@ if (animationFrames.length < 100 || animationBytes < 5_000_000) {
   throw new Error(`Product build does not contain the complete desktop companion animation set (${animationFrames.length} PNG files, ${animationBytes} bytes).`);
 }
 
-console.log(`Chroni product asset verification passed: ${animationFrames.length} companion PNG frames (${animationBytes} bytes) and all six workspaces are present.`);
+console.log(`Chroni product asset verification passed: ${animationFrames.length} companion PNG frames (${animationBytes} bytes) and all six core workspaces are present.`);
 
 function walk(directory) {
   return readdirSync(directory).flatMap((name) => {

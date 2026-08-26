@@ -430,6 +430,37 @@ test("daily task API distinguishes missing records from invalid schedules", asyn
   });
 });
 
+test("daily review API saves and lists date-based summaries", async () => {
+  await withStore(async (store) => {
+    const reasons = [];
+    const server = await listenWithRandomPort(store, (_snapshot, reason) => reasons.push(reason));
+    try {
+      const token = await getApiToken(server);
+      const headers = { authorization: `Bearer ${token}` };
+      const payload = {
+        summary: "完成了今日复习与报告初稿。",
+        note: "明天继续校对。",
+        totalTasks: 3,
+        completedTasks: 2,
+        plannedMinutes: 180,
+        completedMinutes: 120,
+        unfinishedTaskTitles: ["校对报告"],
+      };
+      const saved = await apiRequest(server, "PUT", "/api/daily-reviews/2026-08-26", payload, headers);
+      assert.equal(saved.status, 200);
+      assert.equal(saved.body.snapshot.dailyReviews[0].date, "2026-08-26");
+      const listed = await apiRequest(server, "GET", "/api/daily-reviews", undefined, headers);
+      assert.equal(listed.body.dailyReviews.length, 1);
+      assert.equal(listed.body.dailyReviews[0].completedTasks, 2);
+      const invalid = await apiRequest(server, "PUT", "/api/daily-reviews/2026-02-30", payload, headers);
+      assert.equal(invalid.status, 400);
+      assert.deepEqual(reasons, ["data"]);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});
+
 test("clarification and task plan APIs are authenticated, validated, and resumable", async () => {
   await withStore(async (store) => {
     const analysis = analyzeCompleteness({ sourceName: "直接文本", sourceType: "text", text: "下周完成机器学习作业。" }, new Date("2026-07-12T10:00:00+08:00"));

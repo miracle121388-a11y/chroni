@@ -321,3 +321,37 @@ test("deleting a scheduled task archives its record while deleting an inbox task
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("daily reviews are updated by date and persist independently from task changes", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-daily-review-"));
+  try {
+    const store = new ChroniStore(dir);
+    const first = store.saveDailyReview({
+      date: "2026-08-26",
+      summary: "完成两项计划。",
+      note: "专注度不错。",
+      totalTasks: 3,
+      completedTasks: 2,
+      plannedMinutes: 180,
+      completedMinutes: 120,
+      unfinishedTaskTitles: ["整理资料"],
+    }).dailyReviews[0];
+    store.saveDailyReview({
+      date: "2026-08-26",
+      summary: "完成两项计划，资料整理顺延。",
+      note: "明早继续。",
+      totalTasks: 3,
+      completedTasks: 2,
+      plannedMinutes: 180,
+      completedMinutes: 120,
+      unfinishedTaskTitles: ["整理资料"],
+    });
+    const reloaded = new ChroniStore(dir).snapshot().dailyReviews;
+    assert.equal(reloaded.length, 1);
+    assert.equal(reloaded[0].summary, "完成两项计划，资料整理顺延。");
+    assert.equal(reloaded[0].createdAt, first.createdAt);
+    assert.deepEqual(reloaded[0].unfinishedTaskTitles, ["整理资料"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

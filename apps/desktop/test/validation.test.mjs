@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIntakePayload, validateItemPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "../dist/validation.js";
+import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateClarificationAnswer, validateDailyReviewInput, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIntakePayload, validateItemPatch, validatePreferencesPatch, validateTaskPlanUpdate } from "../dist/validation.js";
 
 test("validateIntakePayload accepts supported text and file shapes", () => {
   assert.deepEqual(validateIntakePayload({ kind: "text", text: "tomorrow 18:00 submit report" }), {
@@ -55,6 +55,23 @@ test("daily task validation requires coherent local date-time schedules", () => 
   assert.throws(() => validateDailyTaskCreate({ title: "跨日", scheduledStartAt: "2026-07-15T09:00:00Z", scheduledEndAt: "2026-07-16T10:00:00Z" }), /same local date/);
   assert.throws(() => validateDailyTaskCreate({ title: "重复结束过早", scheduledStartAt: "2026-07-15T09:00:00Z", recurrence: "daily", recurrenceEndsAt: "2026-07-13T23:00:00Z" }), /must not be before/);
   assert.throws(() => validateDailyTaskPatch({ completedDates: ["2026-02-30"] }), /valid YYYY-MM-DD/);
+});
+
+test("daily review validation keeps a coherent historical summary", () => {
+  const input = {
+    date: "2026-08-26",
+    summary: "完成了报告初稿。",
+    note: "明天继续校对。",
+    totalTasks: 3,
+    completedTasks: 2,
+    plannedMinutes: 180,
+    completedMinutes: 120,
+    unfinishedTaskTitles: ["校对报告", "校对报告"],
+  };
+  assert.deepEqual(validateDailyReviewInput(input), { ...input, unfinishedTaskTitles: ["校对报告"] });
+  assert.throws(() => validateDailyReviewInput({ ...input, date: "2026-02-30" }), /valid YYYY-MM-DD/);
+  assert.throws(() => validateDailyReviewInput({ ...input, completedTasks: 4 }), /cannot exceed/);
+  assert.throws(() => validateDailyReviewInput({ ...input, date: "2026-08-25" }, "2026-08-26"), /match the route/);
 });
 
 test("validatePreferencesPatch rejects invalid nested settings", () => {

@@ -9,10 +9,9 @@ const api = window.chroni;
 type SnapshotSetter = React.Dispatch<React.SetStateAction<ChroniSnapshot | null>>;
 
 export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" }: { snapshot: ChroniSnapshot; setSnapshot: SnapshotSetter; variant?: "default" | "agent" }) {
-  const allPending = snapshot.clarifications.filter((item) => item.status === "pending");
-  const pending = variant === "agent" ? allPending : allPending.filter((item) => item.required);
-  const requiredCount = pending.filter((item) => item.required).length;
-  const optionalCount = pending.length - requiredCount;
+  const required = snapshot.clarifications.filter((item) => item.status === "pending" && item.required);
+  const pending = required.slice(0, 1);
+  const remainingCount = Math.max(0, required.length - pending.length);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState("");
   const [feedback, setFeedback] = useState("");
@@ -71,10 +70,11 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
       <header className="clarification-head">
         <div className="clarification-head-main">
           {variant === "agent" && <span className="clarification-mark" aria-hidden="true">?</span>}
-          <div><p>{requiredCount ? "需要你的确认" : "计划后的完善项"}</p><h3 id={`clarification-heading-${variant}`}>{requiredCount ? `有 ${requiredCount} 条必要信息需要补充` : `有 ${optionalCount} 条信息可继续完善`}</h3></div>
+          <div><p>需要确认</p><h3 id={`clarification-heading-${variant}`}>补充这一项后继续整理</h3></div>
         </div>
+        {remainingCount > 0 && <span className="clarification-remaining">稍后还有 {remainingCount} 项</span>}
       </header>
-      {variant === "agent" && <p className="clarification-intro">{requiredCount ? "必要信息确认后会继续创建对应日程；其他完善项不会阻止已生成的任务与规划。" : "主任务和基础规划已经完成；这些信息可按需补充，也可以暂不处理。"}</p>}
+      {variant === "agent" && <p className="clarification-intro">仅在缺少任务标题或截止时间、无法可靠建立日程时确认。</p>}
       {pending.map((item) => {
         const draft = snapshot.intakeDrafts.find((candidate) => candidate.id === item.draftId);
         const sourceId = item.sourceId ?? draft?.sourceId;
