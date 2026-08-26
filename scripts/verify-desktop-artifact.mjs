@@ -29,9 +29,11 @@ const asarPath = platform === "macos"
   : join(packageRoot, "resources", "app.asar");
 
 assert(existsSync(asarPath), `Packaged app.asar is missing: ${asarPath}`);
-const files = asar.listPackage(asarPath).map((file) => file.replace(/^\//, ""));
+const archiveFiles = asar.listPackage(asarPath).map((file) => file.replace(/^[/\\]/, ""));
+const files = archiveFiles.map((file) => file.replaceAll("\\", "/"));
+const archivePathByFile = new Map(files.map((file, index) => [file, archiveFiles[index]]));
 const fileSet = new Set(files);
-const buildManifest = JSON.parse(asar.extractFile(asarPath, "dist/build-manifest.json").toString("utf8"));
+const buildManifest = JSON.parse(asar.extractFile(asarPath, archivePath("dist/build-manifest.json")).toString("utf8"));
 
 assert(buildManifest.schemaVersion === 1, "Packaged build manifest schema is invalid.");
 assert(buildManifest.productName === "Chroni", "Packaged build manifest product name is invalid.");
@@ -39,10 +41,10 @@ assert(buildManifest.version === packageJson.version, "Packaged build manifest v
 assert(buildManifest.variant === expectedVariant, `Packaged variant is ${buildManifest.variant}; expected ${expectedVariant}.`);
 
 const rendererPngs = files.filter((file) => /^dist\/renderer\/assets\/.*\.png$/i.test(file));
-const rendererPngBytes = rendererPngs.reduce((total, file) => total + Number(asar.statFile(asarPath, file).size || 0), 0);
+const rendererPngBytes = rendererPngs.reduce((total, file) => total + Number(asar.statFile(asarPath, archivePath(file)).size || 0), 0);
 const rendererScripts = files
   .filter((file) => /^dist\/renderer\/assets\/.*\.js$/i.test(file))
-  .map((file) => asar.extractFile(asarPath, file).toString("utf8"))
+  .map((file) => asar.extractFile(asarPath, archivePath(file)).toString("utf8"))
   .join("\n");
 
 if (expectedVariant === "product") {
@@ -63,6 +65,10 @@ if (platform === "macos") verifyMacArtifact(packageRoot, asarPath, fileSet);
 else verifyPortableArtifactResources(packageRoot, asarPath, fileSet);
 
 console.log(`Chroni ${platform} ${expectedVariant} artifact verified: ${basename(packageRoot)}, ${rendererPngs.length} companion PNG files, ${rendererPngBytes} bytes.`);
+
+function archivePath(file) {
+  return archivePathByFile.get(file) || file;
+}
 
 function findPackageRoot() {
   if (platform === "macos") {
