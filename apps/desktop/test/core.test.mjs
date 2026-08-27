@@ -1215,6 +1215,32 @@ test("LLM keys are encrypted at rest and reload through the secret codec", () =>
   }
 });
 
+test("ordinary use does not touch system secret storage before a credential is configured", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-secret-idle-test-"));
+  let encryptionAttempts = 0;
+  let decryptionAttempts = 0;
+  try {
+    const store = new ChroniStore(dir, {
+      encrypt: () => {
+        encryptionAttempts += 1;
+        throw new Error("unexpected encryption attempt");
+      },
+      decrypt: () => {
+        decryptionAttempts += 1;
+        throw new Error("unexpected decryption attempt");
+      },
+    });
+
+    store.updatePetPlacement({ displayId: 1, xRatio: 0.5, yRatio: 0.5 });
+    store.updatePreferences({ remindersEnabled: false });
+
+    assert.equal(encryptionAttempts, 0);
+    assert.equal(decryptionAttempts, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("pet placement persists privately without changing the public snapshot", () => {
   const dir = mkdtempSync(join(tmpdir(), "chroni-placement-test-"));
   try {

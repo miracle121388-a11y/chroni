@@ -23,6 +23,7 @@ assert(existsSync(output), "Desktop package output is missing.");
 const require = createRequire(import.meta.url);
 const electronBuilderRequire = createRequire(require.resolve("../apps/desktop/node_modules/electron-builder/package.json"));
 const asar = electronBuilderRequire("@electron/asar");
+const { FuseV1Options, getCurrentFuseWire } = electronBuilderRequire("@electron/fuses");
 const packageRoot = findPackageRoot();
 const asarPath = platform === "macos"
   ? join(packageRoot, "Contents", "Resources", "app.asar")
@@ -61,7 +62,7 @@ if (expectedVariant === "product") {
   assert(files.some((file) => /icon-source-.*\.svg$/i.test(file)), "GOAI artifact is missing its safe placeholder asset.");
 }
 
-if (platform === "macos") verifyMacArtifact(packageRoot, asarPath, fileSet);
+if (platform === "macos") await verifyMacArtifact(packageRoot, asarPath, fileSet);
 else verifyPortableArtifactResources(packageRoot, asarPath, fileSet);
 
 console.log(`Chroni ${platform} ${expectedVariant} artifact verified: ${basename(packageRoot)}, ${rendererPngs.length} companion PNG files, ${rendererPngBytes} bytes.`);
@@ -103,7 +104,7 @@ function verifyPortableArtifactResources(appRoot, packagedAsar, fileSet) {
   }
 }
 
-function verifyMacArtifact(appPath, packagedAsar, fileSet) {
+async function verifyMacArtifact(appPath, packagedAsar, fileSet) {
   assert(process.platform === "darwin", "macOS artifacts must be verified on macOS.");
   const contents = join(appPath, "Contents");
   const resources = join(contents, "Resources");
@@ -165,6 +166,14 @@ function verifyMacArtifact(appPath, packagedAsar, fileSet) {
     "com.apple.security.cs.disable-library-validation",
   ]) assert(entitlements.includes(`<key>${entitlement}</key>`), `macOS signature is missing ${entitlement}.`);
   const signature = execCombined("/usr/bin/codesign", ["--display", "--verbose=4", appPath]);
+  const fuseWire = await getCurrentFuseWire(appPath);
+  const cookieEncryptionEnabled = fuseWire[FuseV1Options.EnableCookieEncryption] === "1".charCodeAt(0);
+  const adHocSigned = /Signature=adhoc/i.test(signature) || /TeamIdentifier=not set/i.test(signature);
+  if (!storeBuild && adHocSigned) {
+    assert(!cookieEncryptionEnabled, "Unsigned macOS package would access Chroni Safe Storage during ordinary startup.");
+  } else {
+    assert(cookieEncryptionEnabled, "Signed macOS package does not protect Chromium cookies with the system Keychain.");
+  }
   if (process.env.CHRONI_REQUIRE_SIGNING === "1") {
     assert(/Authority=Developer ID Application:/i.test(signature), "Public macOS artifact is not signed with Developer ID Application.");
     assert(/flags=.*runtime/i.test(signature), "Public macOS artifact does not enable hardened runtime.");

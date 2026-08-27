@@ -58,7 +58,7 @@
           <section id="credentials">
             <p class="privacy-index">03</p>
             <h2>密钥不进入项目数据</h2>
-            <p>系统安全存储可用时，访问码与自定义 API Key 经 Electron safeStorage 加密后保存。公开状态快照、安装包资源和项目仓库不包含真实密钥；系统安全存储不可用时，凭据只在本次运行中使用。</p>
+            <p>系统安全存储可用时，访问码与自定义 API Key 经 Electron safeStorage 加密后保存。macOS 直装包不会仅因普通启动访问钥匙串，只有保存或读取已配置的模型凭据时才会使用 Chroni Safe Storage。公开状态快照、安装包资源和项目仓库不包含真实密钥；系统安全存储不可用时，凭据只在本次运行中使用。</p>
             <p>本地 HTTP API 默认仅监听 127.0.0.1，并使用每次启动生成的会话令牌保护除健康检查外的接口。</p>
           </section>
 

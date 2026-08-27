@@ -56,6 +56,7 @@ Learning Mission 的证据文件不会发送给模型服务。当前模型规划
 ## 模型凭据
 
 - 控制中心中的服务访问码或自定义 API Key 在操作系统支持时使用 Electron `safeStorage` 加密后保存。
+- macOS 直装包不会仅因普通启动而访问钥匙串；只有保存或读取已配置的模型凭据时才会使用 `Chroni Safe Storage`。首次主动保存凭据时，macOS 可能要求当前账户授权。
 - `chroni-state.json` 不保存明文凭据，公开 snapshot 也会移除凭据。
 - 系统安全存储不可用时，界面填写的凭据只在当前运行期间有效，并在运行状态中提示。
 - DeepSeek 主密钥只存在于 Zeabur 网关环境变量，不会下发给桌面客户端。

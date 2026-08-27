@@ -6,6 +6,18 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 
 暂无未发布的用户可见变更。
 
+## [0.2.2] - 2026-08-28
+
+### Fixed
+
+- 无 Developer ID 签名的 macOS 直装包不再为 Chroni 未使用的浏览器 Cookie 在普通启动阶段初始化系统钥匙串，修复新设备首次启动即提示访问 `Chroni Safe Storage` 的问题。
+- 新增打包后 Electron Fuse 校验：ad-hoc 签名直装包必须关闭 Cookie Encryption，具有稳定签名的直装包和商店包必须保持开启。
+
+### Security
+
+- 服务访问码和自定义 API Key 仍由 Electron `safeStorage` 保护；只有用户主动保存或读取已配置凭据时才可能触发 macOS 钥匙串授权。
+- Gatekeeper 首次放行与钥匙串授权被明确区分；当前无公证安装包仍需按系统安全提示手动允许打开。
+
 ## [0.2.1] - 2026-08-26
 
 ### Added
@@ -26,7 +38,7 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 修复曾经的特殊构建路径只打入图标占位图、导致发布包缺少原桌面伙伴动画的问题。
 - macOS 发布包新增构建变体清单和打包后内容核验，缺少完整桌宠帧、Universal 双架构原生模块、隐私清单、ASAR 完整性或正确 Bundle 元数据时直接失败。
 - 修复 Intel Mac 缺少 `@napi-rs/canvas` x64 原生模块的问题；菜单栏改用可适配明暗模式的单色模板图标，日程浮层在 macOS 上保持置顶。
-- 正式 macOS 标签发布强制 Developer ID 签名与 Apple 公证；清理未使用的摄像头、麦克风、蓝牙权限说明和任意明文网络例外。
+- macOS 发布支持在配置凭据后强制 Developer ID 签名与 Apple 公证；清理未使用的摄像头、麦克风、蓝牙权限说明和任意明文网络例外。
 - 下载页不再把旧版本安装包写死为离线回退，GitHub API 不可用时安全跳转 Latest Release。
 - 修复 600×360 等 Windows 窄窗口下侧栏标签重叠、内容横向溢出的问题。
 
@@ -124,7 +136,8 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 发布标签现在必须与根工作区和桌面应用版本一致。
 - 生产包启用 Electron Fuses 和 ASAR 完整性校验。
 
-[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.3...v0.1.4

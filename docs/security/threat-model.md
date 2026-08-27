@@ -1,6 +1,6 @@
 # Chroni threat model
 
-Last reviewed: 2026-08-06. Scope: desktop app, local HTTP API, optional LLM gateway, updater, packaging, and GOAI demo/evidence paths.
+Last reviewed: 2026-08-28. Scope: desktop app, local HTTP API, optional LLM gateway, updater, packaging, and GOAI demo/evidence paths.
 
 ## Assets and trust boundaries
 
@@ -40,7 +40,7 @@ Local files and model outputs are data, never privileged instructions. The rende
 
 ## Credential handling
 
-Custom model keys are encoded through Electron `safeStorage` when supported. The managed gateway key and beta access-code hashes are server environment variables, not renderer values. The local API publishes a random bearer token in a user-local discovery file and listens only on loopback. Secrets must never enter `.env` files committed to Git, screenshots, benchmark cases, traces, or support issues.
+Custom model keys are encoded through Electron `safeStorage` when supported. Unsigned direct macOS builds disable Chromium's unused Cookie Encryption fuse so ordinary startup does not initialize `Chroni Safe Storage`; Chroni has no persistent browser login cookies, and explicit model credentials continue to use `safeStorage`. Signed direct and store builds keep cookie encryption enabled because their stable identity can be authorized consistently by Keychain. The managed gateway key and beta access-code hashes are server environment variables, not renderer values. The local API publishes a random bearer token in a user-local discovery file and listens only on loopback. Secrets must never enter `.env` files committed to Git, screenshots, benchmark cases, traces, or support issues.
 
 ## Deletion and isolation
 

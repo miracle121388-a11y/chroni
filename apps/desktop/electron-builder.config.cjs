@@ -1,5 +1,11 @@
 const hasCodeSigningCertificate = Boolean(process.env.CSC_LINK?.trim());
 const hasMacCertificate = process.platform === "darwin" && hasCodeSigningCertificate;
+// Chromium cookie encryption initializes the macOS Keychain when the first
+// browser context is created. Chroni does not use persistent login cookies, so
+// unsigned direct builds keep this fuse off to avoid an unexplained
+// "Chroni Safe Storage" password prompt on first launch. A stable signed build
+// can enable it without causing every update to look like a different app.
+const enableCookieEncryption = process.platform !== "darwin" || hasMacCertificate;
 const hasAppleApiCredentials = Boolean(
   process.env.APPLE_API_KEY?.trim()
   && process.env.APPLE_API_KEY_ID?.trim()
@@ -61,7 +67,7 @@ module.exports = {
   forceCodeSigning: requireSigning,
   electronFuses: {
     runAsNode: false,
-    enableCookieEncryption: true,
+    enableCookieEncryption,
     enableNodeOptionsEnvironmentVariable: false,
     enableNodeCliInspectArguments: false,
     enableEmbeddedAsarIntegrityValidation: true,

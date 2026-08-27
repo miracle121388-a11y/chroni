@@ -21,6 +21,7 @@ const windowsSource = readFileSync(new URL("../src/windows.ts", import.meta.url)
 const workspaceConfig = readFileSync(new URL("../../../pnpm-workspace.yaml", import.meta.url), "utf8");
 const artifactVerifier = readFileSync(new URL("../../../scripts/verify-desktop-artifact.mjs", import.meta.url), "utf8");
 const afterPackSource = readFileSync(new URL("../scripts/after-pack.cjs", import.meta.url), "utf8");
+const builderConfigSource = readFileSync(new URL("../electron-builder.config.cjs", import.meta.url), "utf8");
 const releaseVerifierPath = fileURLToPath(new URL("../../../scripts/verify-release-version.mjs", import.meta.url));
 
 test("release version verification ignores branch names and validates tags", () => {
@@ -34,7 +35,10 @@ test("release version verification ignores branch names and validates tags", () 
     },
   });
 
-  assert.match(runVerifier("branch", "main"), /Chroni release version verified: v0\.2\.1/);
+  assert.match(
+    runVerifier("branch", "main"),
+    new RegExp(`Chroni release version verified: v${packageJson.version.replaceAll(".", "\\.")}`),
+  );
   assert.throws(() => runVerifier("tag", "v9.9.9"));
 });
 
@@ -64,6 +68,24 @@ test("macOS universal packaging preserves both canvas native architectures", () 
   assert.match(artifactVerifier, /canvas-darwin-arm64\/skia\.darwin-arm64\.node/);
   assert.match(artifactVerifier, /canvas-darwin-x64\/skia\.darwin-x64\.node/);
   assert.match(artifactVerifier, /assertArchitectures/);
+});
+
+test("unsigned macOS packages do not access Keychain for unused browser cookies", () => {
+  assert.match(builderConfigSource, /process\.platform !== "darwin" \|\| hasMacCertificate/);
+  assert.equal(
+    builderConfig.electronFuses.enableCookieEncryption,
+    process.platform !== "darwin" || Boolean(process.env.CSC_LINK?.trim()),
+  );
+  assert.match(artifactVerifier, /Unsigned macOS package would access Chroni Safe Storage during ordinary startup/);
+
+  if (process.platform === "darwin") {
+    const script = "process.env.CSC_LINK='test-certificate'; process.stdout.write(String(require('./electron-builder.config.cjs').electronFuses.enableCookieEncryption))";
+    const enabledWithStableSignature = execFileSync(process.execPath, ["-e", script], {
+      cwd: new URL("..", import.meta.url),
+      encoding: "utf8",
+    });
+    assert.equal(enabledWithStableSignature, "true");
+  }
 });
 
 test("packaged asset variant and macOS metadata are verified after packaging", () => {
