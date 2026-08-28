@@ -13,6 +13,7 @@ import { selectPlanningPreferences } from "./agent/preference-selector.js";
 import { generateTaskPlan } from "./agent/task-plan-agent.js";
 import { deadlineDateFromText, isConditionalDeadlineText, stripDeadlineTemporalExpressions } from "./shared/deadline-text.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
+import { intakeProgressMessage, REPROCESS_PROGRESS_MESSAGE } from "./shared/intake-copy.js";
 import { localFilePathFromText } from "./shared/local-file-input.js";
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
@@ -82,7 +83,7 @@ type TesseractModule = {
 export async function processIntake(payload: IntakePayload, store: ChroniStore, options: Pick<ExtractOptions, "referenceNow"> = {}): Promise<IntakeResult> {
   const pastedFilePath = payload.kind === "text" ? localFilePathFromText(payload.text) : undefined;
   if (pastedFilePath) store.discardPathOnlyTextIntake(pastedFilePath);
-  store.setCompanion("processing", "正在识别 DDL...");
+  store.setCompanion("processing", intakeProgressMessage(payload));
   const result = await extractPayload(payload, { ...options, llm: store.llmSettings() });
   if (!result.ok) {
     let clarificationSnapshot;
@@ -274,7 +275,7 @@ export async function reprocessSource(sourceId: string, store: ChroniStore): Pro
     const snapshot = store.setCompanion("confused", "找不到原始输入，无法重新识别。");
     return { ok: false, reason: "找不到原始输入。", snapshot };
   }
-  store.setCompanion("processing", "正在重新识别来源...");
+  store.setCompanion("processing", REPROCESS_PROGRESS_MESSAGE);
   const previousItems = store.snapshot().items.filter((item) => item.sourceId === sourceId);
   const referenceNow = stableSourceReferenceTime(source.createdAt);
   const result = await extractPayload({ kind: "text", text: source.text }, { llm: store.llmSettings(), referenceNow });
@@ -444,7 +445,7 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
       if (hasPossibleTaskWithoutDeadline(extracted.map((input) => input.text).join("\n"))) {
         return { ok: false, reason: "关键信息不足：没有明确截止时间。", extracted, failures, items: [], pendingItems: [] };
       }
-      return { ok: false, reason: "没有识别到明确 DDL。", extracted, failures, items: [], pendingItems: [] };
+      return { ok: false, reason: "没有识别到明确的日程或截止事项。", extracted, failures, items: [], pendingItems: [] };
     }
     const count = Math.min(items.length, 12);
     const message = extractionMessage(count, llm, pendingItems.length);

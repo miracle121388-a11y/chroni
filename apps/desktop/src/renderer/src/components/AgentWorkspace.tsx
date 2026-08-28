@@ -13,13 +13,14 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
   const pending = required.slice(0, 1);
   const remainingCount = Math.max(0, required.length - pending.length);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [busyId, setBusyId] = useState("");
+  const [busy, setBusy] = useState<{ id: string; action: "answer" | "reprocess" | "discard" }>();
   const [feedback, setFeedback] = useState("");
+  const busyId = busy?.id ?? "";
   if (!pending.length) return null;
 
   async function answer(item: PendingClarification, optionId?: string) {
     if (busyId) return;
-    setBusyId(item.id);
+    setBusy({ id: item.id, action: "answer" });
     setFeedback("");
     try {
       const raw = answers[item.id]?.trim();
@@ -30,7 +31,7 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
     } catch (error) {
       setFeedback(formatOperationError(error, "回答未保存"));
     } finally {
-      setBusyId("");
+      setBusy(undefined);
     }
   }
 
@@ -38,7 +39,7 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
     const draft = snapshot.intakeDrafts.find((candidate) => candidate.id === item.draftId);
     const sourceId = item.sourceId ?? draft?.sourceId;
     if (!sourceId || busyId) return;
-    setBusyId(item.id);
+    setBusy({ id: item.id, action: "reprocess" });
     setFeedback("");
     try {
       const result = await api.reprocessSource(sourceId);
@@ -47,13 +48,13 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
     } catch (error) {
       setFeedback(formatOperationError(error, "重新识别失败"));
     } finally {
-      setBusyId("");
+      setBusy(undefined);
     }
   }
 
   async function cancelDraft(item: PendingClarification) {
     if (busyId) return;
-    setBusyId(item.id);
+    setBusy({ id: item.id, action: "discard" });
     setFeedback("");
     try {
       setSnapshot(await api.cancelIntakeDraft(item.draftId));
@@ -61,7 +62,7 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
     } catch (error) {
       setFeedback(formatOperationError(error, "无法放弃草稿"));
     } finally {
-      setBusyId("");
+      setBusy(undefined);
     }
   }
 
@@ -78,8 +79,9 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
       {pending.map((item) => {
         const draft = snapshot.intakeDrafts.find((candidate) => candidate.id === item.draftId);
         const sourceId = item.sourceId ?? draft?.sourceId;
+        const busyAction = busy?.id === item.id ? busy.action : undefined;
         return (
-          <article className="clarification-row" key={item.id}>
+          <article className="clarification-row" key={item.id} aria-busy={!!busyAction}>
             <div className="clarification-meta">
               <span>{item.required ? clarificationFieldLabel(item.field) : "可选完善"}</span>
               {draft?.candidate.title && <em>草稿 · {draft.candidate.title}</em>}
@@ -110,19 +112,31 @@ export function ClarificationPanel({ snapshot, setSnapshot, variant = "default" 
                     disabled={!!busyId}
                   />
                 )}
-                <button type="button" disabled={!!busyId || !answers[item.id]?.trim()} onClick={() => void answer(item)}>{busyId === item.id ? "保存中" : "确认"}</button>
+                <button type="button" disabled={!!busyId || !answers[item.id]?.trim()} onClick={() => void answer(item)}>{busyAction === "answer" ? "保存中…" : "确认"}</button>
               </div>
             )}
             <div className="clarification-actions">
-              {sourceId && <button type="button" className="text-action reprocess-action" disabled={!!busyId} onClick={() => void reprocess(item)}>{busyId === item.id ? "处理中..." : "重新识别原内容"}</button>}
-              <button type="button" className="text-action discard-action" disabled={!!busyId} onClick={() => void cancelDraft(item)}>{item.required ? "放弃草稿" : "暂不完善"}</button>
+              {sourceId && <button type="button" className="text-action reprocess-action" disabled={!!busyId} onClick={() => void reprocess(item)}>{busyAction === "reprocess" ? "重新识别中…" : "重新识别原内容"}</button>}
+              <button type="button" className="text-action discard-action" disabled={!!busyId} onClick={() => void cancelDraft(item)}>{clarificationDiscardLabel(item.required, busyAction === "discard")}</button>
             </div>
+            {busyAction && <p className="inline-feedback info" role="status" aria-live="polite">{clarificationBusyMessage(busyAction, item.required)}</p>}
           </article>
         );
       })}
       {feedback && <p className={`inline-feedback ${isClarificationPositiveFeedback(feedback) ? "ok" : "warn"}`} aria-live="polite">{feedback}</p>}
     </section>
   );
+}
+
+function clarificationBusyMessage(action: "answer" | "reprocess" | "discard", required: boolean): string {
+  if (action === "answer") return "正在保存回答…";
+  if (action === "reprocess") return "正在重新识别日程与任务…";
+  return required ? "正在放弃这条草稿…" : "正在跳过这项可选信息…";
+}
+
+function clarificationDiscardLabel(required: boolean, busy: boolean): string {
+  if (busy) return required ? "放弃中…" : "跳过中…";
+  return required ? "放弃草稿" : "暂不完善";
 }
 
 function clarificationFieldLabel(field: PendingClarification["field"]): string {

@@ -111,7 +111,7 @@ export function createRuleTaskPlan(task: DdlItem, preferences: PlanningPreferenc
     taskType: inferTaskType(task),
     deliverables: task.extraction?.deliverables.length ? [...task.extraction.deliverables] : [task.title],
     constraints: [
-      "不得晚于最终 DDL",
+      "不得晚于最终截止时间",
       "最终完成状态由用户确认",
       ...(task.extraction?.submissionMethod ? [`提交方式：${task.extraction.submissionMethod}`] : []),
       ...(task.extraction?.constraints ?? []),
@@ -158,7 +158,7 @@ function planFromCandidate(candidate: PlanCandidate, task: DdlItem, preferences:
   const bufferMinutes = Number(candidate.bufferMinutes ?? 0);
   const groundedDeliverables = task.extraction?.deliverables ?? [];
   const groundedConstraints = [
-    "不得晚于最终 DDL",
+    "不得晚于最终截止时间",
     "最终完成状态由用户确认",
     ...(task.extraction?.submissionMethod ? [`提交方式：${task.extraction.submissionMethod}`] : []),
     ...(task.extraction?.constraints ?? []),

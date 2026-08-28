@@ -15,6 +15,7 @@ import { testLlmConnection } from "./llm-client.js";
 import { isLlmReady, resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
+import { intakeProgressMessage, REPROCESS_PROGRESS_MESSAGE } from "./shared/intake-copy.js";
 import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyReviewInput, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, LearningMissionEvidenceInput, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { ChroniUpdater } from "./updater.js";
@@ -105,7 +106,7 @@ function installIpc(): void {
   ipcMain.handle("chroni:open-releases", () => shell.openExternal("https://github.com/miracle121388-a11y/chroni/releases"));
   ipcMain.handle("chroni:extract", async (_event, payload: IntakePayload) => {
     const validatedPayload = validateIntakePayload(payload);
-    const previousCompanion = beginPetInput(validatedPayload, "正在预览并理解输入...");
+    const previousCompanion = beginPetInput(validatedPayload, intakeProgressMessage(validatedPayload, "preview"));
     try {
       return await extractPayload(validatedPayload, { llm: store.llmSettings() });
     } finally {
@@ -115,7 +116,7 @@ function installIpc(): void {
   ipcMain.handle("chroni:intake", async (_event, payload: IntakePayload) => {
     const validatedPayload = validateIntakePayload(payload);
     const previousPendingIds = pendingClarificationIds();
-    beginPetInput(validatedPayload, "正在理解课程要求...");
+    beginPetInput(validatedPayload, intakeProgressMessage(validatedPayload));
     try {
       const result = await processIntake(validatedPayload, store);
       broadcast("chroni:snapshot-updated", result.snapshot);
@@ -273,7 +274,7 @@ function installIpc(): void {
   ipcMain.handle("chroni:quick-add", async (_event, text: string) => {
     const payload = validateIntakePayload({ kind: "text", text });
     const previousPendingIds = pendingClarificationIds();
-    beginPetInput(payload, "正在理解课程要求...");
+    beginPetInput(payload, intakeProgressMessage(payload));
     try {
       const result = await processIntake(payload, store);
       broadcast("chroni:snapshot-updated", result.snapshot);
@@ -290,7 +291,7 @@ function installIpc(): void {
   ipcMain.handle("chroni:show-schedule", (_event, expanded: boolean) => showSchedule(expanded));
   ipcMain.handle("chroni:source-reprocess", async (_event, sourceId: string) => {
     sourceId = validateIdentifier(sourceId, "source id");
-    beginPetWork("正在重新识别来源...");
+    beginPetWork(REPROCESS_PROGRESS_MESSAGE);
     try {
       const result = await reprocessSource(sourceId, store);
       broadcast("chroni:snapshot-updated", result.snapshot);
@@ -578,9 +579,9 @@ function exportAgentEvidence() {
 
 async function runDeadlineAgentAndPublish(trigger: AgentRunTrigger = "manual"): Promise<AgentRunResult> {
   if (trigger === "manual") {
-    beginPetWork("Agent 正在巡检并安排任务...");
+    beginPetWork("正在检查任务并安排今天…");
   } else {
-    broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在进行自动日程巡检..."));
+    broadcast("chroni:snapshot-updated", store.setCompanion("processing", "正在自动检查日程并更新安排…"));
   }
   let result: AgentRunResult;
   try {

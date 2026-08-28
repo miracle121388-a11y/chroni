@@ -182,7 +182,7 @@ function setHeroProgress(progress) {
   const bubble = document.querySelector("#hero-bubble");
   if (!bubble) return;
   const nextText = progress < 0.15
-    ? "把课程要求、截图或项目材料拖给我。"
+    ? "把日程、课程要求、截图或项目材料拖给我。"
     : progress < 0.32
       ? "正在识别目标、交付物与提交要求…"
       : progress < 0.52

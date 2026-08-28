@@ -14,7 +14,7 @@ _Actual product UI with isolated synthetic demo data._
 
 ## Current version and three-minute path
 
-The repository package version is `0.2.3`. Public installer availability, signatures, and notarization status must be checked on [GitHub Releases](https://github.com/miracle121388-a11y/chroni/releases).
+The repository package version is `0.2.4`. Public installer availability, signatures, and notarization status must be checked on [GitHub Releases](https://github.com/miracle121388-a11y/chroni/releases).
 
 1. Install and start Chroni. The managed smart service is enabled by default and requires no API key, access code, or account. The **Today** timeline is the default workspace.
 2. Drop a course file onto the companion or import it from **Smart Organize**.

@@ -2,6 +2,7 @@ import React, { useEffect, useId, useMemo, useReducer, useRef, useState } from "
 import { createRoot } from "react-dom/client";
 import { buildAgentDashboard } from "../../shared/agent-dashboard";
 import { formatOperationError, formatUserFacingMessage } from "../../shared/errors";
+import { intakeProgressMessage, REPROCESS_PROGRESS_MESSAGE } from "../../shared/intake-copy";
 import { attentionPetAction, basePetAction, isOneShotPetAction, petClickIntent, petMotionReducer, resolvedPetAction } from "../../shared/pet-actions";
 import { fullScheduleSummary, isScheduleItemSnoozed, lightweightScheduleItems, scheduleBucket, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../../shared/schedule";
 import { hasCrossedDragThreshold } from "../../window-geometry";
@@ -179,12 +180,13 @@ function PetView({ snapshot, setSnapshot }: ViewProps) {
       const droppedText = event.dataTransfer.getData("text/plain").trim();
       const files = await filesFromFileList(droppedFiles);
       if (!files.length && !droppedText) throw new Error("没有收到可读取的文件或文字。");
+      const payload: IntakePayload = files.length
+        ? { kind: "files", files }
+        : { kind: "text", text: droppedText };
       dispatchMotion({ type: "command", command: petCommand(files.length ? "study" : "eat", "replace") });
-      setLocalBubble(files.length ? `正在阅读 ${files.length} 个文件…` : "正在理解拖入的文字…");
+      setLocalBubble(intakeProgressMessage(payload));
       await api.companionHover(false).catch(() => undefined);
-      const result = files.length
-        ? await api.intake({ kind: "files", files })
-        : await api.intake({ kind: "text", text: droppedText });
+      const result = await api.intake(payload);
       setSnapshot(result.snapshot);
       setLocalBubble("");
     } catch (error) {
@@ -405,7 +407,7 @@ function ScheduleView({ snapshot, setSnapshot }: ViewProps) {
 
   async function quickAdd() {
     if (!quickText.trim() || isBusy) return;
-    setBusyMessage("正在识别...");
+    setBusyMessage(intakeProgressMessage({ kind: "text", text: quickText }));
     showFeedback(null);
     try {
       const result = await api.quickAdd(quickText);
@@ -761,7 +763,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
           <span className="agent-head-copy">结合里程碑、截止时间、风险和可用时间，形成今天能够落实的行动。</span>
         </div>
         {latest && <button className="agent-run" type="button" disabled={!!busyAction} onClick={() => void runInspection()}>
-          {busyAction === "run" ? "正在检查..." : "更新今日安排"}
+          {busyAction === "run" ? "正在安排…" : "更新今日安排"}
         </button>}
       </header>
 
@@ -781,7 +783,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
             <h3>先看看今天最值得推进的事</h3>
             <p>Chroni 会检查学习任务、里程碑和风险，再把下一步行动安排进你的可用时间。</p>
           </div>
-          <button className="primary" type="button" disabled={!!busyAction} onClick={() => void runInspection()}>{busyAction === "run" ? "正在检查..." : "帮我安排今天"}</button>
+          <button className="primary" type="button" disabled={!!busyAction} onClick={() => void runInspection()}>{busyAction === "run" ? "正在安排…" : "帮我安排今天"}</button>
         </section>
       ) : (
         <>
@@ -971,7 +973,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
 
   async function addManual() {
     if (!manual.trim() || isBusy) return;
-    setBusyMessage("正在识别...");
+    setBusyMessage(intakeProgressMessage({ kind: "text", text: manual }));
     setFeedback("");
     try {
       const result = await api.quickAdd(manual);
@@ -991,7 +993,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
       setFeedback(intakeMessage);
       return;
     }
-    setBusyMessage("正在整理今日安排...");
+    setBusyMessage("正在整理今日安排…");
     try {
       setSnapshot(await api.runDeadlineAgent());
       setFeedback(`${intakeMessage} 今日安排已同步更新。`);
@@ -1002,7 +1004,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
 
   async function runOrganizer(): Promise<void> {
     if (isBusy) return;
-    setBusyMessage("正在检查任务与可用时间...");
+    setBusyMessage("正在检查任务与可用时间…");
     setFeedback("");
     try {
       setSnapshot(await api.runDeadlineAgent());
@@ -1020,7 +1022,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
       return;
     }
     fileOperationRef.current = true;
-    setBusyMessage("正在读取文件...");
+    setBusyMessage("正在读取文件…");
     setFeedback("");
     try {
       const files = await filesFromFileList(fileList);
@@ -1029,10 +1031,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
         return;
       }
       const payload: IntakePayload = { kind: "files", files };
-      const usingLlm = snapshot.services.model === "ready";
-      setBusyMessage(usingLlm
-        ? "正在读取文件并智能整理..."
-        : "正在读取文件并整理日程...");
+      setBusyMessage(intakeProgressMessage(payload));
       await finishIntake(await api.intake(payload));
     } catch (error) {
       setFeedback(formatOperationError(error, "文件处理失败"));
@@ -1072,7 +1071,7 @@ function CorrectionPane({ snapshot, setSnapshot, navigation }: ViewProps & { nav
             ref={manualInputRef}
             value={manual}
             disabled={isBusy}
-            aria-label="快速添加任务"
+            aria-label="快速添加日程"
             onChange={(event) => setManual(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") void addManual();
@@ -1302,7 +1301,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
         <div className="section-head">
           <div>
             <h3>高级</h3>
-            <p>配置后，文件解析与 OCR 结果会逐来源交给大模型提取；模型不可用时使用本地规则继续处理。</p>
+            <p>配置后，输入文字、文件解析与 OCR 结果会逐来源交给大模型理解；模型不可用时使用本地规则继续处理。</p>
           </div>
           <span className="mode-chip">{modelMode}</span>
         </div>
@@ -1425,8 +1424,8 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
       <div className="service-list">
         <StatusRow label="文本解析" state={snapshot.services.parser} detail="TXT、MD、CSV、JSON、ICS、DOCX、PDF、XLSX 等本地解析" />
         <StatusRow label="图片 OCR" state={snapshot.services.ocr} detail="图片与扫描 PDF 先转为文字，再进入提取流程" />
-        <StatusRow label="大模型理解" state={snapshot.services.model} detail="逐文件分块理解课程要求、交付物与截止信息，并保留来源证据" />
-        <StatusRow label="本地数据" state={snapshot.services.storage} detail={snapshot.services.storageDiagnostic ? safeUserMessage(snapshot.services.storageDiagnostic, "本地数据已进入保护状态，请打开数据位置检查备份。") : "学习任务、产出证据、来源和偏好保存到本机应用数据目录"} />
+        <StatusRow label="大模型理解" state={snapshot.services.model} detail="按输入内容理解日程、任务要求、交付物与截止信息，并保留来源证据" />
+        <StatusRow label="本地数据" state={snapshot.services.storage} detail={snapshot.services.storageDiagnostic ? safeUserMessage(snapshot.services.storageDiagnostic, "本地数据已进入保护状态，请打开数据位置检查备份。") : "日程、任务、产出证据、来源和偏好保存到本机应用数据目录"} />
         <StatusRow label="隐私状态" state="ready" detail={safeUserMessage(snapshot.services.privacy, "敏感配置仅保存在本机。") } />
       </div>
       <p className="service-policy-links">
@@ -1582,7 +1581,7 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
 
   async function saveAndReprocess() {
     if (isBusy) return;
-    setBusyMessage("正在重新识别...");
+    setBusyMessage(REPROCESS_PROGRESS_MESSAGE);
     setFeedback("");
     try {
       const snapshot = await api.updateSourceText(source.id, draftText);
@@ -1599,7 +1598,7 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
 
   async function reprocessOnly() {
     if (isBusy) return;
-    setBusyMessage("正在重新识别...");
+    setBusyMessage(REPROCESS_PROGRESS_MESSAGE);
     setFeedback("");
     try {
       const result = await api.reprocessSource(source.id);
@@ -1626,12 +1625,12 @@ function SourceRow({ source, setSnapshot }: { source: SourceRecord; setSnapshot:
           <textarea className="source-textarea" aria-label={`编辑 ${source.sourceName} 的抽取文本`} value={draftText} disabled={isBusy} onChange={(event) => setDraftText(event.target.value)} />
           <div className="source-detail-actions">
             <button type="button" disabled={isBusy} onClick={() => void saveText()}>{busyMessage === "正在保存..." ? "保存中" : "保存原文"}</button>
-            <button type="button" disabled={isBusy} onClick={() => void saveAndReprocess()}>{busyMessage === "正在重新识别..." ? "识别中" : "保存并重新识别"}</button>
+            <button type="button" disabled={isBusy} onClick={() => void saveAndReprocess()}>{busyMessage === REPROCESS_PROGRESS_MESSAGE ? "重新识别中…" : "保存并重新识别"}</button>
           </div>
           {(busyMessage || feedback) && <p className={`source-feedback ${busyMessage ? "busy" : ""}`} role={busyMessage || isPositiveFeedback(feedback) ? "status" : "alert"} aria-live="polite">{busyMessage || feedback}</p>}
         </details>
       </div>
-      <button type="button" disabled={isBusy} onClick={() => void reprocessOnly()}>{busyMessage === "正在重新识别..." ? "识别中" : "重新识别"}</button>
+      <button type="button" disabled={isBusy} onClick={() => void reprocessOnly()}>{busyMessage === REPROCESS_PROGRESS_MESSAGE ? "重新识别中…" : "重新识别"}</button>
     </article>
   );
 }

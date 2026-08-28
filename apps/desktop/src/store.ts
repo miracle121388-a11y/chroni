@@ -10,6 +10,7 @@ import { hasLlmEnvironmentConfiguration, isLlmReady, llmEnabledEnvironmentOverri
 import { normalizeLearningMissions, synchronizeLearningMissions } from "./learning-mission.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
 import { localFilePathFromText } from "./shared/local-file-input.js";
+import { EMPTY_INTAKE_PROMPT } from "./shared/intake-copy.js";
 import {
   CHRONI_MANAGED_LLM_BASE_URL,
   CHRONI_MANAGED_LLM_MODEL,
@@ -1032,7 +1033,7 @@ export class ChroniStore {
       : record);
     this.#settleCompanion(itemIds.length
       ? { state: "success", bubble: message }
-      : { state: "confused", bubble: "重新识别后没有明确的学习任务。" });
+      : { state: "confused", bubble: "重新识别后没有明确的日程或任务。" });
     this.#save();
     return this.snapshot();
   }
@@ -1136,9 +1137,9 @@ export class ChroniStore {
       storagePath: this.filePath,
       privacy: modelEnabled
         ? managedModel
-          ? "学习任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用 Chroni 智能服务时，理解课程要求所需的文本片段和选中的结构化偏好会经 Chroni 网关发送到 DeepSeek，二进制原文件与成果文件不会直接上传。"
-          : "学习任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用 LLM 时，会把理解课程要求所需的文本片段（长文档可能分块覆盖全文）和选中的结构化偏好发送到自定义模型服务。"
-        : "学习任务、来源、产出证据元数据和复盘保存在本机，未启用 LLM 时不会发送到模型服务。",
+          ? "日程、任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用 Chroni 智能服务时，理解日程、任务与课程要求所需的文本片段和选中的结构化偏好会经 Chroni 网关发送到 DeepSeek，二进制原文件与成果文件不会直接上传。"
+          : "日程、任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用 LLM 时，会把理解日程、任务与课程要求所需的文本片段（长文档可能分块覆盖全文）和选中的结构化偏好发送到自定义模型服务。"
+        : "日程、任务、来源、产出证据元数据和复盘保存在本机，未启用 LLM 时不会发送到模型服务。",
       notes: [
         ...(this.#storageDiagnostic ? [this.#storageDiagnostic] : []),
         ...(this.#unreadableApiKeyProtected ? ["已保留暂时无法解密的 LLM API Key 密文；在系统安全存储恢复前不会覆盖。"] : []),
@@ -1426,7 +1427,7 @@ function createDefaultState(): StoredState {
     preferences: createDefaultPreferences(),
     companion: {
       state: "idle",
-      bubble: "把课程要求、截图或项目材料拖给我。",
+      bubble: EMPTY_INTAKE_PROMPT,
     },
     agent: {
       memory: createAgentMemory(),
@@ -2696,8 +2697,8 @@ export function visibleItems(items: DdlItem[], limit = 6): DdlItem[] {
 export function companionStateForItems(items: DdlItem[]): { state: CompanionState; bubble: string } {
   const incomplete = items.filter((item) => !item.completed);
   const active = visibleActiveScheduleItems(items);
-  if (!items.length) return { state: "idle", bubble: "把课程要求、截图或项目材料拖给我。" };
-  if (!incomplete.length) return { state: "celebrating", bubble: "当前学习任务都已完成。" };
+  if (!items.length) return { state: "idle", bubble: EMPTY_INTAKE_PROMPT };
+  if (!incomplete.length) return { state: "celebrating", bubble: "当前日程与任务都已完成。" };
   if (!active.length) return { state: "idle", bubble: "稍后提醒的事项会按时回来。" };
   const first = active[0];
   const hours = (new Date(first.dueAt).getTime() - Date.now()) / 3_600_000;

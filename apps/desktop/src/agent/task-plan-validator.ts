@@ -13,7 +13,7 @@ export function validateTaskPlan(plan: TaskPlan, task: DdlItem): TaskPlan {
     if (!Number.isInteger(step.estimatedMinutes) || step.estimatedMinutes < 15 || step.estimatedMinutes > 480) throw new Error("步骤预计耗时必须为 15 到 480 分钟。");
     if (step.taskId !== task.id) throw new Error("计划步骤不能跨任务。");
     if (step.dependsOn.some((id) => !ids.has(id) || id === step.id)) throw new Error("计划步骤依赖无效。");
-    if (step.suggestedEndAt && new Date(step.suggestedEndAt).getTime() > new Date(task.dueAt).getTime()) throw new Error("建议完成时间不能晚于最终 DDL。");
+    if (step.suggestedEndAt && new Date(step.suggestedEndAt).getTime() > new Date(task.dueAt).getTime()) throw new Error("建议完成时间不能晚于最终截止时间。");
   }
   assertAcyclic(plan);
   const total = plan.steps.reduce((sum, step) => sum + step.estimatedMinutes, 0);

@@ -176,7 +176,7 @@ function isBetterPlan(candidate: AgentPlan, current: AgentPlan, highRiskIds: str
 }
 
 function dailySuggestions(priorities: AgentTaskAssessment[], plan: AgentPlan): string[] {
-  if (!priorities.length) return ["今天没有待处理 DDL，可以保持当前节奏。"];
+  if (!priorities.length) return ["今天没有待处理的截止事项，可以保持当前节奏。"];
   const suggestions = [`优先处理「${priorities[0].title}」，风险等级为 ${priorities[0].riskLevel}。`];
   if (plan.blocks.length) suggestions.push(`已安排 ${plan.blocks.length} 个工作块，共 ${plan.plannedMinutes} 分钟。`);
   if (plan.overflowMinutes > 0) suggestions.push(`今日容量仍缺少 ${plan.overflowMinutes} 分钟，请减少低优先级投入或提前开始。`);

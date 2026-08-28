@@ -6,6 +6,18 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 
 暂无未发布的用户可见变更。
 
+## [0.2.4] - 2026-08-28
+
+### Changed
+
+- 快速添加文字时明确显示“正在理解日程”，文件导入与预览会按文件数量显示“日程与任务”，来源重识别和今日安排也使用对应操作名称。
+- 空状态、模型状态和隐私说明同时覆盖日程、任务与课程要求，不再把所有输入都描述为课程材料。
+
+### Fixed
+
+- 修复输入日程时桌宠错误显示“正在理解课程要求”的场景错位。
+- 修复待确认区域在保存回答、重新识别或放弃草稿时互相串用加载文案的问题，并移除用户界面中的 `DDL` 技术术语。
+
 ## [0.2.3] - 2026-08-28
 
 ### Added
@@ -153,7 +165,8 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 发布标签现在必须与根工作区和桌面应用版本一致。
 - 生产包启用 Electron Fuses 和 ASAR 完整性校验。
 
-[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.0...v0.2.1

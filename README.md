@@ -39,7 +39,7 @@
   <a href="#开发与验证">开发</a>
 </p>
 
-> **当前版本：** `0.2.3`。公开安装包默认提供无需 API Key 的 Chroni 托管智能服务，并包含完整桌宠动画、控制中心与本地优先数据能力；签名、公证和可下载产物以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
+> **当前版本：** `0.2.4`。公开安装包默认提供无需 API Key 的 Chroni 托管智能服务，并包含完整桌宠动画、控制中心与本地优先数据能力；签名、公证和可下载产物以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
 
 > **资产许可提示：** MIT 许可覆盖 Chroni 自研代码，不自动覆盖字体、运行依赖与桌宠视觉素材；完整边界见 [第三方声明](./THIRD_PARTY_NOTICES.md)。
 
@@ -408,6 +408,7 @@ Chroni
 | [发布指南](./docs/releasing.md) | 版本、签名、公证、标签发布与发布后验证。 |
 | [应用商店发布资料](./docs/store/README.md) | Microsoft Store / Mac App Store 身份、沙盒、隐私、文案与审核检查。 |
 | [小红书发布计划](./docs/marketing/xiaohongshu-launch-plan.md) | 15/30/60 秒脚本、截图清单、隐私检查和发布模板。 |
+| [v0.2.4 发布说明](./docs/releases/v0.2.4.md) | 修正日程输入、文件导入和待确认操作的加载文案。 |
 | [v0.2.3 发布说明](./docs/releases/v0.2.3.md) | Windows/macOS 下载后无需 API Key 即可使用完整模型能力。 |
 | [v0.2.2 发布说明](./docs/releases/v0.2.2.md) | 修复无签名 macOS 包首次启动时不必要的钥匙串密码提示。 |
 | [v0.2.1 发布说明](./docs/releases/v0.2.1.md) | Windows 应用身份、桌面伙伴打包、控制中心与商店准备。 |

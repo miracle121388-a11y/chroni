@@ -1,6 +1,6 @@
 {
   "name": "@chroni/desktop",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Local-first learning execution agent with grounded document understanding, evidence-led planning, and ambient companion interaction.",
   "license": "MIT",
