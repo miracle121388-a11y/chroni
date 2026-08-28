@@ -50,6 +50,10 @@ jobs:
           pattern: chroni-*-${{ inputs.artifact_ref_name }}
           path: release
           merge-multiple: true
+      - name: Ensure direct-download aliases
+        run: |
+          node scripts/create-release-aliases.mjs release windows
+          node scripts/create-release-aliases.mjs release macos
       - name: Verify platform checksums
         working-directory: release
         run: |

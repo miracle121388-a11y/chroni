@@ -4,19 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f7f7f3">
-    <meta name="description" content="下载 Chroni，本地优先的学习执行 Agent。把课程要求转化为可执行、可验证、可调整的 Learning Mission。">
+    <meta name="description" content="下载 Chroni，本地优先的学习执行 Agent。理解日程、课程要求与项目材料，建立任务、安排今天，并用成果证据持续推进。">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Chroni">
-    <meta property="og:title" content="Chroni - 本地学习执行 Agent">
-    <meta property="og:description" content="不替学生完成作业，而是把课程要求转化为可执行、可验证、可调整的学习过程。">
+    <meta property="og:title" content="Chroni - 把要求变成今天能做的事">
+    <meta property="og:description" content="无需账号和 API Key。理解日程、课程要求与项目材料，建立任务、安排今天，并用成果证据持续推进。">
     <meta property="og:image" content="https://getchroni.zeabur.app/assets/learning-mission.png">
     <meta property="og:url" content="https://getchroni.zeabur.app/">
     <link rel="canonical" href="https://getchroni.zeabur.app/">
     <link rel="icon" href="./assets/chroni-icon.svg" type="image/svg+xml">
     <link rel="preload" href="./assets/pet-idle.png" as="image">
     <link rel="preload" href="./assets/pet-study.png" as="image">
+    <link rel="preload" href="./assets/pet-response.png" as="image">
     <link rel="stylesheet" href="./styles.css">
-    <title>Chroni - 本地学习执行 Agent</title>
+    <title>Chroni - 把要求变成今天能做的事</title>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -24,10 +25,14 @@
         "name": "Chroni",
         "applicationCategory": "EducationalApplication",
         "operatingSystem": "Windows 10, Windows 11, macOS 12 and later",
-        "downloadUrl": "https://getchroni.zeabur.app/#download",
-        "softwareVersion": "0.2.4",
+        "downloadUrl": [
+          "https://github.com/miracle121388-a11y/chroni/releases/latest/download/Chroni-win-x64-setup.exe",
+          "https://github.com/miracle121388-a11y/chroni/releases/latest/download/Chroni-mac-universal.dmg"
+        ],
+        "softwareVersion": "__CHRONI_VERSION__",
         "license": "https://opensource.org/license/mit",
-        "description": "Local-first learning execution agent that turns course requirements into evidence-grounded learning missions, daily actions and verifiable outcomes."
+        "featureList": "No account required, no API key required, local-first data, Windows and macOS support",
+        "description": "Local-first learning execution agent that turns schedules, course requirements and project materials into grounded missions, daily actions and verifiable outcomes."
       }
     </script>
   </head>
@@ -54,17 +59,23 @@
           <div class="hero-copy">
             <p class="overline">Learning execution agent</p>
             <h1 id="hero-title">Chroni<br>学习执行 Agent</h1>
-            <p class="hero-lead">不替你完成作业。Chroni 把课程要求转化为有依据的目标、里程碑、今日行动与产出证据，让个性化学习真正落到执行过程。</p>
+            <p class="hero-lead">把日程、课程通知、截图或项目材料交给 Chroni。它会提取截止与交付物，建立任务，排进今天，并用成果证据持续校准下一步。</p>
             <div class="hero-actions">
-              <a class="download-button primary-download" id="primary-download" href="#download">
-                <span id="primary-download-label">获取 Chroni</span>
+              <a class="download-button primary-download" id="primary-download" href="#download" data-direct-download>
+                <span id="primary-download-label">直接下载 Chroni</span>
                 <span class="button-icon" aria-hidden="true">↓</span>
               </a>
-              <div>
-                <p class="download-meta" id="primary-download-meta">最新版 · Windows 与 macOS</p>
-                <span class="detected-platform" id="detected-platform">正在识别你的设备</span>
-              </div>
+              <a class="hero-secondary-action" href="#story">查看工作方式 <span aria-hidden="true">→</span></a>
             </div>
+            <div class="hero-download-context">
+              <p class="download-meta" id="primary-download-meta">v__CHRONI_VERSION__ · Windows 与 macOS</p>
+              <span class="detected-platform" id="detected-platform">正在识别你的设备</span>
+            </div>
+            <ul class="hero-assurances" aria-label="Chroni 使用特点">
+              <li>无需账号</li>
+              <li>无需 API Key</li>
+              <li>本地优先</li>
+            </ul>
             <p class="mobile-desktop-note">Chroni 是桌面应用，请在 Windows 或 macOS 电脑上下载。</p>
           </div>
 
@@ -83,9 +94,9 @@
             <div class="hero-mascot" aria-hidden="true">
               <div class="mascot-bubble" id="hero-bubble">把日程、课程要求、截图或项目材料拖给我。</div>
               <div class="mascot-images">
-                <img class="mascot-frame mascot-idle" src="./assets/pet-idle.png" alt="">
-                <img class="mascot-frame mascot-reading" src="./assets/pet-study.png" alt="">
-                <img class="mascot-frame mascot-reminding" src="./assets/pet-response.png" alt="">
+                <img class="mascot-frame mascot-idle" src="./assets/pet-idle.png" width="256" height="256" decoding="async" alt="">
+                <img class="mascot-frame mascot-reading" src="./assets/pet-study.png" width="256" height="256" decoding="async" alt="">
+                <img class="mascot-frame mascot-reminding" src="./assets/pet-response.png" width="256" height="256" decoding="async" alt="">
               </div>
             </div>
 
@@ -106,7 +117,7 @@
                 <span class="window-state">证据闭环已建立</span>
               </div>
               <div class="window-viewport">
-                <img src="./assets/learning-mission.png" alt="Chroni 学习任务控制台，展示目标、交付物、里程碑与产出证据">
+                <img src="./assets/learning-mission.png" width="2139" height="1407" decoding="async" fetchpriority="high" alt="Chroni 学习任务控制台，展示目标、交付物、里程碑与产出证据">
                 <div class="planner-insight">下一步：验证 SQL 查询并补充阶段产出。</div>
               </div>
             </figure>
@@ -120,10 +131,10 @@
       </section>
 
       <section class="release-bar" aria-label="发布信息">
-        <div><span>当前版本</span><strong id="release-version">最新版</strong></div>
+        <div><span>当前版本</span><strong id="release-version">v__CHRONI_VERSION__</strong></div>
         <div><span>支持平台</span><strong>Windows · macOS</strong></div>
-        <div><span>核心闭环</span><strong>Mission · Evidence</strong></div>
-        <a href="#download">全部下载选项 <span aria-hidden="true">→</span></a>
+        <div><span>开箱即用</span><strong>无需账号 · 无需 API Key</strong></div>
+        <a href="#download">选择安装包 <span aria-hidden="true">→</span></a>
       </section>
 
       <section class="clarity-story" id="story" aria-labelledby="story-title">
@@ -158,7 +169,7 @@
             </div>
 
             <div class="clarity-mascot" aria-hidden="true">
-              <img src="./assets/pet-study.png" alt="">
+              <img src="./assets/pet-study.png" width="256" height="256" loading="lazy" decoding="async" alt="">
               <span>我先找出真正需要行动的部分。</span>
             </div>
 
@@ -204,7 +215,7 @@
               <strong>真实产品界面 · 隔离演示数据</strong>
               <span>Learning Mission</span>
             </div>
-            <img src="./assets/learning-mission.png" alt="Chroni 学习任务控制台真实界面，显示数据库项目的目标、交付物、进度、证据覆盖和里程碑">
+            <img src="./assets/learning-mission.png" width="2139" height="1407" loading="lazy" decoding="async" alt="Chroni 学习任务控制台真实界面，显示数据库项目的目标、交付物、进度、证据覆盖和里程碑">
           </figure>
           <aside class="mission-loop" aria-label="学习任务执行闭环">
             <p class="overline">Evidence-led loop</p>
@@ -272,7 +283,7 @@
             <strong>真实产品界面</strong>
             <span>每日任务</span>
           </div>
-          <img src="./assets/daily-planner.png" alt="Chroni 桌面端每日任务完整界面">
+          <img src="./assets/daily-planner.png" width="2139" height="1407" loading="lazy" decoding="async" alt="Chroni 桌面端每日任务完整界面">
         </figure>
       </section>
 
@@ -294,7 +305,7 @@
               <strong>Chroni · Agent</strong>
               <span>计划覆盖率 100%</span>
             </div>
-            <img src="./assets/agent-workspace.png" alt="Chroni 学习执行 Agent 工作台，展示今日安排、计划覆盖率与高风险任务">
+            <img src="./assets/agent-workspace.png" width="2139" height="1407" loading="lazy" decoding="async" alt="Chroni 学习执行 Agent 工作台，展示今日安排、计划覆盖率与高风险任务">
           </figure>
         </div>
       </section>
@@ -318,7 +329,7 @@
 
           <div class="state-mascot">
             <span class="state-name">待机</span>
-            <img id="state-mascot-image" src="./assets/pet-idle.png" alt="Chroni 桌宠待机状态">
+            <img id="state-mascot-image" src="./assets/pet-idle.png" width="256" height="256" loading="lazy" decoding="async" alt="Chroni 桌宠待机状态">
             <div class="state-timeline" aria-hidden="true"><i></i></div>
           </div>
 
@@ -374,50 +385,50 @@
         <div class="section-heading download-heading">
           <p class="overline">Download Chroni</p>
           <h2 id="download-title">让下一项学习任务，<br>真正开始推进。</h2>
-          <p id="release-status" role="status" aria-live="polite">页面正在从 GitHub 检查最新安装包。</p>
+          <p id="release-status" role="status" aria-live="polite">v__CHRONI_VERSION__ 安装包已就绪，点击对应平台即可直接下载。</p>
         </div>
 
         <div class="download-options">
           <article class="download-card recommended" id="windows-setup-card">
-            <div class="card-topline"><span>Windows</span><span class="recommended-label">推荐</span></div>
+            <div class="card-topline"><span>Windows</span><span class="recommended-label">推荐 · 点击即下</span></div>
             <h3>Windows 安装版</h3>
             <p>适用于 Windows 10/11 x64。包含开始菜单、桌面快捷方式与标准卸载入口。</p>
             <dl>
               <div><dt>格式</dt><dd>Setup EXE</dd></div>
               <div><dt>架构</dt><dd>x64</dd></div>
             </dl>
-            <a class="download-button asset-download" id="windows-setup" href="https://github.com/miracle121388-a11y/chroni/releases/latest">
+            <a class="download-button asset-download" id="windows-setup" href="https://github.com/miracle121388-a11y/chroni/releases/latest/download/Chroni-win-x64-setup.exe" data-direct-download data-download-platform="Windows">
               <span>下载 Windows 安装版</span><span aria-hidden="true">↓</span>
             </a>
-            <span class="asset-meta" id="windows-setup-meta">Latest Release</span>
+            <span class="asset-meta" id="windows-setup-meta">v__CHRONI_VERSION__ · 点击直接下载</span>
           </article>
 
           <article class="download-card" id="macos-card">
-            <div class="card-topline"><span>macOS</span><span>Universal</span></div>
+            <div class="card-topline"><span>macOS · Universal</span><span class="direct-label">点击即下</span></div>
             <h3>macOS 通用版</h3>
             <p>适用于 macOS 12 及以上版本，同时兼容 Apple Silicon 与 Intel Mac。当前版本未经 Apple 公证，首次启动需按安全提示允许打开；默认托管智能服务不使用钥匙串，只有主动保存自定义 API Key 时才会访问。</p>
             <dl>
               <div><dt>格式</dt><dd>DMG</dd></div>
               <div><dt>架构</dt><dd>Universal</dd></div>
             </dl>
-            <a class="download-button asset-download secondary-download" id="macos-dmg" href="https://github.com/miracle121388-a11y/chroni/releases/latest">
+            <a class="download-button asset-download secondary-download" id="macos-dmg" href="https://github.com/miracle121388-a11y/chroni/releases/latest/download/Chroni-mac-universal.dmg" data-direct-download data-download-platform="macOS">
               <span>下载 macOS 版</span><span aria-hidden="true">↓</span>
             </a>
-            <span class="asset-meta" id="macos-dmg-meta">Latest Release</span>
+            <span class="asset-meta" id="macos-dmg-meta">v__CHRONI_VERSION__ · 点击直接下载</span>
           </article>
 
           <article class="download-card compact-card" id="windows-portable-card">
-            <div class="card-topline"><span>Windows</span><span>Portable</span></div>
+            <div class="card-topline"><span>Windows · Portable</span></div>
             <div><h3>Windows 便携版</h3><p>无需安装，适合没有安装权限或希望放在独立目录中使用的电脑。</p></div>
-            <a class="text-download" id="windows-portable" href="https://github.com/miracle121388-a11y/chroni/releases/latest">
+            <a class="text-download" id="windows-portable" href="https://github.com/miracle121388-a11y/chroni/releases/latest/download/Chroni-win-x64-portable.exe" data-direct-download data-download-platform="Windows 便携版">
               下载便携版 <span aria-hidden="true">↓</span>
             </a>
-            <span class="asset-meta" id="windows-portable-meta">Latest Release</span>
+            <span class="asset-meta" id="windows-portable-meta">v__CHRONI_VERSION__ · 点击直接下载</span>
           </article>
         </div>
 
         <div class="install-note">
-          <div><strong>安装包由 GitHub Release 提供</strong><p>官网自动同步最新公开版本，并保留构建来源、SHA-256 校验文件和完整版本记录。</p></div>
+          <div><strong>点击按钮直接开始下载</strong><p>不会跳转到发布列表；安装包由 GitHub Release 分发，并保留构建来源、SHA-256 校验文件和完整版本记录。</p></div>
           <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/install-faq.md">安装与安全提示 <span aria-hidden="true">→</span></a>
         </div>
       </section>
@@ -448,10 +459,10 @@
       </section>
 
       <section class="closing section" aria-labelledby="closing-title">
-        <img src="./assets/pet-wake.png" alt="Chroni 桌宠">
+        <img src="./assets/pet-wake.png" width="256" height="256" loading="lazy" decoding="async" alt="Chroni 桌宠">
         <div><p class="overline">Ready when you are</p><h2 id="closing-title">下一份课程要求，直接拖给我。</h2></div>
-        <a class="download-button final-download" id="final-download" href="#download">
-          <span id="final-download-label">获取 Chroni</span><span aria-hidden="true">↓</span>
+        <a class="download-button final-download" id="final-download" href="#download" data-direct-download>
+          <span id="final-download-label">直接下载 Chroni</span><span aria-hidden="true">↓</span>
         </a>
       </section>
     </main>

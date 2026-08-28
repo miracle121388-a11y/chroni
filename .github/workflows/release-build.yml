@@ -51,6 +51,8 @@ jobs:
             Remove-Item Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
           }
           pnpm run package:windows
+      - name: Create Windows direct-download aliases
+        run: node scripts/create-release-aliases.mjs apps/desktop/dist-electron windows
       - name: Generate Windows checksums
         run: node scripts/generate-checksums.mjs apps/desktop/dist-electron apps/desktop/dist-electron/SHA256SUMS-windows.txt
       - name: Attest Windows packages
@@ -124,6 +126,8 @@ jobs:
             unset CSC_LINK CSC_KEY_PASSWORD
           fi
           pnpm run package:macos
+      - name: Create macOS direct-download alias
+        run: node scripts/create-release-aliases.mjs apps/desktop/dist-electron macos
       - name: Generate macOS checksums
         run: node scripts/generate-checksums.mjs apps/desktop/dist-electron apps/desktop/dist-electron/SHA256SUMS-macos.txt
       - name: Attest macOS packages

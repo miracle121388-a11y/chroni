@@ -1,9 +1,27 @@
 const RELEASE_API = "https://api.github.com/repos/miracle121388-a11y/chroni/releases/latest";
-const RELEASE_FALLBACK = "https://github.com/miracle121388-a11y/chroni/releases/latest";
+const CURRENT_VERSION = "__CHRONI_VERSION__";
+const DIRECT_DOWNLOAD_ROOT = "https://github.com/miracle121388-a11y/chroni/releases/latest/download";
+const directDownloadUrl = (name) => `${DIRECT_DOWNLOAD_ROOT}/${name}`;
 const FALLBACK_RELEASE = {
-  tag_name: "最新版",
+  tag_name: `v${CURRENT_VERSION}`,
   published_at: "",
-  assets: [],
+  assets: [
+    {
+      name: "Chroni-win-x64-setup.exe",
+      browser_download_url: directDownloadUrl("Chroni-win-x64-setup.exe"),
+      size: 0,
+    },
+    {
+      name: "Chroni-win-x64-portable.exe",
+      browser_download_url: directDownloadUrl("Chroni-win-x64-portable.exe"),
+      size: 0,
+    },
+    {
+      name: "Chroni-mac-universal.dmg",
+      browser_download_url: directDownloadUrl("Chroni-mac-universal.dmg"),
+      size: 0,
+    },
+  ],
 };
 
 const targets = {
@@ -61,12 +79,12 @@ function configurePlatform(platform) {
 
   const copy = {
     windows: {
-      button: "下载 Windows 版",
-      detected: "已匹配 Windows 10/11 x64",
+      button: "直接下载 Windows 版",
+      detected: "已匹配 Windows 10/11 x64 · 点击直接下载",
     },
     macos: {
-      button: "下载 macOS 版",
-      detected: "已匹配 macOS 通用版本",
+      button: "直接下载 macOS 版",
+      detected: "已匹配 macOS 通用版 · 点击直接下载",
     },
     other: {
       button: "查看电脑版本",
@@ -80,9 +98,14 @@ function configurePlatform(platform) {
 
   if (platform !== "other") {
     target.card?.classList.add("detected");
+    const platformLabel = platform === "macos" ? "macOS" : "Windows";
+    primary.dataset.downloadPlatform = platformLabel;
+    final.dataset.downloadPlatform = platformLabel;
   } else {
     primary.href = "#download";
     final.href = "#download";
+    delete primary.dataset.downloadPlatform;
+    delete final.dataset.downloadPlatform;
   }
   return { final, primary, target };
 }
@@ -99,26 +122,26 @@ function applyRelease(release, platform, selected, fallback = false) {
     if (!asset) continue;
     matchedAssets.set(key, asset);
     target.link.href = asset.browser_download_url;
-    target.meta.textContent = `${release.tag_name} · ${formatBytes(asset.size)}`;
+    target.meta.textContent = [release.tag_name, formatBytes(asset.size), "点击直接下载"].filter(Boolean).join(" · ");
   }
 
   if (platform !== "other") {
     const selectedKey = platform === "macos" ? "macos" : "windowsSetup";
     const recommendedAsset = matchedAssets.get(selectedKey);
-    const recommendedHref = recommendedAsset?.browser_download_url || RELEASE_FALLBACK;
+    const recommendedHref = recommendedAsset?.browser_download_url || selected.target?.link.href || "#download";
     selected.primary.href = recommendedHref;
     selected.final.href = recommendedHref;
     const date = formatDate(release.published_at);
     const size = recommendedAsset ? formatBytes(recommendedAsset.size) : "";
-    primaryMeta.textContent = [release.tag_name, size, date].filter(Boolean).join(" · ");
+    primaryMeta.textContent = [release.tag_name, size, date, "点击直接下载"].filter(Boolean).join(" · ");
   } else {
     primaryMeta.textContent = `${release.tag_name} · Windows 与 macOS`;
   }
 
   releaseVersion.textContent = release.tag_name;
   releaseStatus.textContent = fallback
-    ? "正在从 GitHub 检查最新安装包；读取失败时将打开 Latest Release 页面。"
-    : `${release.tag_name} 已发布，页面已为你匹配可直接运行的安装包。`;
+    ? `${release.tag_name} 安装包已就绪，点击对应平台即可直接下载。`
+    : `${release.tag_name} 已发布，页面已为你匹配最新安装包。`;
 }
 
 async function loadLatestRelease() {
@@ -133,13 +156,25 @@ async function loadLatestRelease() {
     if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
     applyRelease(await response.json(), platform, selected);
   } catch (error) {
-    document.querySelector("#release-status").textContent = "暂时无法自动读取版本，请从 Latest Release 页面选择当前安装包。";
-    console.warn("Unable to load Chroni release metadata", error);
+    document.querySelector("#release-status").textContent = `${FALLBACK_RELEASE.tag_name} 安装包已就绪，当前使用稳定直达下载通道。`;
+    console.info("Using stable Chroni download links", error instanceof Error ? error.message : "release metadata unavailable");
   }
+}
+
+function initializeDirectDownloadFeedback() {
+  document.addEventListener("click", (event) => {
+    const link = event.target instanceof Element ? event.target.closest("a[data-direct-download]") : null;
+    if (!link || !link.href.startsWith("https://github.com/")) return;
+    const platform = link.dataset.downloadPlatform || "对应平台";
+    document.querySelector("#release-status").textContent = `正在连接 ${platform} 安装包，下载将立即开始…`;
+    link.classList.add("download-started");
+    window.setTimeout(() => link.classList.remove("download-started"), 1800);
+  });
 }
 
 document.querySelector("#current-year").textContent = String(new Date().getFullYear());
 loadLatestRelease();
+initializeDirectDownloadFeedback();
 
 const clamp = (value, minimum = 0, maximum = 1) => Math.min(maximum, Math.max(minimum, value));
 const rangeProgress = (progress, start, end) => clamp((progress - start) / (end - start));

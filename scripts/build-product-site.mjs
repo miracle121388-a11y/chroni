@@ -1,10 +1,11 @@
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(root, "site");
 const output = join(root, "dist", "site");
+const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 
 const assets = [
   ["docs/assets/chroni-daily-planner-v0.2.0.png", "assets/daily-planner.png"],
@@ -27,6 +28,15 @@ if (!existsSync(source)) {
 rmSync(output, { force: true, recursive: true });
 mkdirSync(output, { recursive: true });
 cpSync(source, output, { recursive: true });
+
+for (const filename of ["index.html", "app.js"]) {
+  const target = join(output, filename);
+  const content = readFileSync(target, "utf8");
+  if (!content.includes("__CHRONI_VERSION__")) {
+    throw new Error(`Product site version placeholder is missing: ${filename}`);
+  }
+  writeFileSync(target, content.replaceAll("__CHRONI_VERSION__", version), "utf8");
+}
 
 for (const [inputPath, outputPath] of assets) {
   const input = join(root, inputPath);
