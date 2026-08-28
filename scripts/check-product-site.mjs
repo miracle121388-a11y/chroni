@@ -62,6 +62,12 @@ if (!html.includes("https://github.com/miracle121388-a11y/chroni/releases/latest
 if (!html.includes(`"softwareVersion": "${expectedVersion}"`)) {
   throw new Error(`Product site structured version does not match ${expectedVersion}.`);
 }
+if (!html.includes("把日程、课程要求、截图或项目材料拖给我。")) {
+  throw new Error("Product site intake prompt does not cover schedules and mixed materials.");
+}
+if (script.includes("正在理解课程材料")) {
+  throw new Error("Product site contains course-only generic understanding copy.");
+}
 
 for (const file of ["_headers", "_redirects", "robots.txt", "sitemap.xml", ".nojekyll"]) {
   if (!existsSync(join(output, file))) throw new Error(`Missing deployment file: ${file}`);

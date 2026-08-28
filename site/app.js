@@ -261,7 +261,7 @@ const mascotStates = {
     image: "./assets/pet-study.png",
     alt: "Chroni 桌宠阅读材料状态",
     message: "我先从材料里确认学习目标、交付物和验收标准。",
-    title: "正在理解课程材料",
+    title: "正在理解日程与任务",
     meta: "已找到 4 项关键信息",
   },
   planning: {
