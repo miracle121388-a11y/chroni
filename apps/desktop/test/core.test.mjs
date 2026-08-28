@@ -1241,6 +1241,72 @@ test("ordinary use does not touch system secret storage before a credential is c
   }
 });
 
+test("managed model startup and preference writes never initialize secret storage", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-managed-secret-idle-test-"));
+  let encryptionAttempts = 0;
+  let decryptionAttempts = 0;
+  try {
+    const store = new ChroniStore(dir, {
+      encrypt: () => {
+        encryptionAttempts += 1;
+        throw new Error("unexpected encryption attempt");
+      },
+      decrypt: () => {
+        decryptionAttempts += 1;
+        throw new Error("unexpected decryption attempt");
+      },
+    });
+
+    store.updatePreferences({ llm: { enabled: true, mode: "managed" } });
+    store.updatePreferences({ remindersEnabled: false });
+    store.snapshot();
+
+    assert.equal(encryptionAttempts, 0);
+    assert.equal(decryptionAttempts, 0);
+    assert.equal(store.snapshot().preferences.llm.mode, "managed");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("managed service upgrades discard obsolete access codes without opening secret storage", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-managed-secret-migration-test-"));
+  let encryptionAttempts = 0;
+  let decryptionAttempts = 0;
+  try {
+    writeFileSync(join(dir, "chroni-state.json"), JSON.stringify({
+      preferences: {
+        llm: {
+          enabled: true,
+          mode: "managed",
+          provider: "openai-compatible",
+          baseUrl: "https://api-getchroni.zeabur.app/v1",
+          apiKeyProtected: "obsolete-access-code",
+          model: "chroni-beta",
+        },
+      },
+    }), "utf8");
+    const store = new ChroniStore(dir, {
+      encrypt: () => {
+        encryptionAttempts += 1;
+        throw new Error("unexpected encryption attempt");
+      },
+      decrypt: () => {
+        decryptionAttempts += 1;
+        throw new Error("unexpected decryption attempt");
+      },
+    });
+
+    assert.equal(encryptionAttempts, 0);
+    assert.equal(decryptionAttempts, 0);
+    assert.equal(store.llmSettings().apiKey, "");
+    assert.equal(store.snapshot().services.model, "ready");
+    assert.equal(readFileSync(store.filePath, "utf8").includes("apiKeyProtected"), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("pet placement persists privately without changing the public snapshot", () => {
   const dir = mkdtempSync(join(tmpdir(), "chroni-placement-test-"));
   try {

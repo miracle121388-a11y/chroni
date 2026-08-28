@@ -6,6 +6,23 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 
 暂无未发布的用户可见变更。
 
+## [0.2.3] - 2026-08-28
+
+### Added
+
+- Windows 与 macOS 新安装默认启用 Chroni 托管智能服务，无需 API Key、服务访问码或账号即可使用模型抽取、主动追问、TaskPlan 和 Agent 规划。
+- 公共网关新增按来源网络和全局维度的分钟、每日、并发、提示词与输出限制，并保留上游超时和脱敏日志。
+
+### Changed
+
+- DeepSeek 主密钥只保存在 Zeabur 服务端；桌面安装包、本机状态和请求都不包含可提取的共享密钥。
+- 托管服务限流或暂时不可用时自动回退本地规则；高级用户仍可选择自己的 OpenAI-compatible API。
+
+### Fixed
+
+- 系统安全存储改为惰性初始化，升级时直接丢弃旧版托管访问码且不解密；普通启动和使用托管智能服务都不会检查、创建或访问 macOS `Chroni Safe Storage` 钥匙串项。
+- 新安装与既有用户偏好分离：新用户获得零配置智能服务，已有用户主动关闭模型的选择保持不变。
+
 ## [0.2.2] - 2026-08-28
 
 ### Fixed
@@ -136,7 +153,8 @@ Chroni 的重要用户可见变化记录在这里。版本号遵循 [Semantic Ve
 - 发布标签现在必须与根工作区和桌面应用版本一致。
 - 生产包启用 Electron Fuses 和 ASAR 完整性校验。
 
-[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/miracle121388-a11y/chroni/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/miracle121388-a11y/chroni/compare/v0.1.4...v0.2.0

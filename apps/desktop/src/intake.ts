@@ -7,7 +7,7 @@ import readXlsxFile from "read-excel-file/node";
 import type { DdlExtractionContext, DdlItem, ChroniInputFile, ChroniLlmSettings, ExtractResult, ExtractedFailure, ExtractedInput, Importance, IntakeDraft, IntakePayload, IntakeResult, PendingExtractedTask, PendingClarification } from "./shared/types.js";
 import type { ChroniStore } from "./store.js";
 import { requestChatCompletion } from "./llm-client.js";
-import { resolveLlmSettings } from "./llm-settings.js";
+import { isLlmReady, resolveLlmSettings } from "./llm-settings.js";
 import { analyzeCompletenessWithLlm } from "./agent/clarification-agent.js";
 import { selectPlanningPreferences } from "./agent/preference-selector.js";
 import { generateTaskPlan } from "./agent/task-plan-agent.js";
@@ -517,7 +517,7 @@ function fallbackExtractedInputs(payload: IntakePayload, extracted: ExtractedInp
 async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings: ChroniLlmSettings | undefined, referenceNow: Date): Promise<LlmExtraction> {
   const resolvedSettings = resolveLlmSettings(settings);
   const result: LlmExtraction = { items: [], pendingItems: [], attempted: 0, rejected: 0, errors: [] };
-  if (!resolvedSettings.enabled || !resolvedSettings.apiKey || !resolvedSettings.model) return result;
+  if (!isLlmReady(resolvedSettings)) return result;
 
   const today = referenceNow.toISOString();
   const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";

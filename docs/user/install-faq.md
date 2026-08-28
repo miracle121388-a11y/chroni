@@ -42,24 +42,24 @@ Portable 不是“完全不写入数据”。它只是不安装程序，Chroni �
 
 `Chroni Safe Storage` 是 macOS 钥匙串为 Chroni 保存的本机加密密钥名称，不是需要用户知道或输入的一串“Chroni 密钥”。弹窗要求的是当前 Mac 账户的登录密码，用来授权应用访问该钥匙串项。
 
-`v0.2.1` 的无签名 macOS 包错误地在普通启动阶段启用了 Chromium Cookie Encryption，因此即使没有配置模型凭据也可能出现该提示。`v0.2.2` 已关闭无签名直装包中未使用的 Cookie Encryption；没有配置服务访问码或自定义 API Key 时，普通启动不会访问钥匙串。
+`v0.2.1` 的无签名 macOS 包错误地在普通启动阶段启用了 Chromium Cookie Encryption，因此即使没有配置模型凭据也可能出现该提示。`v0.2.2` 已关闭无签名直装包中未使用的 Cookie Encryption；`v0.2.3` 进一步移除托管模型客户端访问码，并把系统安全存储改为惰性初始化。普通启动和使用 Chroni 智能服务都不会检查、创建或访问钥匙串。
 
-只有在用户主动保存服务访问码或自定义 API Key 时，Chroni 才会调用系统安全存储，macOS 此时仍可能进行一次钥匙串授权。稳定的 Developer ID 签名可以让后续版本被系统识别为同一个应用，减少重复授权；Apple 公证主要用于消除 Gatekeeper 的未知开发者拦截，两者不是同一个提示。
+只有用户主动切换到自定义 API 并保存自己的 API Key 时，Chroni 才会调用系统安全存储，macOS 此时仍可能进行一次钥匙串授权。稳定的 Developer ID 签名可以让后续版本被系统识别为同一个应用，减少重复授权；Apple 公证主要用于消除 Gatekeeper 的未知开发者拦截，两者不是同一个提示。
 
 ## 如何校验 SHA-256？
 
 Windows PowerShell：
 
 ```powershell
-Get-FileHash ".\Chroni-0.2.2-win-x64-setup.exe" -Algorithm SHA256
+Get-FileHash ".\Chroni-0.2.3-win-x64-setup.exe" -Algorithm SHA256
 Get-Content ".\SHA256SUMS.txt"
 ```
 
 macOS Terminal：
 
 ```bash
-shasum -a 256 Chroni-0.2.2-mac-universal.dmg
-grep "Chroni-0.2.2-mac-universal.dmg" SHA256SUMS.txt
+shasum -a 256 Chroni-0.2.3-mac-universal.dmg
+grep "Chroni-0.2.3-mac-universal.dmg" SHA256SUMS.txt
 ```
 
 计算结果必须与发布页同名文件对应的值完全一致。版本升级后请替换命令中的版本号。
@@ -90,9 +90,9 @@ Windows 安装器默认不会在卸载时删除用户数据，避免误删日程
 
 ## 不填 API Key 能用吗？
 
-可以。本地规则能处理标题、日期和时间表达明确的 DDL，也能使用本地文件解析、OCR、日程、TaskPlan、每日任务和桌宠。复杂跨段语义和模糊要求的理解能力会降低。
+可以。`v0.2.3` 新安装默认启用 Chroni 智能服务，不要求 API Key、访问码或账号，可以直接使用模型抽取、主动追问、TaskPlan 和 Agent 规划。公共服务有按来源网络和全局额度设置的公平使用限制；暂时不可用或达到额度时会自动回退本地规则。
 
-获得访问权限的用户可以使用 Chroni 服务访问码调用受控模型额度；没有访问码或需要长期使用时，可配置自己的 OpenAI-compatible API Key，并承担对应服务商费用。
+需要完全离线时可以关闭“启用智能模型”；需要自行控制服务商或额度时可以配置自己的 OpenAI-compatible API Key，并承担对应服务商费用。
 
 ## 应用提示端口被占用怎么办？
 

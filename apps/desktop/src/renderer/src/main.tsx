@@ -1307,10 +1307,12 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
           <span className="mode-chip">{modelMode}</span>
         </div>
         <Toggle
-          label={services.modelEnabledOverride === undefined ? "启用 LLM 抽取" : "启用 LLM 抽取（由环境变量控制）"}
+          label={services.modelEnabledOverride === undefined
+            ? "启用智能模型"
+            : "启用智能模型（由环境变量控制）"}
           checked={effectiveLlmEnabled}
           disabled={services.modelEnabledOverride !== undefined}
-          onChange={(value) => void patch({ llm: { enabled: value } }, value ? "LLM 抽取已开启。" : "LLM 抽取已关闭。")}
+          onChange={(value) => void patch({ llm: { enabled: value } }, value ? "智能模型已开启。" : "智能模型已关闭。")}
         />
         <details className="advanced-settings">
           <summary>智能模型服务</summary>
@@ -1321,10 +1323,9 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
           {llmDraft.mode === "managed" ? (
             <>
               <div className="managed-llm-note">
-                <strong>DeepSeek V4 Flash</strong>
-                <span>主密钥由 Chroni 服务端托管，应用只保存可撤销的服务访问码。</span>
+                <strong>Chroni 托管智能服务 · DeepSeek V4 Flash</strong>
+                <span>下载后默认可用，无需填写 API Key 或服务访问码。主密钥只保存在 Chroni 服务端，安装包不包含任何模型密钥。</span>
               </div>
-              <label className="text-field">服务访问码<input type="password" value={llmDraft.apiKey} placeholder={services.model === "ready" && preferences.llm.mode === "managed" ? "已配置，输入新值可替换" : "输入服务方提供的访问码"} autoComplete="off" onChange={(event) => updateLlmDraft("apiKey", event.target.value)} /></label>
             </>
           ) : (
             <>

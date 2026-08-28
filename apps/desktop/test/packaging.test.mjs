@@ -17,6 +17,7 @@ const dailyReviewSource = readFileSync(new URL("../src/renderer/src/components/D
 const rendererTypes = readFileSync(new URL("../src/renderer/src/vite-env.d.ts", import.meta.url), "utf8");
 const preloadSource = readFileSync(new URL("../preload.cjs", import.meta.url), "utf8");
 const mainSource = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+const llmClientSource = readFileSync(new URL("../src/llm-client.ts", import.meta.url), "utf8");
 const windowsSource = readFileSync(new URL("../src/windows.ts", import.meta.url), "utf8");
 const workspaceConfig = readFileSync(new URL("../../../pnpm-workspace.yaml", import.meta.url), "utf8");
 const artifactVerifier = readFileSync(new URL("../../../scripts/verify-desktop-artifact.mjs", import.meta.url), "utf8");
@@ -86,6 +87,16 @@ test("unsigned macOS packages do not access Keychain for unused browser cookies"
     });
     assert.equal(enabledWithStableSignature, "true");
   }
+});
+
+test("fresh desktop installs use the managed model without a packaged credential", () => {
+  assert.match(mainSource, /const firstLaunch = !existsSync/);
+  assert.match(mainSource, /if \(firstLaunch\) primaryStore\.updatePreferences\(\{ llm: \{ enabled: true, mode: "managed" \} \}\)/);
+  assert.match(llmClientSource, /"x-chroni-client": "desktop"/);
+  assert.match(rendererSource, /无需填写 API Key 或服务访问码/);
+  assert.doesNotMatch(rendererSource, /服务访问码<input/);
+  assert.doesNotMatch(mainSource, /if \(!safeStorage\.isEncryptionAvailable\(\)\) return undefined/);
+  assert.match(mainSource, /encrypt: \(value\) => \{[\s\S]*safeStorage\.isEncryptionAvailable\(\)/);
 });
 
 test("packaged asset variant and macOS metadata are verified after packaging", () => {

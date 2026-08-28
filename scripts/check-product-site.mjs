@@ -36,7 +36,7 @@ for (const id of requiredIds) {
   if (!ids.includes(id)) throw new Error(`Missing required site element: #${id}`);
 }
 if (!html.includes("./privacy.html")) throw new Error("Product site does not link to the privacy policy.");
-for (const requiredText of ["默认保存在本机", "模型调用由你开启", "密钥不进入项目数据"]) {
+for (const requiredText of ["默认保存在本机", "联网模型可随时关闭", "密钥不进入项目数据", "没有客户端访问码"]) {
   if (!privacy.includes(requiredText)) throw new Error(`Privacy page is missing: ${requiredText}`);
 }
 

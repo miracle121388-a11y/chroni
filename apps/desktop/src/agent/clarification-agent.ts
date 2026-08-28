@@ -3,6 +3,7 @@ import type { ExtractedInput, IntakeDraft, PendingClarification } from "../share
 import type { ChroniLlmSettings } from "../shared/types.js";
 import { deadlineDateFromText, isConditionalDeadlineText, stripDeadlineTemporalExpressions } from "../shared/deadline-text.js";
 import { requestChatCompletion } from "../llm-client.js";
+import { isLlmReady } from "../llm-settings.js";
 
 export type CompletenessAnalysis = {
   status: "complete" | "needs-clarification";
@@ -66,7 +67,7 @@ export function analyzeCompleteness(input: ExtractedInput, now = new Date()): Co
 
 export async function analyzeCompletenessWithLlm(input: ExtractedInput, settings?: ChroniLlmSettings, now = new Date()): Promise<CompletenessAnalysis> {
   const local = analyzeCompleteness(input, now);
-  if (local.status === "complete" || !settings?.enabled || !settings.apiKey || !settings.model) return local;
+  if (local.status === "complete" || !settings || !isLlmReady(settings)) return local;
   try {
     const content = await requestChatCompletion(settings, [
       {

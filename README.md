@@ -39,7 +39,7 @@
   <a href="#开发与验证">开发</a>
 </p>
 
-> **当前版本：** `0.2.2`。公开安装包包含完整的桌宠动画、控制中心与本地优先数据能力；签名、公证和可下载产物以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
+> **当前版本：** `0.2.3`。公开安装包默认提供无需 API Key 的 Chroni 托管智能服务，并包含完整桌宠动画、控制中心与本地优先数据能力；签名、公证和可下载产物以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
 
 > **资产许可提示：** MIT 许可覆盖 Chroni 自研代码，不自动覆盖字体、运行依赖与桌宠视觉素材；完整边界见 [第三方声明](./THIRD_PARTY_NOTICES.md)。
 
@@ -76,11 +76,11 @@ Chroni 不生成可冒充学生完成的作业，不把原始材料当成学习�
 | 每日回顾 | 独立栏目按日期整理活动轨迹、完成率、投入时长和待延续事项；自动总结与个人记录均保存在本机。 |
 | 环境式桌面交互 | 左键桌宠查看日程，拖入材料开始识别；动作、气泡、系统通知和托盘状态共同呈现 Agent 进度。 |
 | 可控的行为记忆 | 仅从用户明确保存的规划修改中学习偏好；达到证据与置信度门槛后才应用，并可停用、删除或清空。 |
-| Local-first | 学习任务、证据元数据、计划、偏好和结构化执行轨迹保存在本机；API Key 优先交由操作系统安全存储。 |
+| Local-first | 学习任务、证据元数据、计划、偏好和结构化执行轨迹保存在本机；托管模型 Key 只在服务端，自定义 API Key 优先交由操作系统安全存储。 |
 
 ## 3 分钟上手
 
-1. 从 [Latest Release](https://github.com/miracle121388-a11y/chroni/releases/latest) 安装并启动 Chroni。不开启大模型也可以使用本地规则；需要理解复杂、跨段材料时，再按下文连接模型 API。
+1. 从 [Latest Release](https://github.com/miracle121388-a11y/chroni/releases/latest) 安装并启动 Chroni。新安装默认启用无需 API Key 的 Chroni 智能服务；模型不可用或手动关闭时会自动使用本地规则。
 2. 在“智能整理”中选择文件，或把[课程作业示例](./examples/demo/01-course-assignment.txt)拖给桌宠。也可以直接输入：
 
    ```text
@@ -239,15 +239,14 @@ grep "mac-universal.dmg" SHA256SUMS.txt
 
 Chroni 支持 OpenAI-compatible Chat Completions 接口。大模型主要增强复杂语义抽取、TaskPlan 生成和可选的每日规划，本地规则始终作为基础能力与失败回退。
 
-当前版本提供“本地规则”“Chroni 智能服务”和“自定义 API”三种实际工作方式。获得服务访问码的用户无需配置 DeepSeek Key；DeepSeek 主密钥保存在 Zeabur 网关，永远不会写入桌面安装包。三种方式的适用范围、费用与安全边界见[模型使用方式](./docs/user/model-modes.md)，网关部署与运维见[LLM 网关](./docs/llm-gateway.md)。
+当前版本提供“本地规则”“Chroni 智能服务”和“自定义 API”三种实际工作方式。新安装默认使用 Chroni 智能服务，无需 API Key、访问码或账号；DeepSeek 主密钥只保存在 Zeabur 网关，永远不会写入桌面安装包。公共服务执行按来源网络和全局额度限制，超限或暂时不可用时自动回退本地规则。三种方式的适用范围、费用与安全边界见[模型使用方式](./docs/user/model-modes.md)，网关部署与运维见[LLM 网关](./docs/llm-gateway.md)。
 
 ### 控制中心配置（推荐）
 
-1. 从托盘打开“控制中心”，进入“偏好”。
-2. 展开“高级 → 智能模型服务”。
-3. 获得访问权限的用户选择“Chroni 智能服务”，填写服务方提供的访问码。
-4. 自带 Key 的用户选择“自定义 API”。DeepSeek 的 Base URL 为 `https://api.deepseek.com`，模型可填写 `deepseek-v4-flash`。
-5. 点击“保存并测试”，测试通过后开启“启用 LLM 抽取”。
+1. 安装后直接导入材料，Chroni 智能服务已经启用，无需配置。
+2. 如需检查连接，从托盘打开“控制中心”，进入“偏好 → 高级 → 智能模型服务”，点击“测试连接”。
+3. 如需完全离线，可关闭“启用智能模型”，所有基础功能继续使用本地规则。
+4. 自带 Key 的用户可以切换到“自定义 API”。DeepSeek 的 Base URL 为 `https://api.deepseek.com`，模型可填写 `deepseek-v4-flash`。
 
 模型名称和计费规则可能变化，请以 [DeepSeek API 文档](https://api-docs.deepseek.com/) 或所用服务商文档为准。
 
@@ -277,7 +276,7 @@ CHRONI_LLM_API_KEY=你的_DeepSeek_API_Key
 
 `.env` 只供源码开发启动器读取，安装包用户应使用控制中心。系统或终端环境变量优先于 `.env`，`.env` 又优先于控制中心保存的同名配置。修改后重新运行 `pnpm run dev` 或 `pnpm run start`。
 
-> **密钥与费用：** 控制中心保存的 API Key 优先使用 Electron `safeStorage` 交由操作系统安全存储，不会明文写入 `chroni-state.json`。`.env` 是开发机上的明文机密，已被 Git 忽略，请勿提交或分享。模型调用可能按服务商规则计费；可以分别关闭 LLM 抽取、Agent 大模型规划或自动巡检。
+> **密钥与费用：** Chroni 智能服务的 DeepSeek Key 只存在于服务端；安装包、本机状态和请求均不携带它。自定义 API Key 优先使用 Electron `safeStorage`，不会明文写入 `chroni-state.json`。`.env` 是开发机上的明文机密，已被 Git 忽略，请勿提交或分享。公共托管服务有公平使用额度；可以关闭智能模型、Agent 大模型规划或自动巡检。
 
 > **数据发送范围：** 文件解析和 OCR 先在本机完成。启用模型后，Chroni 会按功能发送解析出的文本、任务元数据、来源摘要和已筛选的结构化偏好；二进制原文件不会直接上传。处理敏感材料前，请确认所用模型服务的隐私政策。
 
@@ -310,7 +309,7 @@ API 覆盖文本与文件抽取、Learning Mission 查询、证据说明、阶�
 | --- | --- |
 | 从下载到第一个今日计划 | [3 分钟快速开始](./docs/user/quick-start.md) |
 | 选择安装包、处理系统安全提示 | [安装 FAQ](./docs/user/install-faq.md) |
-| 不填 Key、配置 DeepSeek 或关闭模型 | [模型使用方式](./docs/user/model-modes.md) |
+| 零配置托管模型、自定义 DeepSeek 或关闭模型 | [模型使用方式](./docs/user/model-modes.md) |
 | 了解本地数据和模型发送范围 | [隐私说明](./docs/user/privacy.md) |
 | 文件为空、OCR、窗口、更新或启动问题 | [故障排查](./docs/user/troubleshooting.md) |
 | 提交脱敏问题或体验建议 | [帮助与反馈](./docs/user/feedback.md) |
@@ -402,13 +401,14 @@ Chroni
 | [用户快速开始](./docs/user/quick-start.md) | 无 Key 三分钟体验和日常操作顺序。 |
 | [安装 FAQ](./docs/user/install-faq.md) | Windows/macOS 安装、安全提示、校验、更新与卸载。 |
 | [隐私说明](./docs/user/privacy.md) | 本地数据、模型调用、API Key、删除与反馈边界。 |
-| [模型使用方式](./docs/user/model-modes.md) | 本地规则、用户自带 Key 和后续官方试用规划。 |
+| [模型使用方式](./docs/user/model-modes.md) | 零配置托管模型、本地规则和用户自带 Key。 |
 | [故障排查](./docs/user/troubleshooting.md) | 启动、文件、OCR、模型、窗口、数据和更新问题。 |
 | [Agent 设计](./docs/agent-clarification-task-planning-memory.md) | 主动追问、TaskPlan、状态机和 Behavior Memory。 |
 | [本地 HTTP API](./docs/local-api.md) | 鉴权、端点、上传示例和安全边界。 |
 | [发布指南](./docs/releasing.md) | 版本、签名、公证、标签发布与发布后验证。 |
 | [应用商店发布资料](./docs/store/README.md) | Microsoft Store / Mac App Store 身份、沙盒、隐私、文案与审核检查。 |
 | [小红书发布计划](./docs/marketing/xiaohongshu-launch-plan.md) | 15/30/60 秒脚本、截图清单、隐私检查和发布模板。 |
+| [v0.2.3 发布说明](./docs/releases/v0.2.3.md) | Windows/macOS 下载后无需 API Key 即可使用完整模型能力。 |
 | [v0.2.2 发布说明](./docs/releases/v0.2.2.md) | 修复无签名 macOS 包首次启动时不必要的钥匙串密码提示。 |
 | [v0.2.1 发布说明](./docs/releases/v0.2.1.md) | Windows 应用身份、桌面伙伴打包、控制中心与商店准备。 |
 | [v0.2.0 发布说明](./docs/releases/v0.2.0.md) | 当前公开版本的功能、升级内容与交付边界。 |

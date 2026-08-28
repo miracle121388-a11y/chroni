@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveLlmSettings } from "../dist/llm-settings.js";
+import { hasLlmAccess, hasLlmEnvironmentConfiguration, isLlmReady, llmEnabledEnvironmentOverride, resolveLlmSettings } from "../dist/llm-settings.js";
 
 const persisted = {
   enabled: false,
@@ -57,4 +57,15 @@ test("blank or unrelated environment values leave persisted settings intact", ()
 test("legacy settings without a mode remain custom connections", () => {
   const { mode: _mode, ...legacy } = persisted;
   assert.equal(resolveLlmSettings(legacy).mode, "custom");
+});
+
+test("fresh installs use the managed model without a client credential", () => {
+  const resolved = resolveLlmSettings(undefined, {});
+  assert.equal(resolved.enabled, true);
+  assert.equal(resolved.mode, "managed");
+  assert.equal(resolved.apiKey, "");
+  assert.equal(hasLlmAccess(resolved), true);
+  assert.equal(isLlmReady(resolved), true);
+  assert.equal(isLlmReady({ ...resolved, enabled: false }), false);
+  assert.equal(hasLlmAccess({ ...resolved, mode: "custom" }), false);
 });

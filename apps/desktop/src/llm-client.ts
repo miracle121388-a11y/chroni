@@ -1,4 +1,5 @@
 import type { ChroniLlmSettings, LlmConnectionResult } from "./shared/types.js";
+import { hasLlmAccess } from "./llm-settings.js";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -37,8 +38,10 @@ export async function requestChatCompletion(
     const response = await (options.fetchImpl ?? fetch)(`${normalizeBaseUrl(settings.baseUrl)}/chat/completions`, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${settings.apiKey}`,
         "content-type": "application/json",
+        ...(settings.mode === "managed"
+          ? { "x-chroni-client": "desktop" }
+          : { authorization: `Bearer ${settings.apiKey}` }),
       },
       body: JSON.stringify({
         ...(isDeepSeekBaseUrl(settings.baseUrl) ? { thinking: { type: "disabled" } } : {}),
@@ -93,9 +96,7 @@ export async function testLlmConnection(settings: ChroniLlmSettings, options: Om
 
 function assertCompleteSettings(settings: ChroniLlmSettings): void {
   if (!settings.baseUrl.trim()) throw new LlmRequestError("configuration", "请先填写 API 地址。");
-  if (!settings.apiKey.trim()) {
-    throw new LlmRequestError("configuration", settings.mode === "managed" ? "请先填写服务访问码。" : "请先填写 API Key。");
-  }
+  if (!hasLlmAccess(settings)) throw new LlmRequestError("configuration", "请先填写 API Key。");
   if (!settings.model.trim()) throw new LlmRequestError("configuration", "请先填写模型名称。");
 }
 
@@ -129,7 +130,7 @@ function connectionMessage(error: LlmRequestError, mode: ChroniLlmSettings["mode
   if (error.kind === "configuration") return error.message;
   if (error.kind === "authentication") {
     return mode === "managed"
-      ? "服务访问码无效或已失效，请检查后重试。"
+      ? "Chroni 智能服务暂时无法授权，请稍后重试。"
       : "API Key 无效或没有模型访问权限，请检查后重试。";
   }
   if (error.kind === "model") return "API 地址或模型名称不可用，请检查后重试。";

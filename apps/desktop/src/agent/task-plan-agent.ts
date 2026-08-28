@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ChroniLlmSettings, DdlItem, PlanningPreference, TaskPlan, TaskPlanStep } from "../shared/types.js";
 import { requestChatCompletion } from "../llm-client.js";
+import { isLlmReady } from "../llm-settings.js";
 import { validateTaskPlan } from "./task-plan-validator.js";
 
 type PlanCandidate = {
@@ -21,7 +22,7 @@ export async function generateTaskPlan(
   settings?: ChroniLlmSettings,
   now = new Date(),
 ): Promise<TaskPlan> {
-  if (!settings?.enabled || !settings.apiKey || !settings.model) return createRuleTaskPlan(task, preferences, now);
+  if (!settings || !isLlmReady(settings)) return createRuleTaskPlan(task, preferences, now);
   try {
     const content = await requestChatCompletion(settings, [
       {

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, Notification, safeStorage, shell } from "electron";
-import { createReadStream, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 import { DeadlineAgent } from "./agent/deadline-agent.js";
@@ -12,7 +12,7 @@ import { startChroniApiServer, type AgentApiOperations } from "./api-server.js";
 import { ensureTaskPlan, extractPayload, processIntake, reprocessSource } from "./intake.js";
 import { clearSampleDataStore, createSampleDataStore, SAMPLE_DATA_NAMESPACE } from "./sample-data.js";
 import { testLlmConnection } from "./llm-client.js";
-import { resolveLlmSettings } from "./llm-settings.js";
+import { isLlmReady, resolveLlmSettings } from "./llm-settings.js";
 import { shouldRemindItem } from "./shared/schedule.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
 import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyReviewInput, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, LearningMissionEvidenceInput, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanUpdatePayload } from "./shared/types.js";
@@ -44,9 +44,12 @@ if (!gotLock) {
   app.whenReady().then(() => {
     applyMacDevelopmentIcon();
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");
-    process.env.CHRONI_OCR_CACHE_PATH ||= join(app.getPath("userData"), "cache", "ocr");
+    const userDataPath = app.getPath("userData");
+    const firstLaunch = !existsSync(join(userDataPath, "chroni-state.json"));
+    process.env.CHRONI_OCR_CACHE_PATH ||= join(userDataPath, "cache", "ocr");
     storeSecretCodec = createSecretCodec();
-    primaryStore = new ChroniStore(app.getPath("userData"), storeSecretCodec);
+    primaryStore = new ChroniStore(userDataPath, storeSecretCodec);
+    if (firstLaunch) primaryStore.updatePreferences({ llm: { enabled: true, mode: "managed" } });
     store = primaryStore;
     installDeadlineAgent();
     applicationUpdater = createApplicationUpdater();
@@ -545,7 +548,7 @@ function installDeadlineAgent(): void {
     planner: {
       propose: (context) => {
         const settings = resolveLlmSettings(store.llmSettings());
-        if (!settings.enabled || !settings.apiKey || !settings.model) return Promise.resolve({ fallbackReason: "unavailable" });
+        if (!isLlmReady(settings)) return Promise.resolve({ fallbackReason: "unavailable" });
         return createLlmAgentPlanner(settings).propose(context);
       },
     },
@@ -777,11 +780,16 @@ function registerHotkey(): boolean {
   }
 }
 
-function createSecretCodec(): SecretCodec | undefined {
-  if (!safeStorage.isEncryptionAvailable()) return undefined;
+function createSecretCodec(): SecretCodec {
   return {
-    encrypt: (value) => safeStorage.encryptString(value).toString("base64"),
-    decrypt: (value) => safeStorage.decryptString(Buffer.from(value, "base64")),
+    encrypt: (value) => {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error("System secret storage is unavailable.");
+      return safeStorage.encryptString(value).toString("base64");
+    },
+    decrypt: (value) => {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error("System secret storage is unavailable.");
+      return safeStorage.decryptString(Buffer.from(value, "base64"));
+    },
   };
 }
 

@@ -11,13 +11,24 @@ export type LlmEnvironment = Partial<Record<
 >>;
 
 const fallbackSettings: ChroniLlmSettings = {
-  enabled: false,
+  enabled: true,
   mode: "managed",
   provider: "openai-compatible",
   baseUrl: CHRONI_MANAGED_LLM_BASE_URL,
   apiKey: "",
   model: CHRONI_MANAGED_LLM_MODEL,
 };
+
+export function hasLlmAccess(settings: ChroniLlmSettings): boolean {
+  return settings.mode === "managed" || !!settings.apiKey.trim();
+}
+
+export function isLlmReady(settings: ChroniLlmSettings): boolean {
+  return settings.enabled
+    && !!settings.baseUrl.trim()
+    && !!settings.model.trim()
+    && hasLlmAccess(settings);
+}
 
 export function resolveLlmSettings(settings?: ChroniLlmSettings, environment: LlmEnvironment = process.env): ChroniLlmSettings {
   const current = settings ?? fallbackSettings;

@@ -110,17 +110,23 @@ test("managed connections use service-specific status messages", async () => {
     ...settings,
     mode: "managed",
     baseUrl: "https://api-getchroni.zeabur.app/v1",
-    apiKey: "beta-code",
+    apiKey: "",
     model: "chroni-beta",
   };
   const failed = await testLlmConnection(managed, {
     fetchImpl: async () => new Response(null, { status: 401 }),
   });
   assert.equal(failed.ok, false);
-  assert.match(failed.message, /服务访问码/);
+  assert.match(failed.message, /暂时无法授权/);
 
+  let receivedHeaders;
   const succeeded = await testLlmConnection(managed, {
-    fetchImpl: async () => new Response(JSON.stringify({ choices: [{ message: { content: "OK" } }] }), { status: 200 }),
+    fetchImpl: async (_url, init) => {
+      receivedHeaders = init.headers;
+      return new Response(JSON.stringify({ choices: [{ message: { content: "OK" } }] }), { status: 200 });
+    },
   });
   assert.deepEqual(succeeded, { ok: true, message: "Chroni 智能服务可以正常响应。" });
+  assert.equal(receivedHeaders["x-chroni-client"], "desktop");
+  assert.equal("authorization" in receivedHeaders, false);
 });

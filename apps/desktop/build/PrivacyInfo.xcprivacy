@@ -12,7 +12,7 @@
       <key>NSPrivacyCollectedDataType</key>
       <string>NSPrivacyCollectedDataTypeOtherUserContent</string>
       <key>NSPrivacyCollectedDataTypeLinked</key>
-      <true/>
+      <false/>
       <key>NSPrivacyCollectedDataTypeTracking</key>
       <false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>
@@ -24,7 +24,7 @@
       <key>NSPrivacyCollectedDataType</key>
       <string>NSPrivacyCollectedDataTypeOtherUsageData</string>
       <key>NSPrivacyCollectedDataTypeLinked</key>
-      <true/>
+      <false/>
       <key>NSPrivacyCollectedDataTypeTracking</key>
       <false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>
@@ -34,9 +34,9 @@
     </dict>
     <dict>
       <key>NSPrivacyCollectedDataType</key>
-      <string>NSPrivacyCollectedDataTypeUserID</string>
+      <string>NSPrivacyCollectedDataTypeOtherDataTypes</string>
       <key>NSPrivacyCollectedDataTypeLinked</key>
-      <true/>
+      <false/>
       <key>NSPrivacyCollectedDataTypeTracking</key>
       <false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>

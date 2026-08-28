@@ -1,13 +1,13 @@
 # Chroni 产品化审计与路线图
 
-更新时间：2026-08-25
-审计基线：Chroni `v0.2.0`
+更新时间：2026-08-28
+审计基线：Chroni `v0.2.3`
 
 ## 1. 本轮边界
 
 本轮目标是在不修改 Chroni 产品功能的前提下，降低普通用户的下载、安装、首次体验、模型配置、排错和反馈门槛。
 
-初始产品化轮次没有新增 Relay Server、登录、云同步、订阅或移动端。2026-07-24 的后续内测轮次已增加真实 LLM Gateway：服务端托管 DeepSeek Key，客户端只持有可撤销访问码，并具备限流、超时、参数白名单、脱敏日志与健康检查。
+初始产品化轮次没有新增 Relay Server、登录、云同步、订阅或移动端。`v0.2.3` 将真实 LLM Gateway 升级为公开桌面服务：DeepSeek Key 只在服务端，客户端不持有任何共享凭据；网关具备来源网络和全局限流、超时、参数白名单、脱敏日志与健康检查。
 
 ## 2. 当前用户链路
 
@@ -18,7 +18,7 @@ GitHub Releases 下载
 -> 左键桌宠打开日程抽屉
 -> 在控制中心快速输入，或拖入文件/图片
 -> 本地解析与 OCR
--> 本地规则抽取、Chroni 内测网关，或用户配置的 OpenAI-compatible 模型增强抽取
+-> 默认 Chroni 智能服务、本地规则回退，或用户配置的 OpenAI-compatible 模型
 -> 核对 Learning Mission 与必要待确认项
 -> 检查并启用 TaskPlan
 -> Agent 生成今日时间块
@@ -32,9 +32,9 @@ GitHub Releases 下载
 | Windows 安装 | 已有 NSIS Setup 和 Portable | 未签名版本可能触发 SmartScreen；用户不理解两个版本区别 | 安装 FAQ、校验说明、推荐选择 |
 | macOS 安装 | 已有 Universal DMG/ZIP | 未公证版本可能触发 Gatekeeper；用户不清楚安全打开方式 | 安装 FAQ、来源与校验说明 |
 | 首次启动 | 直接进入桌宠和控制中心 | 无应用内 onboarding，用户不知道第一步做什么 | 提供 3 分钟指南、可拖入示例材料和隔离 GOAI Demo |
-| 无 API Key | 本地规则可处理结构明确的 DDL | README 提到能力，但体验边界不够集中 | 明确 local-only 路径、适用范围和验证方法 |
+| 无 API Key | 默认托管模型可直接使用完整智能能力 | 公共服务需要成本与滥用边界 | 服务端密钥、来源网络与全局额度、供应商预算保护、本地规则回退 |
 | 用户自带 Key | 偏好 -> 高级 -> 大模型 API | 需要理解 Base URL、模型、费用和数据发送范围 | 独立模型模式指南和 DeepSeek 配置步骤 |
-| Chroni 内测 | 偏好 -> 高级 -> 智能模型服务 | 测试者不应接触 DeepSeek 主密钥 | Zeabur 网关、独立访问码、限流与脱敏日志 |
+| Chroni 智能服务 | 偏好 -> 高级 -> 智能模型服务 | 用户不应接触 DeepSeek 主密钥或配置凭据 | Zeabur 网关、零配置客户端、来源网络与全局限流、脱敏日志 |
 | 材料确认 | 支持抽取预览、直接填入、待确认项 | 用户可能混淆预览与保存 | 快速指南中先预览、再填入、再确认 |
 | 学习执行入口 | 控制中心默认打开“学习任务” | 需要同时看清来源、完成标准、里程碑、证据与反馈 | 以 Learning Mission 为主入口，并连接今日执行 |
 | Demo Mode | 已有隔离式应用内 GOAI Demo | 首次体验不需要准备材料或 API Key | 场景 A/B/C 覆盖主链路、缺失信息和来源冲突；退出后清除合成状态 |
@@ -51,7 +51,7 @@ GitHub Releases 下载
 | 用户自带 LLM 配置 UI | `apps/desktop/src/renderer/src/main.tsx` 的偏好页 |
 | LLM 设置合并与环境变量优先级 | `apps/desktop/src/llm-settings.ts` |
 | OpenAI-compatible 请求 | `apps/desktop/src/llm-client.ts` |
-| 内测 LLM 网关 | `apps/gateway/`、`zbpack.chroni-api.json` |
+| 公开 LLM 网关 | `apps/gateway/`、`zbpack.chroni-api.json` |
 | API Key 安全存储 | `apps/desktop/src/main.ts`、`apps/desktop/src/store.ts` |
 | 文件解析、OCR 与抽取 | `apps/desktop/src/intake.ts` |
 | 桌宠拖入与动作反馈 | `apps/desktop/src/renderer/src/main.tsx`、`apps/desktop/src/shared/pet-actions.ts` |
@@ -72,25 +72,25 @@ GitHub Releases 下载
 
 当前产品实际有三种工作方式：
 
-1. 本地规则：不填写 Key，或关闭“启用 LLM 抽取”。结构明确的标题、日期和时间可以本地处理；复杂跨段语义能力有限。
-2. Chroni 内测：使用可撤销访问码调用 Zeabur 网关，网关固定 DeepSeek 模型并实施受控额度。
+1. 本地规则：关闭“启用智能模型”，或在托管服务不可用时自动使用。结构明确的标题、日期和时间可以本地处理；复杂跨段语义能力有限。
+2. Chroni 智能服务：新安装默认启用，不要求 API Key、访问码或账号；Zeabur 网关固定 DeepSeek 模型并实施来源网络和全局额度。
 3. 用户自带 Key：使用 OpenAI-compatible 服务。Key 在支持的系统上通过 Electron `safeStorage` 加密，模型失败时回退本地规则。
 
-内测额度不是无条件的公开免费额度。推广内容应明确“受邀内测”和限流边界，不应声称注册送次数或永久免费。
+公共额度是公平使用保护，不承诺无限调用。推广内容必须说明限流、本地回退和当前未签名/未公证边界，不应声称永久免费或无限额度。
 
 ## 7. 三分钟核心闭环验收
 
 不修改功能时，可达到的低门槛验收路径：
 
 1. 用户从 Latest Release 下载对应安装包。
-2. 启动 Chroni，不配置 API Key。
+2. 启动 Chroni，不配置 API Key；默认托管模型已可用。
 3. 从 `examples/demo/` 选择示例 TXT，拖到桌宠或控制中心。
-4. Chroni 使用本地规则识别明确 DDL，并显示桌宠处理反馈。
+4. Chroni 使用托管模型识别材料并显示桌宠处理反馈；断网或限流时使用本地规则。
 5. 用户核对 Learning Mission，打开规划详情并启用计划。
 6. 进入执行 Agent 点击“帮我安排今天”，在“今日执行”查看结果。
-7. 用户知道如何清理示例数据、配置 DeepSeek、检查更新或提交反馈。
+7. 用户知道如何清理示例数据、关闭托管模型、配置自定义 API、检查更新或提交反馈。
 
-该路径依赖示例材料使用明确的相对时间，且不会假装调用了未配置的模型。
+该路径不要求用户准备模型凭据；示例材料仍使用明确时间，保证服务不可用时也能完成本地回退。
 
 ## 8. 推广素材缺口
 

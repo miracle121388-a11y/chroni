@@ -1,7 +1,7 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { missingGatewayConfiguration, type GatewayAccessKey, type GatewayConfig } from "./config.js";
+import { missingGatewayConfiguration, type GatewayConfig } from "./config.js";
 
 type RateState = {
   minuteStartedAt: number;
@@ -9,6 +9,17 @@ type RateState = {
   day: string;
   dayCount: number;
   active: number;
+};
+
+type RatePolicy = {
+  requestsPerMinute: number;
+  requestsPerDay: number;
+  concurrentRequests: number;
+};
+
+type GatewayIdentity = {
+  id: string;
+  accessMode: "credential" | "public";
 };
 
 type ChatMessage = {
@@ -66,9 +77,9 @@ export function createGatewayServer(config: GatewayConfig, dependencies: Gateway
       return;
     }
 
-    const accessKey = authenticate(request, config.accessKeys);
-    if (!accessKey) {
-      sendError(response, 401, requestId, "invalid_access_token", "服务访问码无效或已失效。");
+    const identity = authenticate(request, config);
+    if (!identity) {
+      sendError(response, 401, requestId, "invalid_access_token", "Chroni 客户端授权无效。");
       return;
     }
 
@@ -91,10 +102,30 @@ export function createGatewayServer(config: GatewayConfig, dependencies: Gateway
       return;
     }
 
-    const rate = acquireRateSlot(rateStates, accessKey.id, config, now());
+    const rate = acquireRateSlot(rateStates, identity.id, identity.accessMode === "public" ? {
+      requestsPerMinute: config.publicRequestsPerMinute,
+      requestsPerDay: config.publicRequestsPerDay,
+      concurrentRequests: config.publicConcurrentRequests,
+    } : {
+      requestsPerMinute: config.requestsPerMinute,
+      requestsPerDay: config.requestsPerDay,
+      concurrentRequests: config.concurrentRequests,
+    }, now());
     if (!rate.ok) {
       response.setHeader("retry-after", rate.retryAfterSeconds);
       sendError(response, 429, requestId, rate.code, rate.message);
+      return;
+    }
+
+    const globalRate = acquireRateSlot(rateStates, "__global__", {
+      requestsPerMinute: config.globalRequestsPerMinute,
+      requestsPerDay: config.globalRequestsPerDay,
+      concurrentRequests: config.globalConcurrentRequests,
+    }, now());
+    if (!globalRate.ok) {
+      releaseRateSlot(rateStates, identity.id);
+      response.setHeader("retry-after", globalRate.retryAfterSeconds);
+      sendError(response, 429, requestId, globalRate.code, "智能服务当前额度已用完，请稍后重试。");
       return;
     }
 
@@ -103,7 +134,7 @@ export function createGatewayServer(config: GatewayConfig, dependencies: Gateway
     let usage: Record<string, unknown> | undefined;
     try {
       const body = await readJsonBody(request, config.maxBodyBytes);
-      const validated = validateChatRequest(body, config);
+      const validated = validateChatRequest(body, config, identity.accessMode === "public");
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
       let upstream: Response;
@@ -167,11 +198,13 @@ export function createGatewayServer(config: GatewayConfig, dependencies: Gateway
       }
       throw error;
     } finally {
-      releaseRateSlot(rateStates, accessKey.id);
+      releaseRateSlot(rateStates, identity.id);
+      releaseRateSlot(rateStates, "__global__");
       logger({
         event: "gateway_request",
         request_id: requestId,
-        credential_id: accessKey.id,
+        credential_id: identity.id,
+        access_mode: identity.accessMode,
         status,
         ...(upstreamStatus !== undefined ? { upstream_status: upstreamStatus } : {}),
         latency_ms: Math.max(0, now() - startedAt),
@@ -192,13 +225,31 @@ class RequestError extends Error {
   }
 }
 
-function authenticate(request: IncomingMessage, accessKeys: GatewayAccessKey[]): GatewayAccessKey | undefined {
+function authenticate(request: IncomingMessage, config: GatewayConfig): GatewayIdentity | undefined {
   const authorization = request.headers.authorization;
-  if (!authorization?.startsWith("Bearer ")) return undefined;
-  const received = authorization.slice(7).trim();
-  if (!received) return undefined;
-  const receivedDigest = digest(received);
-  return accessKeys.find((key) => timingSafeEqual(receivedDigest, digest(key.secret)));
+  if (authorization?.startsWith("Bearer ")) {
+    const received = authorization.slice(7).trim();
+    const receivedDigest = received ? digest(received) : undefined;
+    const accessKey = receivedDigest
+      ? config.accessKeys.find((key) => timingSafeEqual(receivedDigest, digest(key.secret)))
+      : undefined;
+    if (accessKey) return { id: `credential-${accessKey.id}`, accessMode: "credential" };
+  }
+  if (!config.publicAccessEnabled || request.headers["x-chroni-client"] !== "desktop") return undefined;
+  const addressDigest = createHmac("sha256", config.upstreamApiKey || "chroni-unconfigured")
+    .update(clientAddress(request), "utf8")
+    .digest("hex")
+    .slice(0, 20);
+  return { id: `public-${addressDigest}`, accessMode: "public" };
+}
+
+function clientAddress(request: IncomingMessage): string {
+  const forwarded = request.headers["x-forwarded-for"];
+  const firstForwarded = (Array.isArray(forwarded) ? forwarded[0] : forwarded)
+    ?.split(",", 1)[0]
+    ?.trim()
+    .slice(0, 128);
+  return firstForwarded || request.socket.remoteAddress || "unknown";
 }
 
 function digest(value: string): Buffer {
@@ -208,7 +259,7 @@ function digest(value: string): Buffer {
 function acquireRateSlot(
   states: Map<string, RateState>,
   id: string,
-  config: GatewayConfig,
+  policy: RatePolicy,
   timestamp: number,
 ): { ok: true } | { ok: false; code: string; message: string; retryAfterSeconds: number } {
   const minute = 60_000;
@@ -223,10 +274,10 @@ function acquireRateSlot(
     state.dayCount = 0;
   }
   states.set(id, state);
-  if (state.active >= config.concurrentRequests) {
+  if (state.active >= policy.concurrentRequests) {
     return { ok: false, code: "concurrency_limit", message: "当前已有多个分析任务，请等待片刻再试。", retryAfterSeconds: 2 };
   }
-  if (state.minuteCount >= config.requestsPerMinute) {
+  if (state.minuteCount >= policy.requestsPerMinute) {
     return {
       ok: false,
       code: "minute_limit",
@@ -234,7 +285,7 @@ function acquireRateSlot(
       retryAfterSeconds: Math.max(1, Math.ceil((minute - (timestamp - state.minuteStartedAt)) / 1000)),
     };
   }
-  if (state.dayCount >= config.requestsPerDay) {
+  if (state.dayCount >= policy.requestsPerDay) {
     return { ok: false, code: "daily_limit", message: "今日服务额度已用完，请明天继续。", retryAfterSeconds: 3_600 };
   }
   state.active += 1;
@@ -270,7 +321,7 @@ async function readJsonBody(request: IncomingMessage, maximumBytes: number): Pro
   }
 }
 
-function validateChatRequest(value: unknown, config: GatewayConfig): ValidatedChatRequest {
+function validateChatRequest(value: unknown, config: GatewayConfig, publicAccess: boolean): ValidatedChatRequest {
   const body = plainRecord(value);
   if (!body) throw new RequestError(400, "invalid_request", "请求体必须是对象。");
   if (body.stream === true) throw new RequestError(400, "stream_not_supported", "托管服务暂不支持流式响应。");
@@ -286,7 +337,8 @@ function validateChatRequest(value: unknown, config: GatewayConfig): ValidatedCh
     characters += message.content.length;
     return { role: message.role as ChatMessage["role"], content: message.content };
   });
-  if (characters > config.maxPromptCharacters) {
+  const maxPromptCharacters = publicAccess ? config.publicMaxPromptCharacters : config.maxPromptCharacters;
+  if (characters > maxPromptCharacters) {
     throw new RequestError(413, "prompt_too_large", "发送给模型的文本过长，请缩小文件或分批处理。");
   }
 
@@ -301,7 +353,10 @@ function validateChatRequest(value: unknown, config: GatewayConfig): ValidatedCh
     if (!Number.isInteger(body.max_tokens) || (body.max_tokens as number) < 1) {
       throw new RequestError(400, "invalid_max_tokens", "max_tokens 参数无效。");
     }
-    result.maxTokens = Math.min(body.max_tokens as number, config.maxOutputTokens);
+    result.maxTokens = Math.min(
+      body.max_tokens as number,
+      publicAccess ? config.publicMaxOutputTokens : config.maxOutputTokens,
+    );
   }
   if (body.response_format !== undefined) {
     const format = plainRecord(body.response_format);

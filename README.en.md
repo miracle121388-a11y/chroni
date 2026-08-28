@@ -4,7 +4,7 @@
 
 **A local-first learning execution Agent that turns course material into work you can do today and review at the end of the day.**
 
-Chroni does not complete coursework for students. It turns course requirements into grounded goals, deliverables, success criteria, milestones, daily actions, output evidence, checkpoints, and a persistent daily review. Optional OpenAI-compatible models such as DeepSeek improve semantic understanding, while local validation, persistence, tools, and fallback retain authority.
+Chroni does not complete coursework for students. It turns course requirements into grounded goals, deliverables, success criteria, milestones, daily actions, output evidence, checkpoints, and a persistent daily review. New installations include zero-configuration managed DeepSeek access, while local validation, persistence, tools, and fallback retain authority.
 
 ![Chroni Learning Mission workspace](./docs/assets/chroni-learning-mission-v0.2.0.png)
 
@@ -14,9 +14,9 @@ _Actual product UI with isolated synthetic demo data._
 
 ## Current version and three-minute path
 
-The repository package version is `0.2.2`. Public installer availability, signatures, and notarization status must be checked on [GitHub Releases](https://github.com/miracle121388-a11y/chroni/releases).
+The repository package version is `0.2.3`. Public installer availability, signatures, and notarization status must be checked on [GitHub Releases](https://github.com/miracle121388-a11y/chroni/releases).
 
-1. Install and start Chroni. The **Today** timeline is the default workspace.
+1. Install and start Chroni. The managed smart service is enabled by default and requires no API key, access code, or account. The **Today** timeline is the default workspace.
 2. Drop a course file onto the companion or import it from **Smart Organize**.
 3. Review grounded goals and milestones in **Learning Tasks**, then choose **Smart plan** in **Today** to place realistic work blocks on the timeline.
 4. Complete a block, record output evidence, and let Chroni adjust the remaining plan. At the end of the day, open **Daily Review** to keep the activity trail, reflection, and carry-over items under that date.
@@ -32,7 +32,7 @@ The repository package version is `0.2.2`. Public installer availability, signat
 | Learning execution Agent | Ground, Plan, Act, Verify, Adapt loop with risk/slack/capacity scheduling, local tools, and structured trace. |
 | Daily execution | Day/multi-day/week/month views, overlapping lanes, duration-aware blocks, zoom, drag/replan, history and future dates. |
 | Daily review | A dedicated date-based workspace for completion metrics, the full activity trail, editable summaries, reflections, and unfinished carry-over items. |
-| Local-first | Local state and memory, OS-backed key encoding where available, loopback bearer-token API, no hidden analytics. |
+| Local-first | Local state and memory, server-only managed model key, OS-backed encoding only for optional custom keys, loopback bearer-token API, no hidden analytics. |
 | Auditability | On-screen operational trace plus default-redacted JSON/Markdown export with mission inventory and SHA-256. |
 
 ## Install for users
@@ -54,11 +54,11 @@ npx pnpm@11.7.0 run dev
 
 The renderer starts on `http://127.0.0.1:5173`; Electron opens automatically. The local API normally listens on `127.0.0.1:8765`, with actual address/token in the user-data `chroni-api.json` discovery file.
 
-## Optional DeepSeek setup
+## Managed and custom model access
 
-Open **Preferences → Smart model service → Custom API**, enable the model, set the base URL to your OpenAI-compatible DeepSeek endpoint, enter your API key, and select a model available to your account. Use **Test connection** before saving. Do not commit keys or post them in issues. Exact provider models and prices change; follow the provider's current console/documentation.
+The public Windows and macOS builds default to **Chroni Smart Service**. It supports model extraction, clarification, TaskPlan, and Agent planning without asking the user for an API key, access code, or account. The DeepSeek provider key exists only in the Zeabur gateway environment and is never shipped in the desktop package or request. Source-network and global fair-use limits protect the public service; Chroni falls back to local rules when the service is unavailable or limited.
 
-Without a key, explicit deadlines, local OCR/parsing, deterministic planning, and reminders remain available. Complex semantics may have lower recall.
+Advanced users can instead open **Preferences → Smart model service → Custom API**, set an OpenAI-compatible base URL and model, and enter their own key. The smart model can also be disabled for an entirely local workflow. Never commit custom keys or post them in issues.
 
 ## Architecture and API
 

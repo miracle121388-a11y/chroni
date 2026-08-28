@@ -6,7 +6,7 @@ import { applyFeedbackEvent, createBehaviorMemory, setPreferenceStatus, upsertEx
 import { cloneAgentRun } from "./agent/agent-state.js";
 import { diffTaskPlans } from "./agent/task-plan-diff.js";
 import { validateTaskPlan } from "./agent/task-plan-validator.js";
-import { hasLlmEnvironmentConfiguration, llmEnabledEnvironmentOverride, resolveLlmSettings } from "./llm-settings.js";
+import { hasLlmEnvironmentConfiguration, isLlmReady, llmEnabledEnvironmentOverride, resolveLlmSettings } from "./llm-settings.js";
 import { normalizeLearningMissions, synchronizeLearningMissions } from "./learning-mission.js";
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
 import { localFilePathFromText } from "./shared/local-file-input.js";
@@ -59,10 +59,12 @@ export class ChroniStore {
   #storageStatus: ServiceStatus["storage"] = "ready";
   #storageDiagnostic?: string;
   #unreadableApiKeyProtected?: string;
+  #secretStorageAvailable?: boolean;
   #storageWriteBlocked = false;
 
   constructor(userDataPath: string, readonly secretCodec?: SecretCodec) {
     this.filePath = join(userDataPath, "chroni-state.json");
+    if (!secretCodec) this.#secretStorageAvailable = false;
     this.#state = this.#load();
     const repairedPathDrafts = this.#discardPathOnlyTextIntakes();
     const synchronizedMissions = this.#synchronizeLearningMissions();
@@ -1093,10 +1095,19 @@ export class ChroniStore {
       return this.snapshot();
     }
     if (patch.llm && Object.hasOwn(patch.llm, "apiKey")) this.#unreadableApiKeyProtected = undefined;
+    if (patch.llm?.mode === "managed") this.#unreadableApiKeyProtected = undefined;
+    const impliedMode = patch.llm?.mode
+      ?? (patch.llm?.apiKey?.trim() ? "custom" : this.#state.preferences.llm.mode);
+    const mergedLlm = {
+      ...this.#state.preferences.llm,
+      ...(patch.llm ?? {}),
+      mode: impliedMode,
+    };
+    const nextLlm = mergedLlm.mode === "managed" ? { ...mergedLlm, apiKey: "" } : mergedLlm;
     this.#state.preferences = {
       ...this.#state.preferences,
       ...patch,
-      llm: { ...this.#state.preferences.llm, ...(patch.llm ?? {}) },
+      llm: nextLlm,
     };
     if (!this.#state.preferences.companionEnabled) {
       this.#state.companion = { state: "sleeping", bubble: "桌宠入口已暂时关闭。" };
@@ -1111,7 +1122,7 @@ export class ChroniStore {
     const llm = this.#state.preferences.llm;
     const resolvedLlm = resolveLlmSettings(llm);
     const modelEnabled = resolvedLlm.enabled;
-    const modelReady = modelEnabled && !!resolvedLlm.apiKey;
+    const modelReady = isLlmReady(resolvedLlm);
     const managedModel = resolvedLlm.mode === "managed";
     const environmentConfigured = hasLlmEnvironmentConfiguration();
     return {
@@ -1134,10 +1145,16 @@ export class ChroniStore {
         "已支持文本、PDF、DOCX、XLSX、CSV、网页/结构化文本和图片 OCR 的本地抽取。",
         modelReady
           ? `${managedModel ? "Chroni 智能服务" : "LLM 智能抽取"}已启用，当前模型：${resolvedLlm.model || "未设置"}${environmentConfigured ? "（环境变量优先）" : ""}。`
-          : `未配置${managedModel ? "服务访问码" : " LLM API Key"}时会使用本地规则抽取；配置后优先使用大模型抽取并自动回退。`,
-        this.secretCodec
-          ? `${managedModel ? "服务访问码" : "LLM API Key"}使用操作系统安全存储加密。`
-          : `当前系统安全存储不可用，界面填写的${managedModel ? "服务访问码" : " LLM API Key"}仅在本次运行有效；可改用 CHRONI_LLM_API_KEY。`,
+          : managedModel
+            ? "Chroni 智能服务已关闭；重新开启即可使用，无需填写 API Key 或服务访问码。"
+            : "未配置 LLM API Key 时会使用本地规则抽取；配置后优先使用大模型抽取并自动回退。",
+        managedModel
+          ? "DeepSeek 主密钥只保存在 Chroni 网关，安装包和本机状态均不包含服务密钥。"
+          : this.#secretStorageAvailable === true
+            ? "LLM API Key 使用操作系统安全存储加密。"
+            : this.#secretStorageAvailable === false
+              ? "当前系统安全存储不可用，界面填写的 LLM API Key 仅在本次运行有效；可改用 CHRONI_LLM_API_KEY。"
+              : "保存自定义 API Key 时才会初始化操作系统安全存储。",
         `${this.#state.sources.length} 条输入来源保存在本机，可在控制中心重新识别。`,
         `${this.#state.learningMissions.length} 条学习任务档案保存在本机，成果文件仅记录名称、大小和校验值，不复制文件内容或公开本地路径。`,
         this.#state.preferences.remindersEnabled
@@ -1182,20 +1199,25 @@ export class ChroniStore {
     const fallback = createDefaultState();
     const rawPreferences = plainRecord(parsed.preferences);
     const persistedLlm = plainRecord(rawPreferences?.llm) as PersistedLlmSettings | undefined;
-    const legacyApiKey = typeof persistedLlm?.apiKey === "string" ? persistedLlm.apiKey : "";
-    const apiKeyProtected = typeof persistedLlm?.apiKeyProtected === "string" ? persistedLlm.apiKeyProtected : undefined;
+    const managedWithoutClientCredential = persistedLlm?.mode === "managed";
+    const rawLegacyApiKey = typeof persistedLlm?.apiKey === "string" ? persistedLlm.apiKey : "";
+    const rawApiKeyProtected = typeof persistedLlm?.apiKeyProtected === "string" ? persistedLlm.apiKeyProtected : undefined;
+    const legacyApiKey = managedWithoutClientCredential ? "" : rawLegacyApiKey;
+    const apiKeyProtected = managedWithoutClientCredential ? undefined : rawApiKeyProtected;
     let apiKey = legacyApiKey;
     if (apiKeyProtected) {
       if (this.secretCodec) {
         try {
           apiKey = this.secretCodec.decrypt(apiKeyProtected);
+          this.#secretStorageAvailable = true;
         } catch {
           apiKey = "";
+          this.#secretStorageAvailable = false;
           this.#unreadableApiKeyProtected = apiKeyProtected;
         }
       } else this.#unreadableApiKeyProtected = apiKeyProtected;
     }
-    if (legacyApiKey) this.#needsSecretMigration = true;
+    if (legacyApiKey || (managedWithoutClientCredential && (rawLegacyApiKey || rawApiKeyProtected))) this.#needsSecretMigration = true;
     const normalizedPreferences = normalizeChroniPreferences(parsed.preferences, persistedLlm, apiKey);
     if (normalizedPreferences.repaired) this.#appendStorageDiagnostic("已修复损坏或类型不正确的偏好设置，并对无效字段使用安全默认值。");
     const normalizedItems = normalizeDdlItems(parsed.items);
@@ -1347,7 +1369,16 @@ export class ChroniStore {
       }
     }
     const { apiKey, ...llm } = this.#state.preferences.llm;
-    const apiKeyProtected = apiKey && this.secretCodec ? this.secretCodec.encrypt(apiKey) : this.#unreadableApiKeyProtected;
+    let apiKeyProtected = llm.mode === "custom" ? this.#unreadableApiKeyProtected : undefined;
+    if (llm.mode === "custom" && apiKey && this.secretCodec) {
+      try {
+        apiKeyProtected = this.secretCodec.encrypt(apiKey);
+        this.#secretStorageAvailable = true;
+      } catch {
+        apiKeyProtected = this.#unreadableApiKeyProtected;
+        this.#secretStorageAvailable = false;
+      }
+    }
     const persistedState = {
       ...this.#state,
       preferences: {
@@ -1357,7 +1388,7 @@ export class ChroniStore {
     };
     writeFileSync(tmp, JSON.stringify(persistedState, null, 2), "utf8");
     renameSync(tmp, this.filePath);
-    if (apiKeyProtected) this.#unreadableApiKeyProtected = apiKeyProtected;
+    this.#unreadableApiKeyProtected = apiKeyProtected;
     this.#needsSecretMigration = false;
   }
 }

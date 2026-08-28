@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f7f7f3">
-    <meta name="description" content="Chroni 隐私说明：本地数据、可选模型调用、凭据保护和数据删除方式。">
+    <meta name="description" content="Chroni 隐私说明：本地数据、默认托管模型调用、自定义凭据保护和数据删除方式。">
     <link rel="canonical" href="https://getchroni.zeabur.app/privacy.html">
     <link rel="icon" href="./assets/chroni-icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./styles.css">
@@ -28,7 +28,7 @@
         <p class="overline">Privacy at Chroni</p>
         <h1>你的学习过程，<br>默认留在你的电脑里。</h1>
         <p>本说明适用于 Chroni 0.2.x。Chroni 是本地优先桌面应用，不提供账号系统、广告追踪或默认云同步。</p>
-        <span>更新日期：2026 年 8 月 26 日</span>
+        <span>更新日期：2026 年 8 月 28 日</span>
       </header>
 
       <div class="privacy-layout">
@@ -50,15 +50,15 @@
 
           <section id="model">
             <p class="privacy-index">02</p>
-            <h2>模型调用由你开启</h2>
-            <p>不配置模型或关闭 LLM 时，Chroni 不会调用模型服务。启用 Chroni 智能服务或自定义 API 后，本地解析或 OCR 得到的必要文本、来源名称及时间上下文会发送到所配置的模型服务，用于任务提取和规划。</p>
-            <p>Chroni 托管网关的运维日志可能包含请求标识、可撤销服务凭据标识、状态、耗时和 token 数，不记录提示词正文，也不建立提示词数据库。部署平台日志和模型服务的数据留存规则同时适用。</p>
+            <h2>联网模型可随时关闭</h2>
+            <p>新安装默认启用 Chroni 智能服务。本地解析或 OCR 得到的必要文本、来源名称及时间上下文会经 Chroni 网关发送到 DeepSeek，用于任务提取和规划；你可以关闭“启用智能模型”，关闭后 Chroni 不会调用模型服务，也可以改用自己的兼容 API。</p>
+            <p>Chroni 托管网关按来源网络和全局额度限流。应用日志可能包含请求标识、使用服务端密钥生成的来源网络摘要、状态、耗时和 token 数，不记录提示词正文或原始 IP，也不建立提示词数据库。部署平台日志和模型服务的数据留存规则同时适用。</p>
           </section>
 
           <section id="credentials">
             <p class="privacy-index">03</p>
             <h2>密钥不进入项目数据</h2>
-            <p>系统安全存储可用时，访问码与自定义 API Key 经 Electron safeStorage 加密后保存。macOS 直装包不会仅因普通启动访问钥匙串，只有保存或读取已配置的模型凭据时才会使用 Chroni Safe Storage。公开状态快照、安装包资源和项目仓库不包含真实密钥；系统安全存储不可用时，凭据只在本次运行中使用。</p>
+            <p>Chroni 智能服务没有客户端访问码，DeepSeek 主密钥只存在于服务器环境变量，不会进入安装包、本机状态或桌面请求。系统安全存储采用惰性初始化；只有主动切换到自定义 API 并保存或读取自己的 Key 时，Chroni 才会调用 Electron safeStorage，macOS 此时可能要求当前账户授权。系统安全存储不可用时，自定义凭据只在本次运行中使用。</p>
             <p>本地 HTTP API 默认仅监听 127.0.0.1，并使用每次启动生成的会话令牌保护除健康检查外的接口。</p>
           </section>
 
@@ -66,7 +66,7 @@
             <p class="privacy-index">04</p>
             <h2>你可以查看、导出和删除</h2>
             <p>在“运行状态”中可以打开本地数据位置。完全退出 Chroni 后删除该目录，即可移除应用保存的任务、计划、偏好、缓存和备份；卸载程序默认不会擅自删除这些数据。</p>
-            <p>删除不可撤销，请先保留所需的日历或证据导出文件。托管模型用户还可以移除本机服务访问码或联系维护者撤销对应凭据；部署平台运维日志与模型服务已处理数据适用各自的留存和删除规则。</p>
+            <p>删除不可撤销，请先保留所需的日历或证据导出文件。托管模式不在本机保存服务凭据，也没有云端任务库；部署平台运维日志与模型服务已处理数据适用各自的留存和删除规则。</p>
           </section>
 
           <section id="contact">

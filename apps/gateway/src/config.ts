@@ -9,6 +9,7 @@ export type GatewayConfig = {
   upstreamApiKey: string;
   upstreamModel: string;
   accessKeys: GatewayAccessKey[];
+  publicAccessEnabled: boolean;
   requestTimeoutMs: number;
   maxBodyBytes: number;
   maxPromptCharacters: number;
@@ -16,6 +17,14 @@ export type GatewayConfig = {
   requestsPerMinute: number;
   requestsPerDay: number;
   concurrentRequests: number;
+  publicMaxPromptCharacters: number;
+  publicMaxOutputTokens: number;
+  publicRequestsPerMinute: number;
+  publicRequestsPerDay: number;
+  publicConcurrentRequests: number;
+  globalRequestsPerMinute: number;
+  globalRequestsPerDay: number;
+  globalConcurrentRequests: number;
 };
 
 type GatewayEnvironment = NodeJS.ProcessEnv;
@@ -27,6 +36,7 @@ export function loadGatewayConfig(environment: GatewayEnvironment = process.env)
     upstreamApiKey: environment.DEEPSEEK_API_KEY?.trim() ?? "",
     upstreamModel: environment.DEEPSEEK_MODEL?.trim() || "deepseek-v4-flash",
     accessKeys: parseAccessKeys(environment),
+    publicAccessEnabled: booleanValue(environment.CHRONI_GATEWAY_PUBLIC_ACCESS, true),
     requestTimeoutMs: integerValue(environment.CHRONI_GATEWAY_TIMEOUT_MS, 75_000, 5_000, 180_000),
     maxBodyBytes: integerValue(environment.CHRONI_GATEWAY_MAX_BODY_BYTES, 1_048_576, 16_384, 8_388_608),
     maxPromptCharacters: integerValue(environment.CHRONI_GATEWAY_MAX_PROMPT_CHARACTERS, 350_000, 1_000, 1_000_000),
@@ -34,13 +44,21 @@ export function loadGatewayConfig(environment: GatewayEnvironment = process.env)
     requestsPerMinute: integerValue(environment.CHRONI_GATEWAY_REQUESTS_PER_MINUTE, 20, 1, 1_000),
     requestsPerDay: integerValue(environment.CHRONI_GATEWAY_REQUESTS_PER_DAY, 500, 1, 100_000),
     concurrentRequests: integerValue(environment.CHRONI_GATEWAY_CONCURRENT_REQUESTS, 3, 1, 50),
+    publicMaxPromptCharacters: integerValue(environment.CHRONI_GATEWAY_PUBLIC_MAX_PROMPT_CHARACTERS, 100_000, 1_000, 350_000),
+    publicMaxOutputTokens: integerValue(environment.CHRONI_GATEWAY_PUBLIC_MAX_OUTPUT_TOKENS, 4_096, 32, 8_192),
+    publicRequestsPerMinute: integerValue(environment.CHRONI_GATEWAY_PUBLIC_REQUESTS_PER_MINUTE, 20, 1, 200),
+    publicRequestsPerDay: integerValue(environment.CHRONI_GATEWAY_PUBLIC_REQUESTS_PER_DAY, 300, 1, 5_000),
+    publicConcurrentRequests: integerValue(environment.CHRONI_GATEWAY_PUBLIC_CONCURRENT_REQUESTS, 3, 1, 10),
+    globalRequestsPerMinute: integerValue(environment.CHRONI_GATEWAY_GLOBAL_REQUESTS_PER_MINUTE, 120, 1, 5_000),
+    globalRequestsPerDay: integerValue(environment.CHRONI_GATEWAY_GLOBAL_REQUESTS_PER_DAY, 5_000, 1, 100_000),
+    globalConcurrentRequests: integerValue(environment.CHRONI_GATEWAY_GLOBAL_CONCURRENT_REQUESTS, 20, 1, 200),
   };
 }
 
 export function missingGatewayConfiguration(config: GatewayConfig): string[] {
   const missing: string[] = [];
   if (!config.upstreamApiKey) missing.push("DEEPSEEK_API_KEY");
-  if (!config.accessKeys.length) missing.push("CHRONI_GATEWAY_ACCESS_KEYS_JSON or CHRONI_GATEWAY_ACCESS_TOKEN");
+  if (!config.publicAccessEnabled && !config.accessKeys.length) missing.push("CHRONI_GATEWAY_ACCESS_KEYS_JSON or CHRONI_GATEWAY_ACCESS_TOKEN");
   return missing;
 }
 
@@ -93,4 +111,11 @@ function normalizedUrl(value: string | undefined, fallback: string): string {
 function integerValue(value: string | undefined, fallback: number, minimum: number, maximum: number): number {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+
+function booleanValue(value: string | undefined, fallback: boolean): boolean {
+  const normalized = value?.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized ?? "")) return true;
+  if (["0", "false", "no", "off"].includes(normalized ?? "")) return false;
+  return fallback;
 }
