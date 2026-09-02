@@ -14,7 +14,7 @@
 
 ## 与初版相比
 
-对比基线是 `v0.1.4`（commit `225f63b`）。初版重点解决“材料 → DDL → TaskPlan → 时间轴 → 提醒”；`v0.2.1` 新增并完成了 Learning Mission、证据/检查点、智能整理、每日回顾、隔离评测、安全与发布工程。完整逐项差异见 [12-semifinal-update.md](./12-semifinal-update.md)。
+对比基线是 `v0.1.4`（commit `225f63b`）。初版重点解决“材料 → DDL → TaskPlan → 时间轴 → 提醒”；`v0.2.4` 进一步完成 Learning Mission、证据/检查点、智能整理、语义优先级与容量自适应、14 日回顾趋势、托管模型入口、隔离评测、安全与发布工程。完整逐项差异见 [12-semifinal-update.md](./12-semifinal-update.md)。
 
 ## 三分钟评审路径
 
@@ -44,7 +44,7 @@
 
 | 主题 | 入口 |
 | --- | --- |
-| v0.1.4 → v0.2.1 更新说明 | [12-semifinal-update.md](./12-semifinal-update.md) |
+| v0.1.4 → v0.2.4 更新说明 | [12-semifinal-update.md](./12-semifinal-update.md) |
 | 项目立意与教育价值 | [01-project-introduction.md](./01-project-introduction.md) |
 | 架构、数据流与 Learning Mission | [03-technical-solution.md](./03-technical-solution.md) |
 | 真实演示脚本 | [04-demo-video-script.md](./04-demo-video-script.md) |
@@ -61,7 +61,7 @@ pnpm install --frozen-lockfile
 pnpm run check
 pnpm run eval:goai
 pnpm run build
-pnpm run package:goai:windows
+pnpm run package:submission:windows
 pnpm run submission:goai
 ```
 
@@ -69,6 +69,7 @@ pnpm run submission:goai
 
 ## 当前事实边界
 
-- 当前产品版本为 `0.2.1`，最终附件名为 `Chroni_GOAI_2026_复赛最终提交.zip`。
+- 当前产品版本为 `0.2.4`，最终附件名为 `Chroni_GOAI_2026_复赛最终提交.zip`。
+- 复赛安装包必须通过 `product/xiaotong` 构建清单校验，包含动态桌宠、完整许可证和可达 About；付费或其他商业发行仍需另行取得书面许可或替换自有素材。
 - 精确源码提交、构建环境、评测数据集和安装包哈希以附件根目录验证文件为准。
 - 项目不声称自研基础模型、学校合作、真实学习成效、生产用户规模、已签名 Windows 安装包或已公证 macOS 安装包。

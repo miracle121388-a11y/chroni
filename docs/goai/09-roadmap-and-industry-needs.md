@@ -11,7 +11,7 @@ This roadmap separates implemented work from proposed work. Dates should be assi
 - Add TaskPlan dependency edges, cycle validation, and a benchmarked cycle-detection rate.
 - Add a versioned Learning Mission benchmark for deliverable grounding, success-criteria fidelity, milestone synchronization, evidence coverage, checkpoint recovery, and replan correctness.
 - Produce signed Windows and signed/notarized macOS artifacts when credentials exist; verify installation on clean machines.
-- Replace or formally authorize every competition-facing character asset; keep the original-mode verifier as a release gate.
+- Obtain explicit written commercial authorization for the companion before any paid, sponsored, or revenue-generating release, or replace it with fully project-owned assets; keep license and build-manifest verification as release gates.
 
 ## P2: authorized pilot
 

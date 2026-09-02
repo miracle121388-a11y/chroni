@@ -2,6 +2,8 @@
 
 > Historical baseline captured before the semifinal upgrade. For the current Learning Mission implementation and verified results, start from [the semifinal submission index](./00-submission-index.md).
 
+> Current resolution (2026-09-02): the final noncommercial semifinal installer uses the verified `product/xiaotong` build with complete license, additional terms, source link and About access. The original-mode decision below records the earlier conservative audit and is not the current artifact choice. No separate commercial authorization is claimed.
+
 Audit date: 2026-08-06
 Baseline commit: `68cd9a713f706437ce0c1a42dd47274478d0ae95`
 Working branch: `feat/goai-2026`

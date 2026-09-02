@@ -369,7 +369,7 @@ npx pnpm@11.7.0 run store:check
 
 | 验证层级 | 当前基线 |
 | --- | --- |
-| 自动化测试 | 当前 254 项：253 通过、0 失败、1 跳过；覆盖文件接收、中文相对时间、无效模型输出回退、低打扰追问、TaskPlan、Learning Mission、证据与检查点、学习执行 Agent、每日回顾、Memory、日历并发排布、窗口交互、API 安全与打包配置。 |
+| 自动化测试 | 当前 Desktop 278 项：277 通过、0 失败、1 跳过；Gateway 6 项全部通过。覆盖文件接收、中文相对时间、无效模型输出回退、低打扰追问、TaskPlan、Learning Mission、语义优先级、证据与检查点、学习执行 Agent、14 日回顾趋势、Memory、日历并发排布、窗口交互、API 安全与打包配置。 |
 | 跨平台 CI | 每次提交在 Windows、macOS 和 Linux 上执行类型检查、测试及 Electron main / React renderer 生产构建。 |
 | 发布完整性 | Windows 安装版与便携版、macOS Universal DMG 与 ZIP 均由工作流构建，并附带 SHA-256 和 build provenance attestation。 |
 | 许可证交付 | 安装包包含 Chroni MIT、桌宠资产许可证与附加条款，以及字体 SIL OFL 1.1 和对应 Notice。 |

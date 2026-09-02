@@ -102,11 +102,11 @@ progress / evidenceCoverage / status / risk / nextAction
 
 ## 模型与网关
 
-Chroni 不训练或捆绑基础模型。用户可配置 DeepSeek 或其他 OpenAI-compatible 端点。受控内测请求可经过可选网关，其上游 Key、访问码哈希、限流、超时和 URL 均位于服务端环境变量。离线 Demo 和默认评测不会进行模型调用。
+Chroni 不训练或捆绑基础模型。首次安装默认可使用团队托管的兼容网关，用户无需接触上游 Key；内测访问码、限流、超时、上游 URL 与密钥均只存在于服务端环境变量。高级用户也可切换为自己的 DeepSeek 或其他 OpenAI-compatible 端点。模型只生成有界候选，本地规则、schema、来源证据和用户确认继续掌握事实写入权；离线 Demo 和默认评测不会进行模型调用。
 
 ## 构建、验证与扩展
 
-Vite 构建 Renderer，TypeScript 编译 Main，electron-builder 生成 Windows NSIS/Portable 和 macOS DMG/ZIP。GOAI 构建设置 `CHRONI_PET_ASSET_MODE=original`，扫描 Renderer 资源并打包许可清单。
+Vite 构建 Renderer，TypeScript 编译 Main，electron-builder 生成 Windows NSIS/Portable 和 macOS DMG/ZIP。复赛安装包使用与公开产品一致的 `product/xiaotong` 构建；打包脚本同时校验构建清单、219 张动态帧、许可证、附加条款与 About 入口，避免再次把应用图标误当桌宠。付费或其他商业发行需要另行取得素材权利方书面许可，或切换为权利完整的自有素材。
 
 测试覆盖解析、OCR 边界、Store 恢复、Learning Mission 同步、证据与检查点、Agent 行为、窗口几何、API 鉴权、更新、Demo 隔离、prompt injection、冲突处理和脱敏导出。CI 在 Windows、macOS、Linux 运行检查，并在 Ubuntu 运行 benchmark smoke。
 

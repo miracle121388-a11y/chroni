@@ -509,7 +509,7 @@ function validationGuide() {
 
 | 验证项 | 最终结果 | 覆盖范围 |
 | --- | --- | --- |
-| Desktop 自动化测试 | 277 项：276 pass / 0 fail / 1 skip | 抽取、Store、Mission、Agent、语义规划、每日任务/回顾、窗口、API、更新与打包 |
+| Desktop 自动化测试 | 278 项：277 pass / 0 fail / 1 skip | 抽取、Store、Mission、Agent、语义规划、每日任务/回顾、窗口、API、更新与打包 |
 | Gateway 自动化测试 | 6 pass / 0 fail | 访问码、限流、超时、上游错误、托管模型与日志边界 |
 | TypeScript / Renderer 构建 | 通过 | Main、preload、React Renderer 与生产资源 |
 | GOAI 60 条离线评测 | ${percent(evaluation.engineering?.offlineSuccessRate)} | 固定时钟、合成数据、本地规则、零模型/零网络 |

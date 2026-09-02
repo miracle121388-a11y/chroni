@@ -154,7 +154,7 @@ app.whenReady().then(async () => {
     await waitForSelector(petWindow, ".pet-art");
     petWindow.showInactive();
     await waitForStableFrame(petWindow);
-    const petImage = await petWindow.webContents.capturePage();
+    const petImage = await capturePageWithRetry(petWindow, "desktop companion");
     const petSize = petImage.getSize();
     assert(!petImage.isEmpty() && petSize.width === 360 && petSize.height === 360, "Desktop companion capture is unexpectedly empty.");
     const petPng = petImage.toPNG();
@@ -325,32 +325,22 @@ function seedDailyTasks(store, now) {
     completedMinutes: completedReviewTasks.reduce((sum, task) => sum + reviewMinutes(task), 0),
     unfinishedTaskTitles: reviewTasks.filter((task) => !task.completedDates.includes(todayKey)).map((task) => task.title),
   });
-  const previousDay = new Date(now);
-  previousDay.setDate(previousDay.getDate() - 1);
-  const previousKey = `${previousDay.getFullYear()}-${String(previousDay.getMonth() + 1).padStart(2, "0")}-${String(previousDay.getDate()).padStart(2, "0")}`;
-  store.saveDailyReview({
-    date: previousKey,
-    summary: "完成资料归档与需求核对，为今天的课程项目推进腾出了连续时间。",
-    note: "上午专注度更好，复杂任务优先放在第一段时间。",
-    totalTasks: 5,
-    completedTasks: 4,
-    plannedMinutes: 280,
-    completedMinutes: 220,
-    unfinishedTaskTitles: ["补充边界测试数据"],
-  });
-  const earlierDay = new Date(now);
-  earlierDay.setDate(earlierDay.getDate() - 3);
-  const earlierKey = `${earlierDay.getFullYear()}-${String(earlierDay.getMonth() + 1).padStart(2, "0")}-${String(earlierDay.getDate()).padStart(2, "0")}`;
-  store.saveDailyReview({
-    date: earlierKey,
-    summary: "完成论文阅读和展示结构初稿，保留了需要进一步验证的可用性问题。",
-    note: "阅读与输出交替进行比连续阅读更有效。",
-    totalTasks: 4,
-    completedTasks: 3,
-    plannedMinutes: 240,
-    completedMinutes: 180,
-    unfinishedTaskTitles: ["验证展示流程"],
-  });
+  const completedByDaysAgo = [4, 4, 4, 4, 3, 3, 3, 2, 2, 2, 1, 2, 2];
+  for (const [offset, completedTasks] of completedByDaysAgo.entries()) {
+    const reviewDay = new Date(now);
+    reviewDay.setDate(reviewDay.getDate() - offset - 1);
+    const reviewKey = localDateKey(reviewDay);
+    store.saveDailyReview({
+      date: reviewKey,
+      summary: `合成连续使用记录：完成 ${completedTasks}/4 项，用于验证趋势与动态调整。`,
+      note: "演示数据只验证产品闭环，不代表真实学习成效。",
+      totalTasks: 4,
+      completedTasks,
+      plannedMinutes: 180,
+      completedMinutes: completedTasks * 45,
+      unfinishedTaskTitles: ["课程项目延续事项", "次日准备"].slice(0, 4 - completedTasks),
+    });
+  }
 }
 
 function localDateKey(value) {
@@ -440,9 +430,25 @@ async function capture(window, name, requiredSelector) {
   if (name === "01-today.png") await frameDailyCalendar(window);
   const dimensions = await window.webContents.executeJavaScript("({ width: window.innerWidth, height: window.innerHeight })");
   assert(dimensions.width === screenshotSize.width && dimensions.height === screenshotSize.height, `${name} viewport is ${dimensions.width}x${dimensions.height}.`);
-  const png = (await window.webContents.capturePage()).toPNG();
+  const png = (await capturePageWithRetry(window, name)).toPNG();
   assert(png.length > 50_000, `${name} is unexpectedly empty.`);
   writeFileSync(join(outputDirectory, name), png);
+}
+
+async function capturePageWithRetry(window, label) {
+  let lastError;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      const image = await window.webContents.capturePage();
+      if (!image.isEmpty()) return image;
+      lastError = new Error(`${label} returned an empty image.`);
+    } catch (error) {
+      lastError = error;
+    }
+    window.webContents.invalidate();
+    await delay(180 * attempt);
+  }
+  throw new Error(`Unable to capture ${label} after 5 attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
 }
 
 async function frameDailyCalendar(window) {

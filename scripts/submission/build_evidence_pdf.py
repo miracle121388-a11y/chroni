@@ -33,6 +33,7 @@ MISSION_SCREENSHOT = SCREENSHOT_ROOT / "02-learning-mission.png"
 AGENT_SCREENSHOT = SCREENSHOT_ROOT / "03-agent.png"
 SMART_SCREENSHOT = SCREENSHOT_ROOT / "03-smart-organize.png"
 REVIEW_SCREENSHOT = SCREENSHOT_ROOT / "04-daily-review.png"
+COMPANION_SCREENSHOT = SCREENSHOT_ROOT / "05-companion.png"
 EVALUATION = json.loads((ROOT / "benchmarks" / "goai-v1" / "reports" / "latest.json").read_text(encoding="utf-8"))
 INSTALLER = ROOT / "apps" / "desktop" / "dist-electron" / f"Chroni-{VERSION}-win-x64-setup.exe"
 BASELINE_TAG = "v0.1.4"
@@ -46,7 +47,7 @@ COMMITS_SINCE_BASELINE = subprocess.check_output(
 DIFF_SUMMARY = subprocess.check_output(
     ["git", "diff", "--shortstat", f"{BASELINE_TAG}..HEAD"], cwd=ROOT, text=True
 ).strip()
-SUBMISSION_DATE = "2026-08-26"
+SUBMISSION_DATE = "2026-09-02"
 
 INK = colors.HexColor("#20312C")
 MUTED = colors.HexColor("#66736D")
@@ -68,7 +69,7 @@ def percent(value):
 
 def installer_summary():
     if not INSTALLER.exists():
-        return "安装包尚未在本机生成；请先运行 pnpm run package:goai:windows。"
+        return "安装包尚未在本机生成；请先运行 pnpm run package:submission:windows。"
     digest_hash = hashlib.sha256()
     with INSTALLER.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -354,26 +355,28 @@ def build_story(s):
     story.extend([
         section_title("00", "复赛更新摘要", s["h1"]),
         para(
-            "本轮严格以 v0.1.4 初版为基线。初版已经能完成材料抽取、TaskPlan、每日时间轴和提醒；v0.2.1 在此基础上补齐 Learning Mission、证据/检查点、智能整理、每日回顾、评测与发布工程，使系统从 DDL 管理进入可持续学习执行闭环。",
+            f"本轮严格以 v0.1.4 初版为基线。初版已经能完成材料抽取、TaskPlan、每日时间轴和提醒；v{VERSION} 在此基础上补齐 Learning Mission、证据/检查点、智能整理、语义优先级、容量自适应、14 日回顾趋势、托管模型入口、评测与发布工程，使系统从 DDL 管理进入可持续学习执行闭环。",
             s["body"],
         ),
         info_box(
-            "<b>v0.2.1 核心闭环：</b>材料输入 → 智能整理 → Learning Mission → TaskPlan → 今日执行 → 证据/检查点 → 每日回顾 → 风险与下一步调整。",
+            f"<b>v{VERSION} 核心闭环：</b>材料输入 → 智能整理 → Learning Mission → TaskPlan → 今日执行 → 证据/检查点 → 每日回顾 → 风险、容量与下一步调整。",
             s["body"],
         ),
         Spacer(1, 5 * mm),
-        para("从 v0.1.4 到 v0.2.1", s["h2"]),
+        para(f"从 v0.1.4 到 v{VERSION}", s["h2"]),
         para(
             f"基线 commit：{BASELINE_COMMIT[:8]}　当前 commit：{CURRENT_COMMIT[:8]}　新增提交：{COMMITS_SINCE_BASELINE} 个。Git 统计：{DIFF_SUMMARY}。",
             s["small"],
         ),
     ])
     update_rows = [
-        [para("维度", s["table_bold"]), para("v0.1.4 初版", s["table_bold"]), para("v0.2.1 复赛版", s["table_bold"])],
+        [para("维度", s["table_bold"]), para("v0.1.4 初版", s["table_bold"]), para(f"v{VERSION} 复赛版", s["table_bold"])],
         [para("产品中心", s["table_bold"]), para("DDL、TaskPlan 与提醒", s["table"]), para("Learning Mission 与学习执行闭环", s["table"])],
         [para("验证方式", s["table_bold"]), para("用户勾选完成", s["table"]), para("SHA-256 产出证据、阶段检查点与人工确认", s["table"])],
         [para("Agent 行为", s["table_bold"]), para("抽取、追问、拆解、排程", s["table"]), para("Ground → Plan → Act → Verify → Adapt", s["table"])],
+        [para("连续规划", s["table_bold"]), para("以截止和基础风险为主", s["table"]), para("语境、截止、进度、工作量和历史执行联合排序；15/25 分钟分级恢复", s["table"])],
         [para("每日反馈", s["table_bold"]), para("查看任务完成状态", s["table"]), para("独立每日回顾、活动轨迹、总结、历史与顺延", s["table"])],
+        [para("使用门槛", s["table_bold"]), para("用户自行配置模型", s["table"]), para("托管模型默认入口、个人 DeepSeek 可选、本地规则可回退", s["table"])],
         [para("演示与评测", s["table_bold"]), para("通用回归和安装包", s["table"]), para("A/B/C 三种路径、60 条固定时钟评测、精确 commit 与哈希", s["table"])],
     ]
     story.extend([
@@ -447,9 +450,10 @@ def build_story(s):
         [para("多格式输入", s["table_bold"]), para("TXT/MD/PDF/DOCX/XLSX/ICS/图片统一进入 intake 管线；OCR 在本机完成。", s["table"])],
         [para("Learning Mission", s["table_bold"]), para("来源、目标、交付物、完成标准、TaskPlan 里程碑、证据、检查点、进度和风险统一建档。", s["table"])],
         [para("证据与反馈", s["table_bold"]), para("文件流式 SHA-256 与说明证据；检查点绑定里程碑并回写步骤、进度和下一步。", s["table"])],
-        [para("Agent 规划", s["table_bold"]), para("Ground → Plan → Act → Verify → Adapt；风险、容量、工具和结构化 Trace。", s["table"])],
+        [para("Agent 规划", s["table_bold"]), para("Ground → Plan → Act → Verify → Adapt；融合学业语境、截止、进度、工作量和历史执行，并避开既有课程/会议。", s["table"])],
         [para("每日时间轴", s["table_bold"]), para("日、多日、周、月视图；按真实时长显示，支持缩放、拖动、重排和历史回顾。", s["table"])],
-        [para("每日回顾", s["table_bold"]), para("按日期保存活动轨迹、完成率、自动摘要、个人记录和未完成项；支持历史回顾与未来计划。", s["table"])],
+        [para("每日回顾", s["table_bold"]), para("按日期保存活动轨迹、完成率、自动摘要、个人记录和未完成项；对比前后 7 天并反馈下一轮容量。", s["table"])],
+        [para("低门槛模型", s["table_bold"]), para("默认可使用托管兼容网关，也可切换个人 DeepSeek；模型失败时保留本地规则结果。", s["table"])],
         [para("可控记忆", s["table_bold"]), para("只从用户明确保存的计划差异学习；可停用、删除或清空。", s["table"])],
         [para("可复现演示", s["table_bold"]), para("A/B/C 合成输入覆盖明确任务、缺失字段与来源冲突；本地规则主链路无需 Key。", s["table"])],
     ]
@@ -481,7 +485,7 @@ def build_story(s):
         PageBreak(),
         Spacer(1, 3 * mm),
         section_title("02", "真实产品界面（每日反馈）", s["h1"]),
-        para("v0.2.1 将每日活动整理提升为独立一级栏目，让执行结果持续反馈给下一次规划。", s["body"]),
+        para(f"v{VERSION} 将每日活动整理提升为独立一级栏目，并新增前后 7 天趋势，让执行结果持续反馈给下一次规划。", s["body"]),
         scaled_image(REVIEW_SCREENSHOT, 166 * mm),
         para("每日回顾：按日期保存活动轨迹、完成率、计划/完成时长、自动摘要、个人记录和未完成项顺延。", s["caption"]),
         info_box(
@@ -489,6 +493,16 @@ def build_story(s):
             s["body"],
             GREEN_PALE,
             GREEN,
+        ),
+        PageBreak(),
+        section_title("02", "真实产品界面（桌面伙伴）", s["h1"]),
+        scaled_image(COMPANION_SCREENSHOT, 158 * mm),
+        para("桌面伙伴：蓝色动态桌宠提供拖放、状态反馈、提醒与一键打开日程；控制中心与桌宠读取同一份本地状态。", s["caption"]),
+        info_box(
+            "<b>交付修复：</b>复赛安装包强制使用 product/xiaotong 构建并校验 219 张动作帧、完整许可证与 About。打包脚本会拒绝把 Chroni 大图标当成桌宠的 original 占位产物。",
+            s["body"],
+            CORAL_PALE,
+            CORAL,
         ),
         PageBreak(),
     ])
@@ -508,9 +522,9 @@ def build_story(s):
         [para("Ground", s["table_bold"]), para("从长文本提出目标、交付物、完成标准和时间候选。", s["table"]), para("解析/OCR；核对来源、日期、条件、冲突、重复项和 schema。", s["table"])],
         [para("智能整理", s["table_bold"]), para("可辅助跨段语义和问题表达。", s["table"]), para("明确事项先落地；只在事实阻断执行时提出一个必要问题。", s["table"])],
         [para("Plan", s["table_bold"]), para("提出步骤、耗时和不确定性。", s["table"]), para("版本化 TaskPlan；验证依赖、总耗时、交付物、完成标准和截止边界。", s["table"])],
-        [para("Act", s["table_bold"]), para("可提出结构化分配建议。", s["table"]), para("风险、slack、容量、时间冲突、排程/提醒/持久化工具和规则回退。", s["table"])],
+        [para("Act", s["table_bold"]), para("可提出结构化分配建议。", s["table"]), para("语境优先级、slack、容量、时间冲突、已有课程/会议、排程/提醒/持久化工具和规则回退。", s["table"])],
         [para("Verify / Review", s["table_bold"]), para("可辅助生成每日摘要，不得自行完成或评分。", s["table"]), para("证据 SHA-256、里程碑检查点、每日活动轨迹、个人记录与未完成项顺延。", s["table"])],
-        [para("Adapt", s["table_bold"]), para("可提出结构化调整建议。", s["table"]), para("根据实际投入、阻塞、剩余容量和历史状态重算风险、计划与下一步。", s["table"])],
+        [para("Adapt", s["table_bold"]), para("可提出结构化调整建议。", s["table"]), para("根据实际投入、阻塞、14 日趋势和历史未完成重算风险、容量与下一步；触发 25 分钟恢复或 15 分钟重新启动。", s["table"])],
         [para("记忆 / Trace", s["table_bold"]), para("只消费筛选后的结构化偏好。", s["table"]), para("偏好证据门槛、开关/删除、脱敏运行证据导出。", s["table"])],
     ]
     story.extend([
@@ -556,9 +570,9 @@ def build_story(s):
     ])
     test_rows = [
         [para("门禁", s["table_bold"]), para("结果", s["table_bold"]), para("范围", s["table_bold"])],
-        [para("Desktop tests", s["table_bold"]), para("255 pass / 0 fail / 1 skip", s["table"]), para("共 256 项；抽取、Mission、证据/检查点、Store、Agent、每日回顾、UI、API 与打包。", s["table"])],
-        [para("Gateway tests", s["table_bold"]), para("4 pass / 0 fail", s["table"]), para("鉴权、限流、超时、上游错误和日志边界。", s["table"])],
-        [para("GOAI build", s["table_bold"]), para("通过", s["table"]), para("Renderer 资源扫描无受限 XIAOTONG 路径或栅格素材。", s["table"])],
+        [para("Desktop tests", s["table_bold"]), para("277 pass / 0 fail / 1 skip", s["table"]), para("共 278 项；抽取、Mission、证据/检查点、Store、语义规划、每日回顾、UI、API 与打包。", s["table"])],
+        [para("Gateway tests", s["table_bold"]), para("6 pass / 0 fail", s["table"]), para("鉴权、限流、超时、上游错误、托管模型和日志边界。", s["table"])],
+        [para("Product build", s["table_bold"]), para("通过", s["table"]), para("构建清单为 product/xiaotong；219 张动态帧、About 和完整许可资源通过校验。", s["table"])],
         [para("Windows package", s["table_bold"]), para("本机生成", s["table"]), para("NSIS 安装版和 portable；校验和以附件安装说明为准。", s["table"])],
         [para("站点/链接/密钥", s["table_bold"]), para("通过", s["table"]), para("站点引用、Markdown 相对链接、仓库 Key 模式扫描均无失败。", s["table"])],
     ]
@@ -617,7 +631,7 @@ def build_story(s):
         [para("模型输出", s["table_bold"]), para("只作为候选；日期、来源、字段、计划约束和状态变更均由本地验证。", s["table"])],
         [para("产出证据", s["table_bold"]), para("文件流式 SHA-256、512 MiB 上限与变更检测；状态不保存绝对路径/内容；HTTP API 不接受任意文件路径。", s["table"])],
         [para("数据与密钥", s["table_bold"]), para("任务、Mission、每日回顾和记忆默认本地保存；Key 使用系统安全存储；导出移除原文、路径和 Token。", s["table"])],
-        [para("第三方素材", s["table_bold"]), para("赛事安装包强制 original 模式，不打包 XIAOTONG 帧或捐赠码；可选产品素材的许可边界独立披露。", s["table"])],
+        [para("第三方素材", s["table_bold"]), para("赛事安装包使用 product/xiaotong：219 张动态帧、Apache-2.0、未修改附加条款、原仓库回链和两次交互内可达 About 一并交付；不声称商业授权。", s["table"])],
     ]
     story.extend([
         styled_table(
@@ -636,7 +650,7 @@ def build_story(s):
         ),
         Spacer(1, 1 * mm),
         para(
-            "本机包已完成素材、ASAR、许可证和解包冷启动检查；当前 Authenticode 状态为 NotSigned，Windows 可能显示 SmartScreen。macOS 产物只由 macOS runner 构建。",
+            "本机包已完成 product/xiaotong 素材、ASAR、许可证、动态帧和解包冷启动检查；当前 Authenticode 状态为 NotSigned，Windows 可能显示 SmartScreen。macOS 产物只由 macOS runner 构建。",
             s["body_compact"],
         ),
         para("复现与核验", s["h2_compact"]),
@@ -646,7 +660,7 @@ def build_story(s):
         ),
         Spacer(1, 1 * mm),
         info_box(
-            "<b>结论：</b>Chroni 已形成从材料理解、任务规划、今日执行、证据反馈到每日回顾的可运行闭环，并提供失败分支、复现证据与教育边界。真实授权用户研究、正式签名/公证、模型基准和真实 OCR 大样本仍属于后续工作。",
+            "<b>结论：</b>Chroni 已形成从材料理解、语义优先级规划、今日执行、证据反馈到 14 日趋势回顾和容量调整的可运行闭环，并提供失败分支、复现证据、低门槛模型入口与教育边界。真实授权用户研究、正式签名/公证、模型基准和真实 OCR 大样本仍属于后续工作。",
             s["body_compact"],
             GREEN_PALE,
             GREEN,

@@ -153,7 +153,7 @@ Chroni Desktop -> Chroni Relay -> Model Provider
 - README、Release Notes、产品下载页、截图和安装包版本保持一致。
 - `pnpm run check` 必须通过类型检查、Desktop 测试、Gateway 测试与生产构建。
 - `pnpm run eval:goai` 必须输出逐例机器可读结果，并明确区分合成系统评测与真实模型/学习成效。
-- GOAI 构建必须通过受限素材扫描；公开包保留原作许可证和 About 入口，但不分发受限桌宠帧与二维码。
+- 复赛与公开产品构建必须校验 `product/xiaotong` 清单、动态帧、原作许可证、附加条款、回链与 About 入口；商业发行前另行取得书面许可或替换素材。
 - 正式复赛 ZIP 必须来自 clean worktree，写入提交 SHA、运行环境、安装包哈希、逐文件哈希和事实边界。
 - 安装指南覆盖 Setup、Portable、DMG、SmartScreen、Gatekeeper、SHA-256 与签名/公证状态。
 
@@ -162,14 +162,14 @@ Chroni Desktop -> Chroni Relay -> Model Provider
 | 命令或检查 | 结果 |
 | --- | --- |
 | `pnpm run check` | 通过：typecheck、Desktop tests、Gateway tests、production build |
-| Desktop tests | 250 项：249 pass、0 fail、1 skip |
-| Gateway tests | 4 pass、0 fail |
+| Desktop tests | 278 项：277 pass、0 fail、1 skip |
+| Gateway tests | 6 pass、0 fail |
 | `pnpm run eval:goai` | 60 cases；离线成功率 100.0%；Mission 闭环门槛全部通过 |
 | `pnpm run site:check` | 下载链接、DOM 引用和安装包映射通过 |
-| `pnpm run build:goai` | 公开 renderer 未发现受限 XIAOTONG 路径或栅格素材 |
+| `pnpm run package:submission:windows` | product/xiaotong 构建、219 张动态帧、About 与许可资源通过校验 |
 | 提交材料扫描 | API Key、Bearer Token、本地用户路径和非清单文件均作为阻断项 |
 
-标题归一化准确率 95.5%、交付物 F1 83.9%，因此项目不把字段抽取描述为“完美”。完整指标、运行环境和未测项见 `docs/goai/07-evaluation-report.md` 与 `GOAI_COMPLETION_REPORT.md`。
+标题归一化准确率 95.5%、交付物 F1 83.9%，因此项目不把字段抽取描述为“完美”。完整指标、运行环境和未测项见 `docs/goai/07-evaluation-report.md` 与最终附件中的 `PROJECT_VERIFICATION.json`。
 
 ## 12. 风险与回滚
 
