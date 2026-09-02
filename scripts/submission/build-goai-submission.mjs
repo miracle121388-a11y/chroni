@@ -233,7 +233,8 @@ function cleanStagingBase() {
 function removePath(target) {
   if (!existsSync(target)) return;
   const directory = statSync(target).isDirectory();
-  rmSync(target, { recursive: true, force: true });
+  if (directory) rmSync(target, { recursive: true, force: true });
+  else rmSync(target, { force: true });
   if (existsSync(target) && process.platform === "win32") {
     const command = directory
       ? `[System.IO.Directory]::Delete('${powerShellQuote(target)}', $true)`
