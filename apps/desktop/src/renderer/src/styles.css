@@ -10652,6 +10652,121 @@ progress::-webkit-progress-value {
   font-size: 10px;
 }
 
+.review-insights-panel {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid #dce5e1;
+  border-left: 4px solid #4d8979;
+  border-radius: 7px;
+  background: #f5f9f7;
+}
+
+.review-insights-panel > header,
+.review-intervention,
+.review-intervention > div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.review-insights-panel header p,
+.review-insights-panel header h3,
+.review-insights-panel header span {
+  margin: 0;
+}
+
+.review-insights-panel header p {
+  color: #4f7d70;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.review-insights-panel header h3 {
+  margin-top: 2px;
+  color: #24362e;
+  font-size: 15px;
+}
+
+.review-insights-panel header > span {
+  color: #73817b;
+  font-size: 10px;
+}
+
+.review-insight-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 14px;
+  border-top: 1px solid #dbe5e0;
+  border-bottom: 1px solid #dbe5e0;
+}
+
+.review-insight-metrics article {
+  min-width: 0;
+  padding: 12px 14px;
+  border-right: 1px solid #dbe5e0;
+}
+
+.review-insight-metrics article:first-child { padding-left: 0; }
+.review-insight-metrics article:last-child { border-right: 0; }
+
+.review-insight-metrics span,
+.review-insight-metrics b,
+.review-insight-metrics small {
+  display: block;
+}
+
+.review-insight-metrics span {
+  color: #78867f;
+  font-size: 9px;
+}
+
+.review-insight-metrics b {
+  margin-top: 3px;
+  color: #254137;
+  font-size: 19px;
+}
+
+.review-insight-metrics small {
+  margin-top: 2px;
+  color: #82908a;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.review-intervention {
+  margin-top: 13px;
+}
+
+.review-intervention > div {
+  min-width: 180px;
+  display: grid;
+  justify-content: initial;
+  gap: 3px;
+}
+
+.review-intervention b {
+  color: #30483e;
+  font-size: 11px;
+}
+
+.review-intervention span {
+  max-width: 310px;
+  color: #83908a;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.review-intervention ul {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  padding-left: 18px;
+  color: #52635c;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
 .review-main-grid {
   min-width: 0;
   display: grid;
@@ -11087,6 +11202,21 @@ progress::-webkit-progress-value {
 
   .review-main-grid {
     gap: 18px;
+  }
+
+  .review-insight-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-insight-metrics article:nth-child(2) { border-right: 0; }
+  .review-insight-metrics article:nth-child(3) { padding-left: 0; }
+
+  .review-intervention {
+    display: block;
+  }
+
+  .review-intervention ul {
+    margin-top: 10px;
   }
 }
 

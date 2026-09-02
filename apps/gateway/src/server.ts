@@ -42,6 +42,7 @@ type GatewayDependencies = {
 
 export function createGatewayServer(config: GatewayConfig, dependencies: GatewayDependencies = {}): Server {
   const rateStates = new Map<string, RateState>();
+  let rateStateDay = "";
   const fetchImpl = dependencies.fetchImpl ?? fetch;
   const now = dependencies.now ?? Date.now;
   const logger = dependencies.logger ?? ((entry) => console.log(JSON.stringify(entry)));
@@ -102,6 +103,12 @@ export function createGatewayServer(config: GatewayConfig, dependencies: Gateway
       return;
     }
 
+    const rateTimestamp = now();
+    const currentRateDay = utcDay(rateTimestamp);
+    if (currentRateDay !== rateStateDay) {
+      pruneInactiveRateStates(rateStates, currentRateDay);
+      rateStateDay = currentRateDay;
+    }
     const rate = acquireRateSlot(rateStates, identity.id, identity.accessMode === "public" ? {
       requestsPerMinute: config.publicRequestsPerMinute,
       requestsPerDay: config.publicRequestsPerDay,
@@ -110,7 +117,7 @@ export function createGatewayServer(config: GatewayConfig, dependencies: Gateway
       requestsPerMinute: config.requestsPerMinute,
       requestsPerDay: config.requestsPerDay,
       concurrentRequests: config.concurrentRequests,
-    }, now());
+    }, rateTimestamp);
     if (!rate.ok) {
       response.setHeader("retry-after", rate.retryAfterSeconds);
       sendError(response, 429, requestId, rate.code, rate.message);
@@ -121,7 +128,7 @@ export function createGatewayServer(config: GatewayConfig, dependencies: Gateway
       requestsPerMinute: config.globalRequestsPerMinute,
       requestsPerDay: config.globalRequestsPerDay,
       concurrentRequests: config.globalConcurrentRequests,
-    }, now());
+    }, rateTimestamp);
     if (!globalRate.ok) {
       releaseRateSlot(rateStates, identity.id);
       response.setHeader("retry-after", globalRate.retryAfterSeconds);
@@ -263,7 +270,7 @@ function acquireRateSlot(
   timestamp: number,
 ): { ok: true } | { ok: false; code: string; message: string; retryAfterSeconds: number } {
   const minute = 60_000;
-  const day = new Date(timestamp).toISOString().slice(0, 10);
+  const day = utcDay(timestamp);
   const state = states.get(id) ?? { minuteStartedAt: timestamp, minuteCount: 0, day, dayCount: 0, active: 0 };
   if (timestamp - state.minuteStartedAt >= minute) {
     state.minuteStartedAt = timestamp;
@@ -292,6 +299,16 @@ function acquireRateSlot(
   state.minuteCount += 1;
   state.dayCount += 1;
   return { ok: true };
+}
+
+function utcDay(timestamp: number): string {
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+function pruneInactiveRateStates(states: Map<string, RateState>, currentDay: string): void {
+  for (const [id, state] of states) {
+    if (state.active === 0 && state.day !== currentDay) states.delete(id);
+  }
 }
 
 function releaseRateSlot(states: Map<string, RateState>, id: string): void {

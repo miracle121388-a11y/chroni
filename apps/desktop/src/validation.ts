@@ -1,4 +1,5 @@
 import type { AgentMemory, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ChroniInputFile, ChroniLlmSettings, DailyReviewInput, DailyTaskCreateInput, DailyTaskPatch, DailyTaskSubtask, ExplicitPreferenceInput, ChroniPreferencesPatch, IntakePayload, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, PlanningPreferenceKey, TaskPlanStep, TaskPlanUpdatePayload } from "./shared/types.js";
+import { isValidCalendarDate, normalizeRfc3339DateTime, parseCompatibleDateTime } from "./shared/date-time.js";
 
 const MAX_TEXT_LENGTH = 2 * 1024 * 1024;
 const MAX_FILES = 32;
@@ -465,28 +466,20 @@ function booleanValue(value: unknown, field: string): boolean {
 
 function dateString(value: unknown, field: string): string {
   const result = nonEmptyString(value, field, 100);
-  if (Number.isNaN(new Date(result).getTime())) fail(`${field} must be a valid date string.`);
+  if (!parseCompatibleDateTime(result)) fail(`${field} must be a valid date string.`);
   return result;
 }
 
 function dateTimeString(value: unknown, field: string): string {
   const result = nonEmptyString(value, field, 100);
-  const pattern = /^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
-  const match = result.match(pattern);
-  if (!match || !isCalendarDateKey(match[1]) || Number.isNaN(new Date(result).getTime())) {
-    fail(`${field} must be an RFC 3339 date-time with a timezone.`);
-  }
-  return new Date(result).toISOString();
+  const normalized = normalizeRfc3339DateTime(result);
+  if (!normalized) fail(`${field} must be an RFC 3339 date-time with a timezone.`);
+  return normalized;
 }
 
 function isCalendarDateKey(value: string): boolean {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(year, month - 1, day);
-  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+  return !!match && isValidCalendarDate(Number(match[1]), Number(match[2]), Number(match[3]));
 }
 
 function localDateKey(value: Date): string {

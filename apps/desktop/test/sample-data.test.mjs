@@ -72,6 +72,20 @@ test("conflict sample retains conflicting evidence until the user chooses a sour
   }
 });
 
+test("adaptive sample provides a 14-day synthetic trend and contextual deadline pair", () => {
+  const root = mkdtempSync(join(tmpdir(), "chroni-sample-adaptive-"));
+  try {
+    const snapshot = createSampleDataStore(root, undefined, "adaptive", now).snapshot();
+    assert.equal(snapshot.items.length, 2);
+    assert.equal(snapshot.dailyReviews.length, 14);
+    assert.equal(snapshot.dailyTasks.some((task) => task.origin === "agent" && task.linkedTaskId === "sample-adaptive-final"), true);
+    assert.equal(snapshot.items.find((item) => item.id === "sample-adaptive-final")?.progressPercent, 20);
+    assert.equal(new Date(snapshot.items.find((item) => item.id === "sample-adaptive-club").dueAt) < new Date(snapshot.items.find((item) => item.id === "sample-adaptive-final").dueAt), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("sample data namespace never changes the primary store and is removable", () => {
   const root = mkdtempSync(join(tmpdir(), "chroni-sample-isolation-"));
   try {

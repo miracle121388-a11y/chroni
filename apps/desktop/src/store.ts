@@ -11,6 +11,7 @@ import { normalizeLearningMissions, synchronizeLearningMissions } from "./learni
 import { compareScheduleItems, visibleActiveScheduleItems } from "./shared/schedule.js";
 import { localFilePathFromText } from "./shared/local-file-input.js";
 import { EMPTY_INTAKE_PROMPT } from "./shared/intake-copy.js";
+import { isValidCalendarDate, normalizeCompatibleDateTime, parseCompatibleDateTime, parseRfc3339DateTime } from "./shared/date-time.js";
 import {
   CHRONI_MANAGED_LLM_BASE_URL,
   CHRONI_MANAGED_LLM_MODEL,
@@ -459,7 +460,8 @@ export class ChroniStore {
     if (input.note) evidence.note = input.note.slice(0, 4_000);
     if (Number.isInteger(input.bytes) && Number(input.bytes) >= 0) evidence.bytes = Number(input.bytes);
     if (typeof input.sha256 === "string" && /^[a-f0-9]{64}$/i.test(input.sha256)) evidence.sha256 = input.sha256.toLowerCase();
-    if (input.modifiedAt && !Number.isNaN(new Date(input.modifiedAt).getTime())) evidence.modifiedAt = new Date(input.modifiedAt).toISOString();
+    const modifiedAt = input.modifiedAt ? normalizeCompatibleDateTime(input.modifiedAt) : undefined;
+    if (modifiedAt) evidence.modifiedAt = modifiedAt;
     mission.evidence = [evidence, ...mission.evidence].slice(0, 200);
     this.#recordWorkflowTrace([
       { stage: "observe", summary: `读取学习任务「${mission.title}」的交付要求。`, data: { missionId, deliverableCount: mission.deliverables.length } },
@@ -751,10 +753,16 @@ export class ChroniStore {
           .filter((task) => task.origin === "agent"
             && !task.agentBlockKey
             && !matched.has(task.id)
+            && reusableAgentBlock(task, now)
             && task.linkedTaskId === block.taskId
             && (task.linkedStepId ?? "") === (block.stepId ?? ""))
           .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())[0];
       if (existing) {
+        if (shouldArchiveMissedAgentBlock(existing, block.endAt, now)) {
+          const historical: DailyTask = { ...structuredClone(existing), id: `daily-agent-history-${randomUUID()}` };
+          delete historical.agentBlockKey;
+          this.#state.dailyTasks.push(historical);
+        }
         matched.add(existing.id);
         existing.agentBlockKey = agentBlockKey;
         existing.allocatedMinutes = block.allocatedMinutes;
@@ -796,7 +804,8 @@ export class ChroniStore {
     }
     this.#state.dailyTasks = boundDailyTasks(this.#state.dailyTasks.filter((task) => {
       if (task.origin !== "agent" || matched.has(task.id) || task.userAdjusted || task.completedDates.length || !task.scheduledStartAt) return true;
-      return localDateKey(new Date(task.scheduledStartAt)) < today;
+      const endAt = task.scheduledEndAt ?? task.scheduledStartAt;
+      return localDateKey(new Date(task.scheduledStartAt)) < today || new Date(endAt).getTime() < now.getTime();
     }));
   }
 
@@ -2063,6 +2072,11 @@ function normalizeAgentAssessment(value: unknown): AgentRunResult["priorities"][
   if (nextStepId) assessment.nextStepId = nextStepId;
   if (nextStepTitle) assessment.nextStepTitle = nextStepTitle;
   if (typeof input.nextStepMinutes === "number" && Number.isFinite(input.nextStepMinutes)) assessment.nextStepMinutes = Math.max(0, input.nextStepMinutes);
+  if (typeof input.priorityScore === "number" && Number.isFinite(input.priorityScore)) assessment.priorityScore = boundedFiniteNumber(input.priorityScore, -1_000_000, 1_000_000, 0);
+  if (typeof input.progressPercent === "number" && Number.isFinite(input.progressPercent)) assessment.progressPercent = boundedFiniteNumber(input.progressPercent, 0, 100, 0);
+  if (typeof input.missedPlanCount === "number" && Number.isFinite(input.missedPlanCount)) assessment.missedPlanCount = Math.max(0, Math.floor(input.missedPlanCount));
+  if (input.interventionLevel === "none" || input.interventionLevel === "nudge" || input.interventionLevel === "rescue") assessment.interventionLevel = input.interventionLevel;
+  if (typeof input.recommendedSessionMinutes === "number" && Number.isFinite(input.recommendedSessionMinutes)) assessment.recommendedSessionMinutes = boundedFiniteNumber(input.recommendedSessionMinutes, 5, 720, 15);
   if (typeof input.availableMinutesUntilDue === "number" && Number.isFinite(input.availableMinutesUntilDue)) assessment.availableMinutesUntilDue = input.availableMinutesUntilDue;
   if (typeof input.slackMinutes === "number" && Number.isFinite(input.slackMinutes)) assessment.slackMinutes = input.slackMinutes;
   if (typeof input.actionable === "boolean") assessment.actionable = input.actionable;
@@ -2103,6 +2117,9 @@ function normalizeAgentPlan(value: unknown): NormalizedValue<AgentPlan | undefin
     ...(forecastBlocks.values.length ? { forecastBlocks: forecastBlocks.values } : {}),
     ...(isBoundedInteger(input.forecastHorizonDays, 1, 365) ? { forecastHorizonDays: input.forecastHorizonDays } : {}),
     ...(typeof input.requestedMinutes === "number" && Number.isFinite(input.requestedMinutes) ? { requestedMinutes: Math.max(0, input.requestedMinutes) } : {}),
+    ...(typeof input.capacityMinutes === "number" && Number.isFinite(input.capacityMinutes) ? { capacityMinutes: boundedFiniteNumber(input.capacityMinutes, 0, 1_000_000, 0) } : {}),
+    ...(typeof input.availableMinutes === "number" && Number.isFinite(input.availableMinutes) ? { availableMinutes: boundedFiniteNumber(input.availableMinutes, 0, 1_000_000, 0) } : {}),
+    ...(Array.isArray(input.adaptationReasons) ? { adaptationReasons: safeStringList(input.adaptationReasons, 10, 500) } : {}),
     ...(plannerSource ? { plannerSource } : {}),
     ...(safeNonEmptyString(input.fallbackReason, 500) ? { fallbackReason: safeNonEmptyString(input.fallbackReason, 500) } : {}),
     ...(coverage.length ? { coverage } : {}),
@@ -2289,8 +2306,9 @@ function applyClarificationAnswer(draft: IntakeDraft, field: PendingClarificatio
     return;
   }
   if (field === "dueAt" || field === "dueTime") {
-    if (typeof answer !== "string" || Number.isNaN(new Date(answer).getTime())) throw new Error("截止时间回答无效。");
-    draft.candidate.dueAt = new Date(answer).toISOString();
+    const dueAt = typeof answer === "string" ? normalizeCompatibleDateTime(answer) : undefined;
+    if (!dueAt) throw new Error("截止时间回答无效。");
+    draft.candidate.dueAt = dueAt;
     return;
   }
   if (field === "estimatedMinutes") {
@@ -2582,9 +2600,7 @@ function normalizeExtractionContext(value: unknown): DdlItem["extraction"] | und
 }
 
 function normalizedDate(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  return typeof value === "string" ? normalizeCompatibleDateTime(value) : undefined;
 }
 
 function assertDailyTaskSchedule(startAt: string | undefined, endAt: string | undefined, allDay: boolean, recurrence: DailyTask["recurrence"], recurrenceEndsAt?: string): void {
@@ -2606,9 +2622,7 @@ function assertDailyTaskSchedule(startAt: string | undefined, endAt: string | un
 }
 
 function isRfc3339DateTime(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(value)
-    && isCalendarDateKey(value.slice(0, 10))
-    && !Number.isNaN(new Date(value).getTime());
+  return !!parseRfc3339DateTime(value);
 }
 
 function dailyTaskEndAfter(startAt: string, durationMs: number): string {
@@ -2635,6 +2649,20 @@ function stableAgentBlockKey(taskId: string, stepId: string | undefined, ordinal
   return `agent:${encodeURIComponent(taskId)}:${encodeURIComponent(stepId ?? "")}:${ordinal + 1}`;
 }
 
+function reusableAgentBlock(task: DailyTask, now: Date): boolean {
+  if (task.dismissed || task.completedDates.length || !task.scheduledStartAt) return false;
+  const endAt = task.scheduledEndAt ?? task.scheduledStartAt;
+  const end = new Date(endAt).getTime();
+  return Number.isFinite(end) && end >= now.getTime();
+}
+
+function shouldArchiveMissedAgentBlock(task: DailyTask, incomingEndAt: string, now: Date): boolean {
+  if (task.userAdjusted || task.dismissed || task.completedDates.length || !task.scheduledStartAt) return false;
+  const previousEnd = new Date(task.scheduledEndAt ?? task.scheduledStartAt).getTime();
+  const incomingEnd = new Date(incomingEndAt).getTime();
+  return Number.isFinite(previousEnd) && previousEnd < now.getTime() && Number.isFinite(incomingEnd) && incomingEnd > now.getTime();
+}
+
 function boundDailyTasks(tasks: DailyTask[]): DailyTask[] {
   if (tasks.length <= 2_000) return tasks;
   return [...tasks]
@@ -2646,12 +2674,7 @@ function boundDailyTasks(tasks: DailyTask[]): DailyTask[] {
 
 function isCalendarDateKey(value: string): boolean {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(year, month - 1, day);
-  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+  return !!match && isValidCalendarDate(Number(match[1]), Number(match[2]), Number(match[3]));
 }
 
 function localDateKey(value: Date): string {
@@ -2874,7 +2897,7 @@ function synchronizeStateSourceItemIds(state: StoredState): StoredState {
 }
 
 function isValidDateString(value: string): boolean {
-  return typeof value === "string" && !Number.isNaN(new Date(value).getTime());
+  return typeof value === "string" && !!parseCompatibleDateTime(value);
 }
 
 function isValidClockTime(value: string): boolean {

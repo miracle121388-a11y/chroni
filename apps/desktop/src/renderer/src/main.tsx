@@ -592,6 +592,7 @@ function DemoDataTools({ setSnapshot }: Pick<ViewProps, "setSnapshot">) {
   const [feedback, setFeedback] = useState("");
   const scenarios: Array<{ id: SampleDataScenario; title: string; summary: string }> = [
     { id: "clear", title: "完整课程任务", summary: "载入包含交付物、里程碑、时间块与产出证据的示例。" },
+    { id: "adaptive", title: "连续使用与动态干预", summary: "载入 14 天合成记录，查看语境排序、未完成干预与效果趋势。" },
     { id: "clarification", title: "待补充截止时间", summary: "载入仅需确认关键日期的示例，检查主动追问流程。" },
     { id: "conflict", title: "多来源时间冲突", summary: "载入存在不同截止时间证据的示例，检查人工确认边界。" },
   ];
@@ -833,7 +834,7 @@ function AgentPane({ snapshot, setSnapshot }: ViewProps) {
               <div className="agent-risk-list">
                 {dashboard.attentionTasks.map((item) => (
                   <article className={`agent-risk-row risk-${item.riskLevel}`} key={item.taskId}>
-                    <div><b>{item.title}</b><span>{formatAgentTime(item.dueAt)} · {safeUserMessage(item.reasons[0], "需要优先处理")}{item.actionable === false ? " · 等待解除阻塞" : ""}</span></div>
+                    <div><b>{item.title}</b><span>{formatAgentTime(item.dueAt)} · {safeUserMessage(item.reasons[0], "需要优先处理")}{agentInterventionCopy(item)}{item.actionable === false ? " · 等待解除阻塞" : ""}</span></div>
                     <em>{agentRiskLabel(item.riskLevel)}</em>
                   </article>
                 ))}
@@ -1990,6 +1991,12 @@ function agentStatusLabel(status: NonNullable<ChroniSnapshot["agent"]["latestRun
 
 function agentRiskLabel(level: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["priorities"][number]["riskLevel"]): string {
   return level === "critical" ? "严重" : level === "high" ? "高" : level === "medium" ? "中" : "低";
+}
+
+function agentInterventionCopy(item: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["priorities"][number]): string {
+  if (item.interventionLevel === "rescue") return ` · 重新启动 ${item.recommendedSessionMinutes ?? 15} 分钟`;
+  if (item.interventionLevel === "nudge") return ` · 恢复推进 ${item.recommendedSessionMinutes ?? 25} 分钟`;
+  return "";
 }
 
 function agentStageLabel(stage: NonNullable<ChroniSnapshot["agent"]["latestRun"]>["trace"][number]["stage"]): string {

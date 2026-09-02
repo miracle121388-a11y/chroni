@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { ensureOcrCachePath, ensureTaskPlan, extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, isReliableOcrResult, mergeModelAndRuleItems, processIntake, recognizeImageWithTesseract, reprocessSource, workbookText } from "../dist/intake.js";
-import { lightweightScheduleItems, scheduleBucket, shouldRemindItem, snoozeUntil, visibleScheduleSummary } from "../dist/shared/schedule.js";
+import { lightweightScheduleItems, scheduleBucket, shouldRemindItem, snoozeUntil, visibleActiveScheduleItems, visibleScheduleSummary } from "../dist/shared/schedule.js";
 import { companionStateForItems, ChroniStore } from "../dist/store.js";
 
 function localIso(year, month, day, hour, minute) {
@@ -54,6 +54,17 @@ test("empty workbook sheets cannot create task text from sheet names", () => {
   ]);
 
   assert.equal(text, "");
+});
+
+test("semantic stakes and progress outrank a slightly earlier low-stakes deadline", () => {
+  const now = new Date(2026, 8, 1, 8, 0);
+  const base = { sourceSummary: "聊天记录", createdAt: now.toISOString(), updatedAt: now.toISOString(), completed: false };
+  const ordered = visibleActiveScheduleItems([
+    { id: "club", title: "社团汇报PPT初稿", dueAt: new Date(2026, 8, 2, 9, 0).toISOString(), importance: "medium", estimatedMinutes: 30, progressPercent: 70, ...base },
+    { id: "final", title: "期末作业", dueAt: new Date(2026, 8, 2, 9, 30).toISOString(), importance: "medium", estimatedMinutes: 180, progressPercent: 20, ...base },
+  ], now);
+
+  assert.deepEqual(ordered.map((item) => item.id), ["final", "club"]);
 });
 
 test("OCR cache selection skips invalid paths and falls back to a writable directory", () => {
@@ -231,7 +242,7 @@ test("startup removes historical clarifications created from a pasted file path"
 
 test("the comprehensive notice creates five plans before exposing optional refinements", async () => {
   await withStore(async (store) => {
-    const noticePath = join(process.cwd(), "..", "..", "ddl_agent_test_notice.md");
+    const noticePath = new URL("../../../ddl_agent_test_notice.md", import.meta.url);
     const text = readFileSync(noticePath, "utf8");
     store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-chat" } });
     store.updateAgentMemory({ useLlmPlanning: false });
@@ -609,14 +620,18 @@ test("pending reprocessing preserves the old task and updates it after confirmat
 
 test("invalid calendar dates are not rolled into a different date", () => {
   const items = extractDdlItemsFromText("2月31日 23:59 提交课程报告");
+  const zonedItems = extractDdlItemsFromText("请于 2026-02-31T23:59:00+08:00 提交课程报告");
 
   assert.equal(items.length, 0);
+  assert.equal(zonedItems.length, 0);
 });
 
 test("plain schedule dates without task intent are not converted to DDL", () => {
   const items = extractDdlItemsFromText("课程安排：7月12日 第一讲 导论；7月19日 第二讲 阅读方法");
+  const pptCourse = extractDdlItemsFromText("课程安排：7月20日 9:00 PPT 设计第一讲");
 
   assert.equal(items.length, 0);
+  assert.equal(pptCourse.length, 0);
 });
 
 test("coursework dates with task intent are still converted to DDL", () => {
@@ -650,8 +665,11 @@ test("invalid item due date patches do not corrupt stored items", async () => {
     const before = created.snapshot.items[0];
     const snapshot = store.updateItem(before.id, { dueAt: "not-a-date" });
     const after = snapshot.items.find((item) => item.id === before.id);
+    const calendarSnapshot = store.updateItem(before.id, { dueAt: "2026-02-31T23:59:00+08:00" });
+    const afterCalendarPatch = calendarSnapshot.items.find((item) => item.id === before.id);
 
     assert.equal(after?.dueAt, before.dueAt);
+    assert.equal(afterCalendarPatch?.dueAt, before.dueAt);
     assert.equal(snapshot.companion.state, "confused");
     assert.match(snapshot.companion.bubble, /截止时间/);
   });

@@ -268,10 +268,10 @@ curl -fsS \
 | --- | --- |
 | `title` | 非空，最多 120 个字符 |
 | `importance` | `high`、`medium` 或 `low` |
-| `dueAt` | 可解析的日期时间字符串；建议使用带时区 RFC 3339 |
+| `dueAt` | 可解析且日历值有效的日期时间字符串；建议使用带时区 RFC 3339 |
 | `sourceSummary` | 最多 500 个字符 |
 | `completed` | 布尔值 |
-| `snoozedUntil` | 日期时间字符串；`null` 表示清除 |
+| `snoozedUntil` | 可解析且日历值有效的日期时间字符串；`null` 表示清除 |
 | `estimatedMinutes` | `15` 至 `1440` 的整数；`null` 表示清除 |
 | `progressPercent` | `0` 至 `100` 的整数；`null` 表示清除 |
 
@@ -546,6 +546,7 @@ Agent Memory 可更新字段：
 - 直接文本 `text` 最多 2,097,152 个字符。
 - 单个纯文本文件最多 `2 MiB`。
 - 单个 DOCX、PDF、XLSX 或图片最多 `18 MiB`。
+- 没有文本层的扫描 PDF 最多执行 `60` 页本地 OCR；文本型 PDF 不受此页数限制。
 - Base64 通常会比原文件增加约三分之一大小，实际可上传上限还受 `32 MiB` JSON 请求体限制。
 - 单次抽取最多返回 12 个明确 DDL 和 12 个待确认候选。
 

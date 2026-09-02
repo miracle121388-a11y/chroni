@@ -1,3 +1,5 @@
+import { isValidCalendarDateTimeParts, normalizeRfc3339DateTime } from "./date-time.js";
+
 const periodPattern = "上午|下午|晚上|中午|凌晨|早上|早晨|傍晚|今晚|明晚|晚";
 const chineseNumberPattern = "零〇一二两三四五六七八九十";
 const clockSuffixPattern = `(?:[:：]\\s*\\d{1,2}|[点时]\\s*(?:\\d{1,2}\\s*分?|半|一刻|三刻)?)`;
@@ -7,13 +9,23 @@ export function deadlineDateFromText(text: string, now = new Date()): string | u
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return undefined;
 
-  const iso = normalized.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?/);
+  const iso = normalized.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?([Zz]|[+-]\d{1,4}(?::\d{0,4})?)?/);
   if (iso) {
-    if (iso[7]) {
-      const parsed = new Date(iso[0]);
-      return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+    const year = Number(iso[1]);
+    const month = Number(iso[2]);
+    const day = Number(iso[3]);
+    const hour = Number(iso[4]);
+    const minute = Number(iso[5]);
+    const second = Number(iso[6] ?? 0);
+    if (!isValidCalendarDateTimeParts(year, month, day, hour, minute, second)) return undefined;
+    if (iso[8]) {
+      const fraction = iso[7] ? `.${iso[7]}` : "";
+      const candidate = `${iso[1]}-${iso[2]}-${iso[3]}T${iso[4]}:${iso[5]}:${String(second).padStart(2, "0")}${fraction}${iso[8]}`;
+      return normalizeRfc3339DateTime(candidate);
     }
-    return localDate(Number(iso[1]), Number(iso[2]), Number(iso[3]), Number(iso[4]), Number(iso[5]), Number(iso[6] ?? 0));
+    const suffix = normalized.slice((iso.index ?? 0) + iso[0].length);
+    if (/^[Zz+-]/.test(suffix)) return undefined;
+    return localDate(year, month, day, hour, minute, second);
   }
 
   const full = normalized.match(/(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*[日号]?/);
@@ -56,7 +68,7 @@ export function deadlineDateFromText(text: string, now = new Date()): string | u
 
 export function stripDeadlineTemporalExpressions(text: string): string {
   return text
-    .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})?/gi, " ")
+    .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?/gi, " ")
     .replace(/20\d{2}\s*[年/.\-]\s*\d{1,2}\s*[月/.\-]\s*\d{1,2}\s*[日号]?/g, " ")
     .replace(/\d{1,2}(?:\s*[月/\-]\s*|\.)\d{1,2}\s*[日号]?/g, " ")
     .replace(new RegExp(`(?:${periodPattern})?\\s*\\d{1,2}\\s*${clockSuffixPattern}`, "g"), " ")

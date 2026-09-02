@@ -134,6 +134,27 @@ test("Agent work blocks populate daily tasks while preserving user adjustments",
   }
 });
 
+test("replanning archives an elapsed unfinished Agent block instead of erasing execution history", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-agent-missed-history-"));
+  try {
+    const store = new ChroniStore(dir);
+    store.addItems([ddlItem("ddl-history", "期末作业", 120)]);
+    const previousStart = new Date(Date.now() - 26 * 60 * 60_000);
+    const previous = { taskId: "ddl-history", stepId: "step-draft", title: "撰写期末作业", startAt: previousStart.toISOString(), endAt: new Date(previousStart.getTime() + 30 * 60_000).toISOString(), allocatedMinutes: 30 };
+    store.saveAgentRun(runWithBlock(previous));
+    const nextStart = new Date(Date.now() + 30 * 60_000);
+    const next = { ...previous, startAt: nextStart.toISOString(), endAt: new Date(nextStart.getTime() + 30 * 60_000).toISOString() };
+    store.saveAgentRun(runWithBlock(next));
+
+    const tasks = store.snapshot().dailyTasks.filter((task) => task.linkedTaskId === "ddl-history");
+    assert.equal(tasks.length, 2);
+    assert.equal(tasks.some((task) => task.scheduledStartAt === previous.startAt && !task.completedDates.length), true);
+    assert.equal(tasks.some((task) => task.scheduledStartAt === next.startAt), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("same-day Agent work blocks persist with alternating colors", () => {
   const dir = mkdtempSync(join(tmpdir(), "chroni-agent-colors-"));
   try {

@@ -7,6 +7,7 @@ import type {
   SourceRecord,
   TaskPlan,
 } from "./shared/types.js";
+import { normalizeCompatibleDateTime } from "./shared/date-time.js";
 
 export type NormalizedLearningMissions = {
   values: LearningMission[];
@@ -334,9 +335,7 @@ function safeStringList(value: unknown, maxItems: number, maxLength: number): st
 }
 
 function safeDate(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
+  return typeof value === "string" ? normalizeCompatibleDateTime(value) : undefined;
 }
 
 function boundedInteger(value: unknown, min: number, max: number): number | undefined {

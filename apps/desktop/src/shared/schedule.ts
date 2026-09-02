@@ -1,4 +1,5 @@
 import type { DdlItem } from "./types.js";
+import { taskPrioritySignals } from "./task-priority.js";
 
 export type ScheduleSummary = {
   active: number;
@@ -86,7 +87,7 @@ export function compareScheduleItems(a: DdlItem, b: DdlItem, now = new Date()): 
   if (a.completed !== b.completed) return a.completed ? 1 : -1;
   const snoozedDiff = Number(isScheduleItemSnoozed(a, now)) - Number(isScheduleItemSnoozed(b, now));
   if (snoozedDiff) return snoozedDiff;
-  const urgencyDiff = urgencyScore(b, now) - urgencyScore(a, now);
+  const urgencyDiff = taskPrioritySignals(b, now).totalScore - taskPrioritySignals(a, now).totalScore;
   if (urgencyDiff) return urgencyDiff;
   return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
 }
@@ -111,13 +112,6 @@ function summarizeItems(items: DdlItem[], now: Date, visibleOnly: boolean): Sche
     }
     return summary;
   }, { active: 0, completed: 0, overdue: 0, today: 0, upcoming: 0 });
-}
-
-function urgencyScore(item: DdlItem, now: Date): number {
-  const hours = (new Date(item.dueAt).getTime() - now.getTime()) / 3_600_000;
-  const timeScore = hours < 0 ? 500 : hours <= 24 ? 400 : hours <= 72 ? 250 : hours <= 168 ? 120 : 0;
-  const importanceScore = item.importance === "high" ? 60 : item.importance === "medium" ? 30 : 10;
-  return timeScore + importanceScore;
 }
 
 function sameLocalDay(a: Date, b: Date): boolean {

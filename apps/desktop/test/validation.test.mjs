@@ -31,9 +31,12 @@ test("validateItemPatch enforces field types, enums, dates, and known keys", () 
   assert.throws(() => validateItemPatch({ completed: "yes" }), /completed/);
   assert.throws(() => validateItemPatch({ importance: "urgent" }), /importance/);
   assert.throws(() => validateItemPatch({ dueAt: "not-a-date" }), /dueAt/);
+  assert.throws(() => validateItemPatch({ dueAt: "2026-02-31T23:59:00+08:00" }), /dueAt/);
+  assert.throws(() => validateItemPatch({ dueAt: " 2026-02-31T23:59:00+08:00 " }), /dueAt/);
   assert.throws(() => validateItemPatch({ injected: true }), /injected/);
   assert.throws(() => validateItemPatch({ estimatedMinutes: 5 }), /estimatedMinutes/);
   assert.throws(() => validateItemPatch({ progressPercent: 101 }), /progressPercent/);
+  assert.deepEqual(validateItemPatch({ dueAt: "July 20, 2026 18:00 UTC" }), { dueAt: "July 20, 2026 18:00 UTC" });
 });
 
 test("daily task validation requires coherent local date-time schedules", () => {

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ExtractedInput, IntakeDraft, PendingClarification } from "../shared/types.js";
 import type { ChroniLlmSettings } from "../shared/types.js";
 import { deadlineDateFromText, isConditionalDeadlineText, stripDeadlineTemporalExpressions } from "../shared/deadline-text.js";
+import { parseCompatibleDateTime } from "../shared/date-time.js";
 import { requestChatCompletion } from "../llm-client.js";
 import { isLlmReady } from "../llm-settings.js";
 
@@ -119,7 +120,7 @@ function validateProposedOptions(value: unknown, field: PendingClarification["fi
     if (!label) return [];
     const raw = option.value;
     if (field === "dueAt" || field === "dueTime") {
-      if (typeof raw !== "string" || Number.isNaN(new Date(raw).getTime())) return [];
+      if (typeof raw !== "string" || !parseCompatibleDateTime(raw)) return [];
       const localDates = localOptions.map((option) => typeof option.value === "string" ? new Date(option.value).getTime() : Number.NaN).filter(Number.isFinite);
       if (localDates.length && (new Date(raw).getTime() < Math.min(...localDates) || new Date(raw).getTime() > Math.max(...localDates))) return [];
     } else if (typeof raw !== "string" && typeof raw !== "number" && !Array.isArray(raw)) return [];

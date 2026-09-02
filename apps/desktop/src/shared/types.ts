@@ -78,6 +78,7 @@ export type AgentMemory = {
 export type AgentMemoryPatch = Partial<AgentMemory>;
 
 export type AgentRiskLevel = "low" | "medium" | "high" | "critical";
+export type AgentInterventionLevel = "none" | "nudge" | "rescue";
 export type AgentRunTrigger = "manual" | "startup" | "daily" | "task-change";
 export type AgentPlannerSource = "rules" | "llm" | "rules-fallback";
 
@@ -91,7 +92,12 @@ export type AgentTaskAssessment = {
   importance: Importance;
   riskLevel: AgentRiskLevel;
   score: number;
+  priorityScore?: number;
   estimatedMinutes: number;
+  progressPercent?: number;
+  missedPlanCount?: number;
+  interventionLevel?: AgentInterventionLevel;
+  recommendedSessionMinutes?: number;
   availableMinutesUntilDue?: number;
   slackMinutes?: number;
   actionable?: boolean;
@@ -123,6 +129,9 @@ export type AgentPlan = {
   forecastHorizonDays?: number;
   requestedMinutes?: number;
   plannedMinutes: number;
+  capacityMinutes?: number;
+  availableMinutes?: number;
+  adaptationReasons?: string[];
   overflowMinutes: number;
   unplannedTaskIds: string[];
   plannerSource?: AgentPlannerSource;
@@ -203,7 +212,7 @@ export type AgentEvidenceExportResult = {
   integritySha256: string;
 };
 
-export type SampleDataScenario = "clear" | "clarification" | "conflict";
+export type SampleDataScenario = "clear" | "clarification" | "conflict" | "adaptive";
 
 export type SampleDataStatus = {
   active: boolean;

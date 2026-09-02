@@ -85,6 +85,85 @@ test("risk assessment detects capacity pressure before the deadline is near", ()
   assert.equal(risk.reasons.some((reason) => /每日容量/.test(reason)), true);
 });
 
+test("agent combines semantic stakes, progress and missed blocks for adaptive intervention", () => {
+  const now = new Date(2026, 8, 1, 18, 0);
+  const finalTask = task("final", "期末作业", new Date(2026, 8, 2, 9, 30).toISOString(), "medium", { estimatedMinutes: 180, progressPercent: 20 });
+  const clubTask = task("club", "社团汇报PPT初稿", new Date(2026, 8, 2, 9, 0).toISOString(), "medium", { estimatedMinutes: 30, progressPercent: 70 });
+  const missed = [0, 1].map((offset) => {
+    const start = new Date(2026, 7, 30 + offset, 15, 0);
+    return {
+      id: `missed-${offset}`,
+      title: "期末作业推进",
+      notes: "",
+      color: "coral",
+      allDay: false,
+      scheduledStartAt: start.toISOString(),
+      scheduledEndAt: new Date(start.getTime() + 30 * 60_000).toISOString(),
+      recurrence: "none",
+      subtasks: [],
+      completedDates: [],
+      origin: "agent",
+      linkedTaskId: "final",
+      userAdjusted: false,
+      dismissed: false,
+      createdAt: start.toISOString(),
+      updatedAt: start.toISOString(),
+    };
+  });
+  const tools = createAgentTools({
+    readTasks: () => [clubTask, finalTask],
+    readDailyTasks: () => missed,
+    intakeText: async () => { throw new Error("unused"); },
+    writeIcs: () => "unused",
+    sendReminder: async () => ({ sent: false, reason: "not-needed" }),
+  });
+
+  const risks = tools.assessRisks([clubTask, finalTask], now, createAgentMemory());
+  assert.equal(risks[0].taskId, "final");
+  assert.equal(risks[0].importance, "high");
+  assert.equal(risks[0].missedPlanCount, 2);
+  assert.equal(risks[0].interventionLevel, "rescue");
+  assert.equal(risks[0].recommendedSessionMinutes, 15);
+});
+
+test("a completed recovery block clears the consecutive-miss intervention", () => {
+  const now = new Date(2026, 8, 1, 18, 0);
+  const item = task("recovered", "期末作业", new Date(2026, 8, 2, 9, 30).toISOString(), "high", { estimatedMinutes: 120, progressPercent: 50 });
+  const dates = [new Date(2026, 7, 30, 15, 0), new Date(2026, 7, 31, 15, 0), new Date(2026, 8, 1, 16, 0)];
+  const history = dates.map((start, index) => {
+    const key = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+    return { id: `history-${index}`, title: "期末作业推进", notes: "", color: "coral", allDay: false, scheduledStartAt: start.toISOString(), scheduledEndAt: new Date(start.getTime() + 30 * 60_000).toISOString(), recurrence: "none", subtasks: [], completedDates: index === 2 ? [key] : [], origin: "agent", linkedTaskId: item.id, userAdjusted: false, dismissed: false, createdAt: start.toISOString(), updatedAt: start.toISOString() };
+  });
+  const tools = createAgentTools({ readTasks: () => [item], readDailyTasks: () => history, intakeText: async () => { throw new Error("unused"); }, writeIcs: () => "unused", sendReminder: async () => ({ sent: false, reason: "not-needed" }) });
+
+  const [assessment] = tools.assessRisks([item], now, createAgentMemory());
+  assert.equal(assessment.missedPlanCount, 0);
+  assert.equal(assessment.interventionLevel, "none");
+});
+
+test("recent execution data automatically contracts an overloaded next plan", () => {
+  const now = new Date(2026, 8, 1, 9, 0);
+  const item = task("adaptive", "课程期末项目", new Date(2026, 8, 5, 18, 0).toISOString(), "high", { estimatedMinutes: 300, progressPercent: 10 });
+  const reviews = [0, 1].map((offset) => {
+    const date = new Date(2026, 8, 1 - offset);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    return { date: key, summary: "执行不足", note: "", totalTasks: 4, completedTasks: 1, plannedMinutes: 240, completedMinutes: 60, unfinishedTaskTitles: ["课程期末项目"], createdAt: now.toISOString(), updatedAt: now.toISOString() };
+  });
+  const tools = createAgentTools({
+    readTasks: () => [item],
+    readDailyReviews: () => reviews,
+    intakeText: async () => { throw new Error("unused"); },
+    writeIcs: () => "unused",
+    sendReminder: async () => ({ sent: false, reason: "not-needed" }),
+  });
+  const risks = tools.assessRisks([item], now, createAgentMemory());
+  const plan = tools.plan(risks, createAgentMemory(), now);
+
+  assert.equal(plan.capacityMinutes, 165);
+  assert.equal(plan.plannedMinutes, 165);
+  assert.match(plan.adaptationReasons[0], /240 分钟.*165 分钟/);
+});
+
 test("active plans expose only dependency-ready unblocked steps", () => {
   const now = new Date(2026, 6, 13, 9, 0);
   const item = task("planned", "Planned report", new Date(2026, 6, 15, 18, 0).toISOString(), "medium", { estimatedMinutes: 120 });
@@ -122,6 +201,34 @@ test("work planning stays inside preferred hours and daily capacity", () => {
   assert.equal(plan.overflowMinutes, 30);
   assert.equal(plan.blocks[0].startAt, new Date(2026, 6, 11, 10, 0, 0, 0).toISOString());
   assert.equal(plan.blocks[1].endAt, new Date(2026, 6, 11, 12, 0, 0, 0).toISOString());
+});
+
+test("work planning uses free calendar gaps instead of overlapping fixed activities", () => {
+  const now = new Date(2026, 6, 13, 9, 0);
+  const memory = { ...createAgentMemory(), maxDailyMinutes: 120, workdayStart: "09:00", workdayEnd: "18:00" };
+  const risks = assessTaskRisks([task("course", "期末课程项目", new Date(2026, 6, 15, 18, 0).toISOString(), "high", { estimatedMinutes: 120 })], now, memory);
+  const fixedStart = new Date(2026, 6, 13, 10, 0);
+  const fixed = {
+    id: "fixed-class",
+    title: "专业课",
+    notes: "",
+    color: "blue",
+    allDay: false,
+    scheduledStartAt: fixedStart.toISOString(),
+    scheduledEndAt: new Date(2026, 6, 13, 11, 0).toISOString(),
+    recurrence: "none",
+    subtasks: [],
+    completedDates: [],
+    origin: "manual",
+    userAdjusted: true,
+    dismissed: false,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+
+  const plan = planWorkBlocks(risks, memory, now, [fixed]);
+  assert.deepEqual(plan.blocks.map((block) => [new Date(block.startAt).getHours(), new Date(block.endAt).getHours()]), [[9, 10], [11, 12]]);
+  assert.equal(plan.availableMinutes, 120);
 });
 
 test("work planning previews unfinished effort across the next week without crossing the deadline", () => {

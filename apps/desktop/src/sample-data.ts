@@ -27,6 +27,10 @@ function seedScenario(store: ChroniStore, scenario: SampleDataScenario, now: Dat
     seedClearScenario(store, now);
     return;
   }
+  if (scenario === "adaptive") {
+    seedAdaptiveScenario(store, now);
+    return;
+  }
   seedClarificationScenario(store, scenario, now);
 }
 
@@ -58,6 +62,97 @@ function seedClearScenario(store: ChroniStore, now: Date): void {
   };
   const source: ExtractedInput = { sourceName, sourceType: "text/plain", text };
   store.addItems([item], "完整课程任务示例已载入。", [source]);
+}
+
+function seedAdaptiveScenario(store: ChroniStore, now: Date): void {
+  const sourceName = "示例-D-连续学习记录.txt";
+  const text = "聊天记录：社团汇报 PPT 初稿明天 9:00 在群里收；期末作业明天 9:30 前发给老师。目前期末作业完成 20%，PPT 初稿完成 70%。";
+  const createdAt = now.toISOString();
+  const finalTask: DdlItem = {
+    id: "sample-adaptive-final",
+    title: "期末作业",
+    importance: "high",
+    dueAt: tomorrowAt(now, 9, 30).toISOString(),
+    sourceSummary: `${sourceName}: 期末作业明天 9:30 前发给老师。目前完成 20%。`,
+    createdAt,
+    updatedAt: createdAt,
+    completed: false,
+    estimatedMinutes: 180,
+    progressPercent: 20,
+    extraction: {
+      contextExcerpt: "期末作业明天 9:30 前发给老师。目前完成 20%。",
+      deliverables: ["期末作业"],
+      submissionMethod: "发给老师",
+      constraints: [],
+      risks: ["截止时间接近且完成度较低"],
+      uncertainties: [],
+      reminderSuggestions: [],
+    },
+  };
+  const clubTask: DdlItem = {
+    id: "sample-adaptive-club",
+    title: "社团汇报PPT初稿",
+    importance: "medium",
+    dueAt: tomorrowAt(now, 9, 0).toISOString(),
+    sourceSummary: `${sourceName}: 社团汇报 PPT 初稿明天 9:00 在群里收。目前完成 70%。`,
+    createdAt,
+    updatedAt: createdAt,
+    completed: false,
+    estimatedMinutes: 45,
+    progressPercent: 70,
+    extraction: {
+      contextExcerpt: "社团汇报 PPT 初稿明天 9:00 在群里收。目前完成 70%。",
+      deliverables: ["PPT 初稿"],
+      submissionMethod: "群聊",
+      constraints: [],
+      risks: [],
+      uncertainties: [],
+      reminderSuggestions: [],
+    },
+  };
+  store.addItems([clubTask, finalTask], "动态个性化示例已载入。", [{ sourceName, sourceType: "text/plain", text }]);
+  seedReviewHistory(store, now);
+  const missedBlocks = [2, 1].map((daysAgo, index) => {
+    const start = dayAt(now, -daysAgo, 15, 0);
+    const end = new Date(start.getTime() + 30 * 60_000);
+    return { taskId: finalTask.id, title: `期末作业 · 第 ${index + 1} 次推进`, startAt: start.toISOString(), endAt: end.toISOString(), allocatedMinutes: 30 };
+  });
+  store.saveAppliedAgentPlan({
+    blocks: missedBlocks,
+    plannedMinutes: 60,
+    requestedMinutes: 180,
+    overflowMinutes: 120,
+    unplannedTaskIds: [finalTask.id],
+    plannerSource: "rules",
+  });
+}
+
+function seedReviewHistory(store: ChroniStore, now: Date): void {
+  const completedByDay = [2, 2, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4];
+  const taskNames = ["整理课堂笔记", "推进课程作业", "复习知识点", "准备第二天材料"];
+  for (let index = 0; index < completedByDay.length; index += 1) {
+    const date = dayAt(now, index - 13, 0, 0);
+    const key = localDateKey(date);
+    const completed = completedByDay[index];
+    for (const [taskIndex, title] of taskNames.entries()) {
+      const start = dayAt(date, 0, 9 + taskIndex, 0);
+      const end = new Date(start.getTime() + 45 * 60_000);
+      const snapshot = store.createDailyTask({ title: `${title} · ${key}`, scheduledStartAt: start.toISOString(), scheduledEndAt: end.toISOString(), color: taskIndex % 2 ? "teal" : "blue" });
+      const created = snapshot.dailyTasks.find((task) => task.title === `${title} · ${key}` && task.scheduledStartAt === start.toISOString());
+      if (created && taskIndex < completed) store.updateDailyTask(created.id, { completedDates: [key] });
+    }
+    const unfinished = taskNames.slice(completed);
+    store.saveDailyReview({
+      date: key,
+      summary: `合成连续使用案例：完成 ${completed}/4 项。`,
+      note: "仅用于比赛演示，不代表真实用户效果或因果结论。",
+      totalTasks: 4,
+      completedTasks: completed,
+      plannedMinutes: 180,
+      completedMinutes: completed * 45,
+      unfinishedTaskTitles: unfinished,
+    });
+  }
 }
 
 function seedClarificationScenario(store: ChroniStore, scenario: "clarification" | "conflict", now: Date): void {
@@ -124,4 +219,16 @@ function nextWeekdayAt(reference: Date, weekday: number, hour: number, minute: n
   result.setDate(result.getDate() + days);
   result.setHours(hour, minute, 0, 0);
   return result;
+}
+
+function tomorrowAt(reference: Date, hour: number, minute: number): Date {
+  return dayAt(reference, 1, hour, minute);
+}
+
+function dayAt(reference: Date, dayOffset: number, hour: number, minute: number): Date {
+  return new Date(reference.getFullYear(), reference.getMonth(), reference.getDate() + dayOffset, hour, minute, 0, 0);
+}
+
+function localDateKey(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }

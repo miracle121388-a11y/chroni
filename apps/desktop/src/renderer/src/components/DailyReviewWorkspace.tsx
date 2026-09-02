@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { ChroniSnapshot, DailyReview, DailyReviewInput, DailyTask } from "../../../shared/types";
+import { buildLearningInsights } from "../../../shared/learning-insights";
 import { UiIcon } from "./UiIcon";
 
 type DailyReviewWorkspaceProps = {
@@ -26,6 +27,7 @@ export function DailyReviewWorkspace({ snapshot, setSnapshot, initialDate, onOpe
   const history = useMemo(() => [...snapshot.dailyReviews].sort((left, right) => right.date.localeCompare(left.date)).slice(0, 8), [snapshot.dailyReviews]);
   const monthDays = useMemo(() => calendarDays(selectedDate), [selectedDate]);
   const monthReviews = useMemo(() => snapshot.dailyReviews.filter((review) => sameMonth(fromDateKey(review.date), selectedDate)), [selectedDate, snapshot.dailyReviews]);
+  const insights = useMemo(() => buildLearningInsights(snapshot.dailyReviews, snapshot.agent.memory.maxDailyMinutes), [snapshot.agent.memory.maxDailyMinutes, snapshot.dailyReviews]);
   const completedTasks = tasks.filter((task) => task.completedDates.includes(selectedKey));
   const unfinishedTasks = tasks.filter((task) => !task.completedDates.includes(selectedKey));
   const currentDraft = draft ?? generated;
@@ -159,6 +161,23 @@ export function DailyReviewWorkspace({ snapshot, setSnapshot, initialDate, onOpe
             </div>
           </section>
 
+          <section className="review-insights-panel" aria-label="连续使用效果与动态调整">
+            <header>
+              <div><p>连续使用效果</p><h3>最近 7 天的执行变化</h3></div>
+              <span>{insights.streakDays ? `连续记录 ${insights.streakDays} 天` : "等待首条回顾"} · {trendStatusLabel(insights.trendStatus)}</span>
+            </header>
+            <div className="review-insight-metrics">
+              <article><span>任务完成率</span><b>{insights.completionRate}%</b><small>{trendDelta(insights.completionRateChange)}</small></article>
+              <article><span>执行效率</span><b>{insights.executionEfficiency}%</b><small>{trendDelta(insights.executionEfficiencyChange)}</small></article>
+              <article title="拖延代理指标：有未完成事项的复盘天数占比，不等同于心理学诊断。"><span>计划未完成率</span><b>{insights.carryoverRate}%</b><small>{trendDelta(insights.carryoverImprovement, "改善")}</small></article>
+              <article><span>节奏平衡</span><b>{insights.rhythmBalanceScore}</b><small>{insights.overloadedDays ? `${insights.overloadedDays} 天超出容量` : "未发现超排"}</small></article>
+            </div>
+            <div className="review-intervention">
+              <div><b>下一轮动态调整</b><span>基于本机日程与回顾；计划未完成率是可解释的行为代理指标</span></div>
+              <ul>{insights.recommendations.map((recommendation) => <li key={recommendation}>{recommendation.trim()}</li>)}</ul>
+            </div>
+          </section>
+
           <div className="review-main-grid">
             <section className="review-activity-panel">
               <header><div><p>活动轨迹</p><h3>这一天安排了什么</h3></div><span>{completedTasks.length} 完成 · {unfinishedTasks.length} 待延续</span></header>
@@ -285,4 +304,6 @@ function formatLongDate(value: Date): string { return new Intl.DateTimeFormat("z
 function formatHistoryDate(value: Date): string { return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", weekday: "short" }).format(value); }
 function formatClock(value: Date): string { return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(value); }
 function formatDuration(minutes: number): string { if (minutes <= 0) return "0 分钟"; if (minutes < 60) return `${minutes} 分钟`; const hours = Math.floor(minutes / 60); const rest = minutes % 60; return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`; }
+function trendDelta(value: number | undefined, positiveLabel = "提升"): string { if (value === undefined) return "正在建立对照基线"; if (Math.abs(value) < 1) return "较前 7 天基本持平"; return `较前 7 天${value > 0 ? positiveLabel : "下降"} ${Math.abs(Math.round(value))} 个百分点`; }
+function trendStatusLabel(status: "collecting" | "improving" | "stable" | "declining"): string { return status === "improving" ? "趋势改善" : status === "declining" ? "需要干预" : status === "stable" ? "节奏稳定" : "正在建立基线"; }
 function operationMessage(error: unknown, fallback: string): string { return error instanceof Error && error.message ? error.message : fallback; }

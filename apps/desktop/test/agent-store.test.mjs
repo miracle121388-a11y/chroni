@@ -157,6 +157,9 @@ test("multi-round clarification blocks task creation until every required field 
     const first = store.answerClarification(titleQuestion.id, { value: "机器学习作业" });
     assert.equal(first.snapshot.items.length, 0);
     assert.equal(first.snapshot.intakeDrafts[0].status, "needs-clarification");
+    assert.throws(() => store.answerClarification(dateQuestion.id, { value: "2026-02-31T18:00:00+08:00" }), /截止时间回答无效/);
+    assert.equal(store.snapshot().clarifications.find((item) => item.id === dateQuestion.id).status, "pending");
+    assert.equal(store.snapshot().items.length, 0);
     const second = store.answerClarification(dateQuestion.id, { value: "2026-07-20T18:00:00.000Z" });
     assert.equal(second.snapshot.items.length, 1);
     assert.equal(second.snapshot.intakeDrafts[0].status, "applied");

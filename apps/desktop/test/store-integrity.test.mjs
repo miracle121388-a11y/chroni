@@ -225,6 +225,7 @@ test("malformed individual items are skipped without making the whole state unre
       items: [
         item("valid", "有效任务", "2026-07-20T12:00:00.000Z", "历史来源"),
         { id: "bad-date", title: "错误任务", dueAt: "not-a-date" },
+        { ...item("bad-calendar", "错误日历日期", "2026-07-20T12:00:00.000Z", "历史来源"), dueAt: "2026-02-31T23:59:00+08:00" },
         null,
       ],
       sources: [],
@@ -234,7 +235,7 @@ test("malformed individual items are skipped without making the whole state unre
     const snapshot = new ChroniStore(dir).snapshot();
     assert.deepEqual(snapshot.items.map((candidate) => candidate.id), ["valid"]);
     assert.equal(snapshot.services.storage, "recovered");
-    assert.match(snapshot.services.storageDiagnostic, /跳过 2 条/);
+    assert.match(snapshot.services.storageDiagnostic, /跳过 3 条/);
     assert.equal(snapshot.services.storageDiagnostic.includes(dir), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });

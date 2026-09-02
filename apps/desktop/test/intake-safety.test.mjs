@@ -114,6 +114,36 @@ test("the same reference anchor keeps relative extraction stable", async () => {
   assert.equal(first.items[0].dueAt, second.items[0].dueAt);
 });
 
+test("natural-language handoffs and meetings are recognized without a deadline template", () => {
+  const items = extractDdlItemsFromText(
+    "社团群说明：明天9：00群里收PPT初稿。期末作业明天9:30前发给老师。周五15:00带上论文框架和导师讨论。",
+    "chat.txt",
+    anchor,
+  );
+
+  assert.equal(items.length, 3);
+  assert.equal(items.some((item) => item.title.includes("PPT")), true);
+  assert.equal(items.find((item) => item.title.includes("期末作业"))?.importance, "high");
+  assert.equal(items.some((item) => item.sourceSummary.includes("带上论文框架")), true);
+});
+
+test("ordinary meeting notes and unassigned project discussion do not become pending tasks", async () => {
+  const chinese = await extractPayload({ kind: "text", text: "这是一段没有日期的普通会议纪要。" }, { referenceNow: anchor });
+  const english = await extractPayload({ kind: "text", text: "We discussed the project and no action was assigned." }, { referenceNow: anchor });
+  assert.equal(chinese.ok, false);
+  assert.equal(chinese.pendingItems.length, 0);
+  assert.equal(english.ok, false);
+  assert.equal(english.pendingItems.length, 0);
+});
+
+test("grounded semantic importance cannot be downgraded by a model candidate", () => {
+  const source = "期末作业明天9:30前发给老师";
+  const dueAt = deadlineDateFromText(source, anchor);
+  assert.ok(dueAt);
+  const item = itemFromLlmCandidate({ title: "期末作业", dueAt, importance: "low", sourceSummary: source }, source, "chat.txt", anchor);
+  assert.equal(item?.importance, "high");
+});
+
 test("oversized path files are rejected from metadata before extraction", async () => {
   const dir = mkdtempSync(join(tmpdir(), "chroni-large-path-"));
   try {

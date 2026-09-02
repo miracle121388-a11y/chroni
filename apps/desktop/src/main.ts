@@ -175,7 +175,11 @@ function installIpc(): void {
     if (taskFingerprint(snapshot) !== previousFingerprint) scheduleAgentForTaskChange();
     return publishStoreSnapshot(snapshot);
   });
-  ipcMain.handle("chroni:daily-review-save", (_event, input: DailyReviewInput) => publishStoreSnapshot(store.saveDailyReview(validateDailyReviewInput(input))));
+  ipcMain.handle("chroni:daily-review-save", (_event, input: DailyReviewInput) => {
+    const snapshot = store.saveDailyReview(validateDailyReviewInput(input));
+    scheduleAgentForTaskChange();
+    return publishStoreSnapshot(snapshot);
+  });
   ipcMain.handle("chroni:learning-mission-file", async (_event, missionId: string, rawInput: unknown) => {
     const input = validateLearningMissionFileInput(rawInput);
     const evidence = await localFileEvidence(input.path, input.linkedDeliverable);
@@ -393,13 +397,13 @@ async function activateSampleData(scenario: SampleDataScenario): Promise<SampleD
   activeSampleScenario = scenario;
   const demoStore = createSampleDataStore(app.getPath("userData"), storeSecretCodec, scenario);
   await switchActiveStore(demoStore);
-  if (scenario === "clear") {
+  if (scenario === "clear" || scenario === "adaptive") {
     for (const item of store.snapshot().items) {
       await ensureTaskPlan(item.id, store, true, "rules-only");
       const plan = store.taskPlanByTaskId(item.id);
       if (plan) store.activateTaskPlan(item.id, plan.id);
       const mission = store.snapshot().learningMissions.find((candidate) => candidate.taskId === item.id);
-      if (mission) {
+      if (scenario === "clear" && mission) {
         store.addLearningMissionEvidence(mission.id, {
           kind: "note",
           title: "演示检查记录：需求与提交物已对齐",
@@ -423,6 +427,8 @@ async function activateSampleData(scenario: SampleDataScenario): Promise<SampleD
     snapshot,
     message: scenario === "clear"
       ? "完整课程任务示例已进入提取、拆解、排期与执行状态。"
+      : scenario === "adaptive"
+        ? "连续 14 天合成案例已载入，可查看语境排序、未完成干预和前后 7 天效果变化。"
       : scenario === "clarification"
         ? "待补充示例已停在必要截止时间确认，其他可识别信息均已保留。"
         : "多来源示例已保留冲突证据，等待你选择可信截止时间。",
@@ -452,7 +458,7 @@ function sampleDataStatus(): SampleDataStatus {
 }
 
 function validateSampleDataScenario(value: unknown): SampleDataScenario {
-  if (value === "clear" || value === "clarification" || value === "conflict") return value;
+  if (value === "clear" || value === "clarification" || value === "conflict" || value === "adaptive") return value;
   throw new Error("不支持的示例数据类型。");
 }
 
@@ -513,6 +519,8 @@ function installDeadlineAgent(): void {
   agentTools = createAgentTools({
     readTasks: () => store.snapshot().items,
     readTaskPlans: () => store.snapshot().taskPlans,
+    readDailyTasks: () => store.snapshot().dailyTasks,
+    readDailyReviews: () => store.snapshot().dailyReviews,
     intakeText: (text) => processIntake({ kind: "text", text }, store),
     writeIcs: (content, fileName) => {
       const directory = join(app.getPath("userData"), "exports");
@@ -533,8 +541,10 @@ function installDeadlineAgent(): void {
       });
       if (!outcome.sent) return outcome;
       showTaskNotification({
-        title: "Chroni Agent：高风险学习任务",
-        body: `${task.title} · ${formatUserFacingMessage(task.reasons[0], "需要优先处理")}`,
+        title: task.interventionLevel === "rescue" ? "Chroni Agent：先重新启动" : "Chroni Agent：高风险学习任务",
+        body: task.interventionLevel === "rescue"
+          ? `${task.title} · 先做 ${task.recommendedSessionMinutes ?? 15} 分钟，完成后自动重排`
+          : `${task.title} · ${formatUserFacingMessage(task.reasons[0], "需要优先处理")}`,
       }, task.taskId);
       store.markItemReminded(task.taskId);
       requestPetAction("wake", "enqueue");

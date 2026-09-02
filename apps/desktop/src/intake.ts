@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { accessSync, closeSync, constants, fstatSync, mkdirSync, openSync, readSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, extname, isAbsolute, join } from "node:path";
@@ -12,9 +12,11 @@ import { analyzeCompletenessWithLlm } from "./agent/clarification-agent.js";
 import { selectPlanningPreferences } from "./agent/preference-selector.js";
 import { generateTaskPlan } from "./agent/task-plan-agent.js";
 import { deadlineDateFromText, isConditionalDeadlineText, stripDeadlineTemporalExpressions } from "./shared/deadline-text.js";
+import { parseRfc3339DateTime } from "./shared/date-time.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
 import { intakeProgressMessage, REPROCESS_PROGRESS_MESSAGE } from "./shared/intake-copy.js";
 import { localFilePathFromText } from "./shared/local-file-input.js";
+import { inferImportanceFromText, strongerImportance } from "./shared/task-priority.js";
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
 const spreadsheetExtensions = new Set([".xlsx"]);
@@ -26,6 +28,7 @@ const maxDocumentBytes = 18 * 1024 * 1024;
 const maxArchiveEntries = 2_000;
 const maxArchiveUncompressedBytes = 64 * 1024 * 1024;
 const maxArchiveCompressionRatio = 200;
+const maxPdfOcrPages = 60;
 const minimumOcrConfidence = 55;
 const llmChunkCharacters = 60_000;
 const llmChunkOverlap = 800;
@@ -494,8 +497,12 @@ function isLlmEnabled(settings?: ChroniLlmSettings): boolean {
 }
 
 function hasPossibleTaskWithoutDeadline(text: string): boolean {
-  return !containsPromptInjectionIndicators(text)
-    && /(作业|报告|项目|论文|提交|完成|截止|截至|交付|材料|比赛|视频|代码|录音|笔记|归档|问卷|ddl|deadline|due|考试|答辩|实验|汇报|presentation|quiz|assignment|任务|提醒)/i.test(text);
+  if (containsPromptInjectionIndicators(text)) return false;
+  if (/(ddl|deadline|\bdue\b|截止|截至|提醒)/i.test(text)) return true;
+  if (/(提交|上交|交付|turn\s*in|submit)/i.test(text)) return true;
+  if (/(作业|论文|考试|考核|答辩|实验|测验|小测|homework|assignment|quiz|essay|paper)/i.test(text)) return true;
+  return /(提交|完成|上交|交付|发送|发到|发给|上传|收取|收齐|带上|携带|出席|到场|签到|彩排|排练|准备|修改|定稿|turn\s*in|submit|upload|send|attend|bring|finish|complete)/i.test(text)
+    && /(报告|项目|汇报|展示|路演|会议|活动|材料|视频|代码|录音|笔记|归档|问卷|PPT|幻灯片|课件|作品|申请|报名|report|project|presentation|deliverable)/i.test(text);
 }
 
 function fallbackExtractedInputs(payload: IntakePayload, extracted: ExtractedInput[]): ExtractedInput[] {
@@ -534,12 +541,14 @@ async function extractWithLlmIfAvailable(extracted: ExtractedInput[], settings: 
         content: [
           "你是 Chroni 的 DDL 信息抽取器。",
           "只输出 JSON，不输出解释。",
-          "从输入中完整抽取明确的截止事项，以及需要准备或参加的固定时间活动。",
+          "从输入中完整抽取明确的截止事项，以及需要准备、交付或参加的固定时间活动。",
+          "理解聊天、自然语言段落、项目符号、表格行和通知转述中的语义，不要求原文使用‘某某活动某某时间截止’模板；例如‘明早九点群里收 PPT 初稿’和‘周五 15:00 带上论文框架讨论’都属于日程。",
           "同一段中同时存在材料提交截止和活动开始时间时，必须分别输出两项，不能只保留材料截止。",
           "deliverables 必须逐项完整列出原文中的所有提交物，不得合并成泛化描述或省略条目。",
           "不要把文档的用途、希望系统输出、个人偏好本身当作任务。",
           "字段结构固定：{\"items\":[{\"title\":\"短标题\",\"dueAt\":\"ISO-8601时间\",\"importance\":\"high|medium|low\",\"sourceSummary\":\"原文截止句\",\"contextExcerpt\":\"包含要求的原文片段\",\"deliverables\":[],\"submissionMethod\":\"\",\"constraints\":[],\"risks\":[],\"uncertainties\":[],\"reminderSuggestions\":[],\"taskType\":\"\"}],\"pendingItems\":[{\"title\":\"短标题\",\"importance\":\"high|medium|low\",\"sourceSummary\":\"原文片段\",\"contextExcerpt\":\"原文片段\",\"deliverables\":[],\"question\":\"需要向用户确认的问题\",\"reason\":\"不能安全确定的原因\"}]}。",
           "title 控制在 16 个中文字符以内。",
+          "importance 必须结合后果与语境判断：期末、考试、答辩、毕业、正式课程考核优先于普通社团或可选活动；同等语境再考虑截止时间。不得仅因时间更早就提高重要性。",
           "dueAt 必须是包含时区的 ISO-8601 字符串。",
           "原文未写明时区时，必须按用户时区解释日期和时间。",
           "sourceSummary 和 contextExcerpt 必须直接摘自原文，不得改写；允许去掉 Markdown 标记。contextExcerpt 应尽量覆盖该任务的提交物、提交方式、限制和风险。",
@@ -637,9 +646,7 @@ export function itemFromLlmCandidate(candidate: LlmDdlCandidate, evidenceText = 
   if (modelDeadlineEvidenceStatus(dueAtRaw, sourceSummary, referenceNow) !== "grounded") return null;
   const dueAt = strictIsoDate(dueAtRaw);
   if (!dueAt) return null;
-  const importance = candidate.importance === "high" || candidate.importance === "medium" || candidate.importance === "low"
-    ? candidate.importance
-    : importanceFromText(`${title} ${sourceSummary}`);
+  const importance = candidateImportance(candidate.importance, `${title} ${sourceSummary}`);
   const extraction = extractionContextFromCandidate(candidate, evidenceText, sourceSummary);
   return createItem(title, dueAt.toISOString(), sourceName ? `${sourceName}: ${sourceSummary}` : sourceSummary, importance, extraction);
 }
@@ -649,9 +656,7 @@ function pendingItemFromImpreciseCandidate(candidate: LlmDdlCandidate, input: Ex
   const sourceSummary = String(candidate.sourceSummary ?? "").trim().slice(0, 500);
   const evidenceStatus = modelDeadlineEvidenceStatus(String(candidate.dueAt ?? "").trim(), sourceSummary, referenceNow);
   if (!title || !sourceSummary || evidenceStatus === "grounded" || !hasSourceEvidence(sourceSummary, input.text)) return null;
-  const importance = candidate.importance === "high" || candidate.importance === "medium" || candidate.importance === "low"
-    ? candidate.importance
-    : importanceFromText(`${title} ${sourceSummary}`);
+  const importance = candidateImportance(candidate.importance, `${title} ${sourceSummary}`);
   return {
     sourceName: input.sourceName,
     sourceType: input.sourceType,
@@ -671,9 +676,7 @@ function pendingItemFromLlmCandidate(candidate: LlmPendingCandidate, input: Extr
   const question = String(candidate.question ?? "").trim().slice(0, 160);
   const reason = String(candidate.reason ?? "").trim().slice(0, 240);
   if (!title || !sourceSummary || !question || !reason || !hasSourceEvidence(sourceSummary, input.text)) return null;
-  const importance = candidate.importance === "high" || candidate.importance === "medium" || candidate.importance === "low"
-    ? candidate.importance
-    : importanceFromText(`${title} ${sourceSummary}`);
+  const importance = candidateImportance(candidate.importance, `${title} ${sourceSummary}`);
   return {
     sourceName: input.sourceName,
     sourceType: input.sourceType,
@@ -973,7 +976,8 @@ async function extractPdfText(buffer: Buffer, name: string): Promise<string> {
   const mod = await import("pdf-parse") as unknown as {
     PDFParse: new (options: { data: Uint8Array }) => {
       getText: () => Promise<{ text: string }>;
-      getScreenshot: (options: { scale: number; imageBuffer: boolean; imageDataUrl: boolean }) => Promise<{ pages: Array<{ data: Uint8Array; pageNumber: number }> }>;
+      getInfo: () => Promise<{ total: number }>;
+      getScreenshot: (options: { desiredWidth: number; imageBuffer: boolean; imageDataUrl: boolean; partial: number[] }) => Promise<{ pages: Array<{ data: Uint8Array; pageNumber: number }> }>;
       destroy: () => Promise<void>;
     };
   };
@@ -982,9 +986,14 @@ async function extractPdfText(buffer: Buffer, name: string): Promise<string> {
     const parsed = await parser.getText();
     if (parsed.text.trim() && looksLikeReliableText(parsed.text.trim())) return parsed.text;
 
-    const screenshots = await parser.getScreenshot({ scale: 2, imageBuffer: true, imageDataUrl: false });
+    const { total } = await parser.getInfo();
+    if (!Number.isInteger(total) || total < 1) throw new Error(`PDF 页数信息无效：${name}`);
+    if (total > maxPdfOcrPages) throw new Error(`扫描型 PDF 页数过多：${name}（最多支持 ${maxPdfOcrPages} 页 OCR）`);
     const pageTexts: string[] = [];
-    for (const page of screenshots.pages) {
+    for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
+      const screenshots = await parser.getScreenshot({ desiredWidth: 1_800, imageBuffer: true, imageDataUrl: false, partial: [pageNumber] });
+      const page = screenshots.pages[0];
+      if (!page?.data?.length) continue;
       const result = await recognizeImage(Buffer.from(page.data));
       if (isReliableOcrResult(result.text, result.confidence)) {
         pageTexts.push(`[第 ${page.pageNumber} 页]\n${result.text.trim()}`);
@@ -1055,11 +1064,29 @@ function readFileBuffer(file: ChroniInputFile, maxBytes: number, sizeError: stri
     if (buffer.length > maxBytes) throw new Error(sizeError);
     return buffer;
   }
-  if (!file.path || !existsSync(file.path)) throw new Error(`文件无法读取：${file.name}`);
-  const stat = statSync(file.path);
-  if (!stat.isFile()) throw new Error(`不是可读取的文件：${file.name}`);
-  if (stat.size > maxBytes) throw new Error(sizeError);
-  return readFileSync(file.path);
+  if (!file.path) throw new Error(`文件无法读取：${file.name}`);
+  let descriptor: number;
+  try {
+    descriptor = openSync(file.path, "r");
+  } catch {
+    throw new Error(`文件无法读取：${file.name}`);
+  }
+  try {
+    const stat = fstatSync(descriptor);
+    if (!stat.isFile()) throw new Error(`不是可读取的文件：${file.name}`);
+    if (stat.size > maxBytes) throw new Error(sizeError);
+    const bounded = Buffer.allocUnsafe(maxBytes + 1);
+    let offset = 0;
+    while (offset < bounded.length) {
+      const count = readSync(descriptor, bounded, offset, bounded.length - offset, null);
+      if (!count) break;
+      offset += count;
+    }
+    if (offset > maxBytes) throw new Error(sizeError);
+    return Buffer.from(bounded.subarray(0, offset));
+  } finally {
+    closeSync(descriptor);
+  }
 }
 
 function textFromBuffer(buffer: Buffer): string {
@@ -1148,11 +1175,12 @@ function hasMultipleTemporalExpressions(text: string): boolean {
 }
 
 function hasTaskTitleEvidence(text: string): boolean {
-  return /(作业|报告|项目|论文|实验|测验|考试|答辩|汇报|展示|会议|活动|任务|材料|比赛|视频|代码|录音|笔记|归档|问卷|presentation|assignment|report|project)/i.test(text);
+  return /(作业|报告|项目|论文|实验|测验|考试|答辩|汇报|展示|会议|活动|任务|材料|比赛|视频|代码|录音|笔记|归档|问卷|PPT|幻灯片|课件|作品|申请|报名|彩排|讨论|presentation|assignment|report|project)/i.test(text);
 }
 
 function hasDeadlineIntent(text: string): boolean {
-  return /(作业|报告|项目|论文|实验|测验|小测|考试|期中|期末|答辩|面试|汇报|展示|路演|会议|活动|材料|视频|代码|录音|笔记|归档|问卷|presentation|quiz|essay|paper|homework|assignment|project|ddl|deadline|due|截止|截至|提交|完成|上交|交付|deliverable|turn\s*in|submit)/i.test(text);
+  if (/(作业|报告|项目|论文|实验|测验|小测|考试|期中|期末|答辩|面试|汇报|展示|路演|会议|活动|材料|视频|代码|录音|笔记|归档|问卷|申请|报名|presentation|quiz|essay|paper|homework|assignment|project|ddl|deadline|due|截止|截至|提交|完成|上交|交付|发送|发到|发给|上传|收取|收齐|带上|携带|出席|到场|签到|彩排|排练|讨论|碰头|开会|演练|deliverable|turn\s*in|submit|upload|send|attend|bring)/i.test(text)) return true;
+  return /(PPT|幻灯片|课件|作品)/i.test(text) && /(收|交|发|传|带|准备|检查|修改|定稿|演示)/i.test(text);
 }
 
 function containsPromptInjectionIndicators(text: string): boolean {
@@ -1238,9 +1266,13 @@ function createItem(title: string, dueAt: string, sourceSummary: string, importa
 }
 
 function importanceFromText(text: string): Importance {
-  if (/(重要|紧急|final|期末|考试|答辩|面试|deadline|ddl|逾期|必须)/i.test(text)) return "high";
-  if (/(作业|报告|项目|提交|会议|review|quiz|实验|presentation|汇报|小组)/i.test(text)) return "medium";
-  return "low";
+  return inferImportanceFromText(text);
+}
+
+function candidateImportance(value: unknown, text: string): Importance {
+  const inferred = importanceFromText(text);
+  const proposed = value === "high" || value === "medium" || value === "low" ? value : inferred;
+  return strongerImportance(proposed, inferred);
 }
 
 function mergeDuplicateItems(items: DdlItem[]): DdlItem[] {
@@ -1350,27 +1382,5 @@ function hasImpreciseClockExpression(text: string): boolean {
 }
 
 function strictIsoDate(value: string): Date | null {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/);
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = match[6] ? Number(match[6]) : 0;
-  if (!isValidDateParts(year, month, day, hour, minute, second)) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function isValidDateParts(year: number, month: number, day: number, hour: number, minute: number, second = 0): boolean {
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day) || !Number.isInteger(hour) || !Number.isInteger(minute) || !Number.isInteger(second)) return false;
-  if (month < 1 || month > 12 || day < 1 || hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return false;
-  const date = new Date(year, month - 1, day, hour, minute, second, 0);
-  return date.getFullYear() === year
-    && date.getMonth() === month - 1
-    && date.getDate() === day
-    && date.getHours() === hour
-    && date.getMinutes() === minute
-    && date.getSeconds() === second;
+  return parseRfc3339DateTime(value) ?? null;
 }

@@ -46,6 +46,7 @@ export class DeadlineAgent {
     const memory = { ...this.#getMemory() };
     const trace = createTraceRecorder(() => this.#now().toISOString());
     const tasks = await this.tools.readTasks();
+    const calendarTasks = await this.tools.readCalendarTasks?.() ?? [];
     const observation = observeTasks(tasks, started);
     trace.record("observe", "已读取当前任务、截止时间和稍后提醒状态。", {
       taskCount: observation.totalCount,
@@ -61,12 +62,12 @@ export class DeadlineAgent {
     if (this.#planner && memory.useLlmPlanning && priorities.length) {
       let plannerResult;
       try {
-        plannerResult = await this.#planner.propose({ assessments: priorities, memory, initialPlan: plan, now: started });
+        plannerResult = await this.#planner.propose({ assessments: priorities, memory, initialPlan: plan, now: started, dailyTasks: calendarTasks });
       } catch {
         plannerResult = { fallbackReason: "request-failed" as const };
       }
       if (plannerResult.proposal) {
-        plan = planFromProposal(plannerResult.proposal, { assessments: priorities, memory, initialPlan: plan, now: started });
+        plan = planFromProposal(plannerResult.proposal, { assessments: priorities, memory, initialPlan: plan, now: started, dailyTasks: calendarTasks });
         modelSuggestions = plannerResult.proposal.suggestions;
         trace.record("plan", "大模型已生成结构化规划，并通过本地约束校验。", { plannerSource: "llm", allocationCount: plan.blocks.length });
       } else {
@@ -177,7 +178,13 @@ function isBetterPlan(candidate: AgentPlan, current: AgentPlan, highRiskIds: str
 
 function dailySuggestions(priorities: AgentTaskAssessment[], plan: AgentPlan): string[] {
   if (!priorities.length) return ["今天没有待处理的截止事项，可以保持当前节奏。"];
-  const suggestions = [`优先处理「${priorities[0].title}」，风险等级为 ${priorities[0].riskLevel}。`];
+  const first = priorities[0];
+  const suggestions = [first.interventionLevel === "rescue"
+    ? `「${first.title}」已连续出现计划未完成：先执行 ${first.recommendedSessionMinutes ?? 15} 分钟可启动步骤，完成后立即重排剩余工作。`
+    : first.interventionLevel === "nudge"
+      ? `「${first.title}」上次计划未完成：先用 ${first.recommendedSessionMinutes ?? 25} 分钟恢复推进，再按进度更新计划。`
+      : `优先处理「${first.title}」，风险等级为 ${first.riskLevel}。`];
+  if (plan.adaptationReasons?.[0]) suggestions.push(`${plan.adaptationReasons[0]}，避免计划再次失衡。`);
   if (plan.blocks.length) suggestions.push(`已安排 ${plan.blocks.length} 个工作块，共 ${plan.plannedMinutes} 分钟。`);
   if (plan.overflowMinutes > 0) suggestions.push(`今日容量仍缺少 ${plan.overflowMinutes} 分钟，请减少低优先级投入或提前开始。`);
   return suggestions;
