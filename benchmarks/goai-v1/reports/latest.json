@@ -1,9 +1,9 @@
 {
   "schemaVersion": "chroni-goai-eval-v1",
-  "generatedAt": "2026-08-26T15:25:20.840Z",
-  "commitSha": "78cd5974d13e35bc034c4056b2f4e917c7bf370a",
+  "generatedAt": "2026-09-02T03:48:29.599Z",
+  "commitSha": "c71ba2efceaae6d05673853126cfd4ea2e1c38e1",
   "repository": {
-    "commitSha": "78cd5974d13e35bc034c4056b2f4e917c7bf370a",
+    "commitSha": "c71ba2efceaae6d05673853126cfd4ea2e1c38e1",
     "workingTreeDirty": false,
     "statusEntryCount": 0,
     "trackedPatchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -76,17 +76,17 @@
     "milestoneCheckpointSyncRate": 1
   },
   "engineering": {
-    "localRulesLatencyP50Ms": 10.36,
-    "localRulesLatencyP95Ms": 15.05,
-    "learningMissionLifecycleP50Ms": 6.38,
-    "learningMissionLifecycleP95Ms": 7.97,
-    "offlineCaseP50Ms": 16.43,
-    "offlineCaseP95Ms": 22.87,
+    "localRulesLatencyP50Ms": 47.61,
+    "localRulesLatencyP95Ms": 68.59,
+    "learningMissionLifecycleP50Ms": 48.06,
+    "learningMissionLifecycleP95Ms": 68.08,
+    "offlineCaseP50Ms": 67.58,
+    "offlineCaseP95Ms": 121.54,
     "modelLatencyP50Ms": "尚未完成测量：model benchmark is opt-in and was not run",
     "modelLatencyP95Ms": "尚未完成测量：model benchmark is opt-in and was not run",
     "modelCallsPerCase": 0,
     "tokenOrCostEstimate": "0 for this offline benchmark",
-    "sampledPeakRssMiB": 82.5,
+    "sampledPeakRssMiB": 82,
     "offlineSuccessRate": 1,
     "continuousRunStability": "尚未完成测量：v1 runs each case once"
   },
