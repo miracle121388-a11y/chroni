@@ -72,7 +72,7 @@ const copies = [
   ["docs/store/assets/screenshots/zh-CN/05-companion.png", "02_产品与Demo/真实截图/06_桌宠交互.png"],
   ["docs/assets/chroni-agent-architecture.svg", "02_产品与Demo/Chroni_Agent架构.svg"],
   ["docs/goai/04-demo-video-script.md", "02_产品与Demo/三分钟演示脚本.md"],
-  ["ddl_agent_test_notice.md", "02_产品与Demo/示例材料/A_五项任务综合通知.md"],
+  ["examples/goai/D-five-task-comprehensive-notice.md", "02_产品与Demo/示例材料/A_五项任务综合通知.md"],
   ["examples/goai/B-ambiguous-startup-materials.txt", "02_产品与Demo/示例材料/B_缺失截止时间.txt"],
   ["examples/goai/C-conflicting-deadlines.txt", "02_产品与Demo/示例材料/C_来源时间冲突.txt"],
 

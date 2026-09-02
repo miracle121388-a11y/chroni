@@ -242,7 +242,7 @@ test("startup removes historical clarifications created from a pasted file path"
 
 test("the comprehensive notice creates five plans before exposing optional refinements", async () => {
   await withStore(async (store) => {
-    const noticePath = new URL("../../../ddl_agent_test_notice.md", import.meta.url);
+    const noticePath = new URL("../../../examples/goai/D-five-task-comprehensive-notice.md", import.meta.url);
     const text = readFileSync(noticePath, "utf8");
     store.updatePreferences({ llm: { enabled: true, baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-chat" } });
     store.updateAgentMemory({ useLlmPlanning: false });
