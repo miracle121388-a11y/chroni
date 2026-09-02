@@ -165,6 +165,8 @@ test("competition submission ships the animated companion product build", () => 
   assert.match(submissionPackager, /buildManifest\.petAssetMode !== "xiaotong"/);
   assert.match(submissionPackager, /XIAOTONG-ADDITIONAL-TERMS\.md/);
   assert.match(submissionPackager, /06_桌宠交互\.png/);
+  assert.match(submissionPackager, /\\\\\\\\\?\\\\/);
+  assert.match(submissionPackager, /System\.IO\.Directory.*Delete/);
   assert.doesNotMatch(workspacePackageJson.scripts["package:submission:windows"], /package:goai/);
 });
 

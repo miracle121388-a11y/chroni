@@ -233,17 +233,20 @@ function cleanStagingBase() {
 function removePath(target) {
   if (!existsSync(target)) return;
   const directory = statSync(target).isDirectory();
-  if (directory) rmSync(target, { recursive: true, force: true });
-  else rmSync(target, { force: true });
-  if (existsSync(target) && process.platform === "win32") {
+  if (process.platform === "win32") {
+    const longTarget = target.startsWith("\\\\?\\") ? target : `\\\\?\\${target}`;
     const command = directory
-      ? `[System.IO.Directory]::Delete('${powerShellQuote(target)}', $true)`
-      : `[System.IO.File]::Delete('${powerShellQuote(target)}')`;
+      ? `[System.IO.Directory]::Delete('${powerShellQuote(longTarget)}', $true)`
+      : `[System.IO.File]::Delete('${powerShellQuote(longTarget)}')`;
     const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
       cwd: root,
       stdio: "inherit",
     });
     if (result.status !== 0) throw new Error(`Windows artifact cleanup failed with exit code ${result.status}: ${target}`);
+  } else if (directory) {
+    rmSync(target, { recursive: true, force: true });
+  } else {
+    rmSync(target, { force: true });
   }
   if (existsSync(target)) throw new Error(`Artifact cleanup did not persist: ${target}`);
 }
