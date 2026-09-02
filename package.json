@@ -27,6 +27,7 @@
     "package:macos:store": "pnpm --filter @chroni/desktop run package:mac:store",
     "package:goai:windows": "pnpm --filter @chroni/desktop run package:goai:win",
     "package:goai:macos": "pnpm --filter @chroni/desktop run package:goai:mac",
+    "package:submission:windows": "pnpm run package:windows",
     "release:verify": "node scripts/verify-release-version.mjs",
     "release:checksums": "node scripts/generate-checksums.mjs",
     "audit:prod": "pnpm audit --prod --audit-level high",

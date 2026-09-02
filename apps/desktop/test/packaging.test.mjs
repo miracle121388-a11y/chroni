@@ -8,6 +8,7 @@ import builderConfig from "../electron-builder.config.cjs";
 
 const require = createRequire(import.meta.url);
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const workspacePackageJson = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8"));
 const electronBuilderRequire = createRequire(require.resolve("electron-builder/package.json"));
 const builderSchema = JSON.parse(readFileSync(electronBuilderRequire.resolve("app-builder-lib/scheme.json"), "utf8"));
 const releaseWorkflow = readFileSync(new URL("../../../.github/workflows/release-build.yml", import.meta.url), "utf8");
@@ -24,6 +25,7 @@ const artifactVerifier = readFileSync(new URL("../../../scripts/verify-desktop-a
 const afterPackSource = readFileSync(new URL("../scripts/after-pack.cjs", import.meta.url), "utf8");
 const builderConfigSource = readFileSync(new URL("../electron-builder.config.cjs", import.meta.url), "utf8");
 const releaseVerifierPath = fileURLToPath(new URL("../../../scripts/verify-release-version.mjs", import.meta.url));
+const submissionPackager = readFileSync(new URL("../../../scripts/submission/build-goai-submission.mjs", import.meta.url), "utf8");
 
 test("release version verification ignores branch names and validates tags", () => {
   const runVerifier = (refType, refName) => execFileSync(process.execPath, [releaseVerifierPath], {
@@ -155,6 +157,15 @@ test("public release jobs use the verified product packaging path", () => {
   assert.match(releaseWorkflow, /CHRONI_REQUIRE_SIGNING: \$\{\{ vars\.CHRONI_REQUIRE_SIGNING \|\| '0' \}\}/);
   assert.match(releaseWorkflow, /CHRONI_REQUIRE_NOTARIZATION: \$\{\{ vars\.CHRONI_REQUIRE_NOTARIZATION \|\| '0' \}\}/);
   assert.doesNotMatch(releaseWorkflow, /github\.ref_type == 'tag' && '1'/);
+});
+
+test("competition submission ships the animated companion product build", () => {
+  assert.equal(workspacePackageJson.scripts["package:submission:windows"], "pnpm run package:windows");
+  assert.match(submissionPackager, /buildManifest\.variant !== "product"/);
+  assert.match(submissionPackager, /buildManifest\.petAssetMode !== "xiaotong"/);
+  assert.match(submissionPackager, /XIAOTONG-ADDITIONAL-TERMS\.md/);
+  assert.match(submissionPackager, /06_桌宠交互\.png/);
+  assert.doesNotMatch(workspacePackageJson.scripts["package:submission:windows"], /package:goai/);
 });
 
 test("default desktop packages include the companion's required notices", () => {

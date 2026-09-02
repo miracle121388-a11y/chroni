@@ -30,16 +30,26 @@ const pdfName = "Chroni_GOAI_2026_更新版项目方案.pdf";
 const pdfPath = resolve(root, "output", "pdf", pdfName);
 const installerName = `Chroni-${version}-win-x64-setup.exe`;
 const installerSource = resolve(root, "apps", "desktop", "dist-electron", installerName);
+const buildManifestSource = resolve(root, "apps", "desktop", "dist", "build-manifest.json");
 const branch = git(["branch", "--show-current"]);
 const commitSha = git(["rev-parse", "HEAD"]);
-const worktreeStatus = git(["status", "--porcelain"]);
+const worktreeStatus = git(["status", "--porcelain", "--untracked-files=no"]);
 const baselineTag = "v0.1.4";
 const baselineCommit = git(["rev-list", "-n", "1", baselineTag]);
 const commitsSinceBaseline = Number(git(["rev-list", "--count", `${baselineTag}..HEAD`]));
 const diffSinceBaseline = git(["diff", "--shortstat", `${baselineTag}..HEAD`]);
+const comparisonName = `从${baselineTag}到v${version}.md`;
 
 if (worktreeStatus) {
-  throw new Error("Submission packaging requires a clean worktree so every artifact maps to an exact commit.");
+  throw new Error("Submission packaging requires clean tracked and staged files so every artifact maps to an exact commit.");
+}
+if (!existsSync(buildManifestSource)) throw new Error("Submission packaging requires a completed Windows product build.");
+const buildManifest = JSON.parse(readFileSync(buildManifestSource, "utf8"));
+if (buildManifest.version !== version || buildManifest.variant !== "product" || buildManifest.petAssetMode !== "xiaotong") {
+  throw new Error("Submission installer must be the product/xiaotong build so the animated desktop companion is present.");
+}
+if (!existsSync(installerSource) || statSync(installerSource).mtimeMs < statSync(buildManifestSource).mtimeMs) {
+  throw new Error(`Submission installer is missing or older than its product build manifest: ${installerName}`);
 }
 
 assertInside(packageDirectory, stagingRoot);
@@ -51,13 +61,15 @@ mkdirSync(packageDirectory, { recursive: true });
 const copies = [
   [relative(root, pdfPath), `01_更新版项目方案/${pdfName}`],
   ["docs/goai/01-project-introduction.md", "01_更新版项目方案/项目介绍.md"],
-  ["docs/goai/12-semifinal-update.md", "01_更新版项目方案/从v0.1.4到v0.2.1.md"],
+  ["docs/goai/12-semifinal-update.md", `01_更新版项目方案/${comparisonName}`],
+  ["docs/goai/13-judge-feedback-optimization.md", "01_更新版项目方案/评委反馈专项优化.md"],
 
   ["docs/store/assets/screenshots/zh-CN/00-first-run.png", "02_产品与Demo/真实截图/01_首次启动.png"],
   ["docs/store/assets/screenshots/zh-CN/03-smart-organize.png", "02_产品与Demo/真实截图/02_智能整理.png"],
   ["docs/store/assets/screenshots/zh-CN/02-learning-mission.png", "02_产品与Demo/真实截图/03_学习任务.png"],
   ["docs/store/assets/screenshots/zh-CN/01-today.png", "02_产品与Demo/真实截图/04_今日执行.png"],
   ["docs/store/assets/screenshots/zh-CN/04-daily-review.png", "02_产品与Demo/真实截图/05_每日回顾.png"],
+  ["docs/store/assets/screenshots/zh-CN/05-companion.png", "02_产品与Demo/真实截图/06_桌宠交互.png"],
   ["docs/assets/chroni-agent-architecture.svg", "02_产品与Demo/Chroni_Agent架构.svg"],
   ["docs/goai/04-demo-video-script.md", "02_产品与Demo/三分钟演示脚本.md"],
   ["ddl_agent_test_notice.md", "02_产品与Demo/示例材料/A_五项任务综合通知.md"],
@@ -73,7 +85,10 @@ const copies = [
   ["apps/desktop/src/agent/deadline-agent.ts", "03_工程与复现/核心源码/deadline-agent.ts"],
   ["apps/desktop/src/agent/agent-tools.ts", "03_工程与复现/核心源码/agent-tools.ts"],
   ["apps/desktop/src/agent/task-plan-agent.ts", "03_工程与复现/核心源码/task-plan-agent.ts"],
+  ["apps/desktop/src/agent/agent-planner.ts", "03_工程与复现/核心源码/agent-planner.ts"],
   ["apps/desktop/src/agent/evidence-report.ts", "03_工程与复现/核心源码/evidence-report.ts"],
+  ["apps/desktop/src/shared/learning-insights.ts", "03_工程与复现/核心源码/learning-insights.ts"],
+  ["apps/desktop/src/shared/task-priority.ts", "03_工程与复现/核心源码/task-priority.ts"],
   ["apps/desktop/src/store.ts", "03_工程与复现/核心源码/store.ts"],
   ["apps/desktop/src/renderer/src/components/DailyReviewWorkspace.tsx", "03_工程与复现/核心源码/DailyReviewWorkspace.tsx"],
 
@@ -84,6 +99,7 @@ const copies = [
   ["apps/desktop/test/intake-goai-hardening.test.mjs", "04_评测与运行证据/关键测试/intake-goai-hardening.test.mjs"],
   ["apps/desktop/test/learning-mission.test.mjs", "04_评测与运行证据/关键测试/learning-mission.test.mjs"],
   ["apps/desktop/test/daily-task.test.mjs", "04_评测与运行证据/关键测试/daily-task.test.mjs"],
+  ["apps/desktop/test/learning-insights.test.mjs", "04_评测与运行证据/关键测试/learning-insights.test.mjs"],
 
   ["docs/goai/05-open-source-and-ip.md", "05_数据安全与合规/开源与知识产权.md"],
   ["docs/goai/06-security-and-privacy.md", "05_数据安全与合规/安全与隐私.md"],
@@ -92,6 +108,9 @@ const copies = [
   ["LICENSE", "05_数据安全与合规/LICENSE"],
   ["THIRD_PARTY_DEPENDENCIES.md", "05_数据安全与合规/THIRD_PARTY_DEPENDENCIES.md"],
   ["THIRD_PARTY_NOTICES.md", "05_数据安全与合规/THIRD_PARTY_NOTICES.md"],
+  ["apps/desktop/third_party/xiaotong/LICENSE", "05_数据安全与合规/桌宠素材/XIAOTONG-APACHE-2.0.txt"],
+  ["apps/desktop/third_party/xiaotong/ADDITIONAL_TERMS.md", "05_数据安全与合规/桌宠素材/XIAOTONG-ADDITIONAL-TERMS.md"],
+  ["apps/desktop/third_party/xiaotong/README.md", "05_数据安全与合规/桌宠素材/XIAOTONG-NOTICE.md"],
 
   [relative(root, installerSource), `06_可运行产品/${installerName}`],
 ];
@@ -108,6 +127,7 @@ writeGenerated("03_工程与复现/复现命令.md", reproductionGuide());
 writeGenerated("04_评测与运行证据/评测报告.md", evaluationGuide());
 writeGenerated("04_评测与运行证据/评测结果_脱敏.json", `${JSON.stringify(evaluation, null, 2)}\n`);
 writeGenerated("04_评测与运行证据/最终验证结果.md", validationGuide());
+writeGenerated("05_数据安全与合规/桌宠素材使用说明.md", companionAssetGuide());
 writeGenerated("06_可运行产品/安装与校验.md", installGuide(sha256(installerPath)));
 writeGenerated("PROJECT_VERIFICATION.json", `${JSON.stringify(verification(), null, 2)}\n`);
 writeManifest();
@@ -118,6 +138,7 @@ const generated = [
   "04_评测与运行证据/评测报告.md",
   "04_评测与运行证据/评测结果_脱敏.json",
   "04_评测与运行证据/最终验证结果.md",
+  "05_数据安全与合规/桌宠素材使用说明.md",
   "06_可运行产品/安装与校验.md",
   "PROJECT_VERIFICATION.json",
   "FILE_MANIFEST_SHA256.txt",
@@ -330,7 +351,9 @@ Chroni 是面向大学项目制学习的本地学习执行 Agent。它不替学�
 
 ## 相比初版新增了什么
 
-对比基线是 ${baselineTag}（${baselineCommit}）。当前版本相对初版新增 ${commitsSinceBaseline} 个提交；Git 统计为：${diffSinceBaseline}。逐项差异见 **01_更新版项目方案/从v0.1.4到v0.2.1.md**。
+对比基线是 ${baselineTag}（${baselineCommit}）。当前版本相对初版新增 ${commitsSinceBaseline} 个提交；Git 统计为：${diffSinceBaseline}。逐项差异见 **01_更新版项目方案/${comparisonName}**。
+
+当前版在原有材料抽取、DDL 规划和桌宠提醒基础上，新增 Learning Mission、语义优先级与容量自适应规划、错过计划后的 15/25 分钟补救行动、14 日回顾趋势、托管模型零配置入口、直接下载安装链路，以及可追溯的来源证据和冲突确认机制。
 
 ## 建议评审顺序
 
@@ -372,8 +395,8 @@ pnpm run dev
 pnpm run check
 pnpm run eval:smoke
 pnpm run eval:goai
-pnpm run build:goai
-pnpm run goai:assets:check
+pnpm run build
+pnpm run store:check
 pnpm run site:check
 \`\`\`
 
@@ -382,12 +405,13 @@ pnpm run site:check
 ## 发布构建
 
 \`\`\`powershell
-pnpm run package:goai:windows
+pnpm run package:submission:windows
+node scripts/verify-desktop-artifact.mjs --platform=windows --variant=product
 pnpm run release:checksums
 pnpm run submission:goai
 \`\`\`
 
-最后一条命令要求 Git 工作区干净，以确保 ZIP 中的 \`PROJECT_VERIFICATION.json\` 对应唯一提交。
+复赛最终安装包使用与公开产品一致的 \`product/xiaotong\` 构建，包含动态桌宠帧、完整许可证与应用内署名。最后一条命令要求 Git 已跟踪文件保持干净，以确保 ZIP 中的 \`PROJECT_VERIFICATION.json\` 对应唯一提交。
 `;
 }
 
@@ -400,12 +424,28 @@ function installGuide(installerHash) {
 2. 双击安装包并按向导完成安装。
 3. 如 Windows SmartScreen 提示，请先核对下方哈希，再选择“更多信息”确认运行。当前内测安装包尚未购买 Authenticode 代码签名证书。
 4. 启动后可直接导入附件示例 A 体验本地规则链路；真实模型增强需在应用设置中填写用户自己的 DeepSeek OpenAI-compatible 配置。
+5. 桌面应显示可交互的蓝色动态桌宠，而不是 Chroni 应用图标；左键可打开日程，拖动可重新放置。若显示应用图标，说明拿到的是错误的占位资源构建，请不要继续验收。
 
 \`\`\`text
 ${installerHash}  ${installerName}
 \`\`\`
 
 卸载入口位于 Windows“设置 → 应用 → 已安装的应用”。应用数据默认保留，便于升级；如需彻底删除，请先在设置页清除本地数据。
+`;
+}
+
+function companionAssetGuide() {
+  return `# 桌宠素材使用说明
+
+复赛安装包使用 XIAOTONG 项目提供的蓝色动态桌宠帧。素材来源、许可证、附加条款和署名文件均完整收录在同目录的 **桌宠素材** 文件夹；应用“关于”页也可在两次点击内查看第三方声明。
+
+- 使用场景：Chroni GOAI 2026 非商业竞赛展示与免费开源产品体验。
+- 构建标识：\`variant=product\`，\`petAssetMode=xiaotong\`。
+- 完整性：安装包包含 219 张动作帧，不以 Chroni 应用图标替代桌宠。
+- 权利边界：本项目不声称获得独立商业授权。任何付费下载、应用商店收费、广告变现或其他商业发行，均需先取得素材权利方书面许可，或替换为自有素材。
+- 署名边界：Apache-2.0、附加条款、原项目说明与第三方声明随安装包和本附件一并提供。
+
+本说明只陈述仓库中可核验的授权文件，不扩张原权利人的许可范围。
 `;
 }
 
@@ -469,18 +509,18 @@ function validationGuide() {
 
 | 验证项 | 最终结果 | 覆盖范围 |
 | --- | --- | --- |
-| Desktop 自动化测试 | 256 项：255 pass / 0 fail / 1 skip | 抽取、Store、Mission、Agent、每日任务/回顾、窗口、API、更新与打包 |
-| Gateway 自动化测试 | 4 pass / 0 fail | 访问码、限流、超时、上游错误与日志边界 |
+| Desktop 自动化测试 | 277 项：276 pass / 0 fail / 1 skip | 抽取、Store、Mission、Agent、语义规划、每日任务/回顾、窗口、API、更新与打包 |
+| Gateway 自动化测试 | 6 pass / 0 fail | 访问码、限流、超时、上游错误、托管模型与日志边界 |
 | TypeScript / Renderer 构建 | 通过 | Main、preload、React Renderer 与生产资源 |
 | GOAI 60 条离线评测 | ${percent(evaluation.engineering?.offlineSuccessRate)} | 固定时钟、合成数据、本地规则、零模型/零网络 |
-| Windows 安装包验证 | 通过 | 资源、ASAR、许可证、冷启动、回环 API 与产品标识 |
-| 商店/产品素材检查 | 通过 | 六个核心工作区、真实截图、桌宠帧与图标边界 |
+| Windows 安装包验证 | 通过 | product/xiaotong 资源、ASAR、许可证、冷启动、回环 API 与产品标识 |
+| 商店/产品素材检查 | 通过 | 六个核心工作区、真实截图、219 张动态桌宠帧与图标边界 |
 
 ## 复现命令
 
     pnpm run check
     pnpm run eval:goai
-    pnpm run package:goai:windows
+    pnpm run package:submission:windows
 
 ## 结果边界
 
@@ -517,11 +557,17 @@ function verification() {
       syntheticData: true,
       modelNetworkCalls: false,
       dailyReviewWorkspace: true,
+      adaptiveSemanticPlanning: true,
+      reviewTrendDays: 14,
+      buildVariant: buildManifest.variant,
+      petAssetMode: buildManifest.petAssetMode,
+      companionLicenseIncluded: true,
     },
     caveats: [
       "Synthetic evaluation demonstrates reproducible system behavior, not real-world learning outcomes.",
       "The Windows installer is not Authenticode-signed.",
       "No macOS binary is included because this package was built and verified on Windows.",
+      "The competition package is noncommercial; paid or otherwise commercial distribution of the XIAOTONG companion requires written permission or replacement assets.",
     ],
   };
 }
