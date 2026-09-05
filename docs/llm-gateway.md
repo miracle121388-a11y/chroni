@@ -35,9 +35,20 @@
 | 变量 | 示例 | 说明 |
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | `sk-...` | 只保存在 Zeabur，禁止放入仓库或客户端 |
-| `DEEPSEEK_MODEL` | `deepseek-v4-flash` | 网关唯一允许的上游模型 |
 
 公共桌面服务默认开启，只要求配置上游 Key。务必同时在 DeepSeek 账户侧设置可承受的余额或消费上限；应用层限流不能替代供应商侧预算保护。
+
+## Flash 模型锁定
+
+托管网关在代码中固定使用 `deepseek-v4-flash`，桌面端提交的 `model` 字段和 Zeabur 中遗留的 `DEEPSEEK_MODEL` 都不能覆盖它。这样可以避免旧环境变量把所有公开客户端静默切换到价格和响应特征不同的 Pro 模型。
+
+在 Zeabur 的 `chroni-api` 服务中删除旧的 `DEEPSEEK_MODEL` 变量，只保留 `DEEPSEEK_API_KEY` 和所需限流变量。重新部署后通过健康检查确认真实生效值：
+
+```powershell
+(Invoke-RestMethod https://api-getchroni.zeabur.app/healthz).model
+```
+
+正确结果必须是 `deepseek-v4-flash`。DeepSeek 控制台中部署前产生的 `deepseek-v4-pro` 历史账单不会因切换而消失，应按调用时间区分新旧流量。
 
 ## 可选私有访问码
 
@@ -102,6 +113,8 @@ Invoke-RestMethod `
 ```
 
 公开请求通过 Zeabur 标准 `X-Forwarded-For` 获取来源地址，并使用只在服务端存在的上游密钥生成 HMAC 摘要用于限流。日志只能包含 `request_id`、匿名 `credential_id`、`access_mode`、状态、耗时和 token 数。出现原始 IP、任务文本、访问码或供应商密钥即视为安全缺陷。
+
+下载量、仓库访问、网站流量、网关请求和模型费用分别来自不同系统，查看入口和统计边界见[运营数据与下载统计](./usage-metrics.md)。
 
 ## 本地验证
 

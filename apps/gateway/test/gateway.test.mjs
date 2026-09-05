@@ -7,10 +7,17 @@ import { createGatewayServer } from "../dist/server.js";
 const baseConfig = loadGatewayConfig({
   PORT: "0",
   DEEPSEEK_API_KEY: "provider-secret",
-  DEEPSEEK_MODEL: "deepseek-v4-flash",
   CHRONI_GATEWAY_ACCESS_KEYS_JSON: JSON.stringify({ tester: "beta-secret" }),
   CHRONI_GATEWAY_REQUESTS_PER_MINUTE: "2",
   CHRONI_GATEWAY_REQUESTS_PER_DAY: "10",
+});
+
+test("managed gateway ignores a stale Pro override and stays on Flash", () => {
+  const config = loadGatewayConfig({
+    DEEPSEEK_API_KEY: "provider-secret",
+    DEEPSEEK_MODEL: "deepseek-v4-pro",
+  });
+  assert.equal(config.upstreamModel, "deepseek-v4-flash");
 });
 
 test("health check reports missing secrets without exposing values", async () => {

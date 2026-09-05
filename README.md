@@ -239,7 +239,7 @@ grep "mac-universal.dmg" SHA256SUMS.txt
 
 Chroni 支持 OpenAI-compatible Chat Completions 接口。大模型主要增强复杂语义抽取、TaskPlan 生成和可选的每日规划，本地规则始终作为基础能力与失败回退。
 
-当前版本提供“本地规则”“Chroni 智能服务”和“自定义 API”三种实际工作方式。新安装默认使用 Chroni 智能服务，无需 API Key、访问码或账号；DeepSeek 主密钥只保存在 Zeabur 网关，永远不会写入桌面安装包。公共服务执行按来源网络和全局额度限制，超限或暂时不可用时自动回退本地规则。三种方式的适用范围、费用与安全边界见[模型使用方式](./docs/user/model-modes.md)，网关部署与运维见[LLM 网关](./docs/llm-gateway.md)。
+当前版本提供“本地规则”“Chroni 智能服务”和“自定义 API”三种实际工作方式。新安装默认使用 Chroni 智能服务，无需 API Key、访问码或账号；DeepSeek 主密钥只保存在 Zeabur 网关，永远不会写入桌面安装包。托管网关在代码中固定使用 `deepseek-v4-flash`，不会被桌面请求或遗留的 Zeabur 模型变量切换到 Pro。公共服务执行按来源网络和全局额度限制，超限或暂时不可用时自动回退本地规则。三种方式的适用范围、费用与安全边界见[模型使用方式](./docs/user/model-modes.md)，网关部署与运维见[LLM 网关](./docs/llm-gateway.md)。
 
 ### 控制中心配置（推荐）
 
@@ -313,6 +313,7 @@ API 覆盖文本与文件抽取、Learning Mission 查询、证据说明、阶�
 | 了解本地数据和模型发送范围 | [隐私说明](./docs/user/privacy.md) |
 | 文件为空、OCR、窗口、更新或启动问题 | [故障排查](./docs/user/troubleshooting.md) |
 | 提交脱敏问题或体验建议 | [帮助与反馈](./docs/user/feedback.md) |
+| 查看下载量、访问与模型调用 | [运营数据与下载统计](./docs/usage-metrics.md) |
 | 下载虚构材料进行演示 | [Demo 示例材料](./examples/demo/README.md) |
 
 ## 已知边界

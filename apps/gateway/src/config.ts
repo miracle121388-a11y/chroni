@@ -29,12 +29,16 @@ export type GatewayConfig = {
 
 type GatewayEnvironment = NodeJS.ProcessEnv;
 
+export const CHRONI_GATEWAY_UPSTREAM_MODEL = "deepseek-v4-flash";
+
 export function loadGatewayConfig(environment: GatewayEnvironment = process.env): GatewayConfig {
   return {
     port: integerValue(environment.PORT, 3000, 0, 65_535),
     upstreamBaseUrl: normalizedUrl(environment.DEEPSEEK_BASE_URL, "https://api.deepseek.com"),
     upstreamApiKey: environment.DEEPSEEK_API_KEY?.trim() ?? "",
-    upstreamModel: environment.DEEPSEEK_MODEL?.trim() || "deepseek-v4-flash",
+    // The managed service has one audited model. A stale Zeabur variable must not
+    // silently move every desktop client to a different price or behavior tier.
+    upstreamModel: CHRONI_GATEWAY_UPSTREAM_MODEL,
     accessKeys: parseAccessKeys(environment),
     publicAccessEnabled: booleanValue(environment.CHRONI_GATEWAY_PUBLIC_ACCESS, true),
     requestTimeoutMs: integerValue(environment.CHRONI_GATEWAY_TIMEOUT_MS, 75_000, 5_000, 180_000),
