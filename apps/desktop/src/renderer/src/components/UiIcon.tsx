@@ -1,4 +1,4 @@
-export type UiIconName = "add" | "arrow-down" | "arrow-left" | "arrow-right" | "arrow-up" | "calendar" | "check" | "clock" | "close" | "inbox" | "review" | "settings" | "spark" | "tasks";
+export type UiIconName = "add" | "arrow-down" | "arrow-left" | "arrow-right" | "arrow-up" | "calendar" | "check" | "clock" | "close" | "inbox" | "microphone" | "review" | "settings" | "shield" | "spark" | "stop" | "tasks";
 
 export function UiIcon({ name, className = "inline-icon" }: { name: UiIconName; className?: string }) {
   return (
@@ -13,9 +13,12 @@ export function UiIcon({ name, className = "inline-icon" }: { name: UiIconName; 
       {name === "calendar" && <><rect x="2.5" y="3.5" width="11" height="10" rx="2" /><path d="M5 2v3m6-3v3M2.5 6.5h11" /></>}
       {name === "clock" && <><circle cx="8" cy="8" r="5.5" /><path d="M8 4.75V8l2.4 1.45" /></>}
       {name === "inbox" && <><path d="M2.5 3.25h11v9.5h-11z" /><path d="M2.5 9.25h3l1 1.5h3l1-1.5h3" /></>}
+      {name === "microphone" && <><rect x="5.25" y="1.75" width="5.5" height="8" rx="2.75" /><path d="M3.5 7.75a4.5 4.5 0 0 0 9 0M8 12.25v2M5.5 14.25h5" /></>}
       {name === "review" && <><path d="M3 2.5h10v11H3z" /><path d="M5.25 5.1h5.5M5.25 7.75h5.5M5.25 10.4h3.25" /></>}
       {name === "settings" && <><circle cx="8" cy="8" r="2.25" /><path d="M8 1.75v1.3m0 9.9v1.3M1.75 8h1.3m9.9 0h1.3M3.58 3.58l.92.92m7 7 .92.92m0-9.84-.92.92m-7 7-.92.92" /></>}
+      {name === "shield" && <path d="M8 1.75 13 3.8v3.55c0 3.15-1.85 5.55-5 6.9-3.15-1.35-5-3.75-5-6.9V3.8L8 1.75Z" />}
       {name === "spark" && <><path d="M8 1.75c.45 2.65 1.6 3.8 4.25 4.25C9.6 6.45 8.45 7.6 8 10.25 7.55 7.6 6.4 6.45 3.75 6 6.4 5.55 7.55 4.4 8 1.75Z" /><path d="M12.2 10.3c.2 1.15.7 1.65 1.85 1.85-1.15.2-1.65.7-1.85 1.85-.2-1.15-.7-1.65-1.85-1.85 1.15-.2 1.65-.7 1.85-1.85Z" /></>}
+      {name === "stop" && <rect x="4" y="4" width="8" height="8" rx="1.25" />}
       {name === "tasks" && <><path d="m2.5 4 1.15 1.15L5.7 3.1M7 4.25h6.5M2.5 8l1.15 1.15L5.7 7.1M7 8.25h6.5M2.5 12l1.15 1.15 2.05-2.05M7 12.25h6.5" /></>}
     </svg>
   );

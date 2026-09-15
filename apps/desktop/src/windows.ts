@@ -14,7 +14,7 @@ type WindowSet = {
 export type ControlCenterRoute = {
   tab?: "missions" | "schedule" | "daily" | "review" | "agent" | "preferences" | "services";
   taskId?: string;
-  focus?: "clarifications";
+  focus?: "clarifications" | "voice";
 };
 
 const windows: WindowSet = {};
@@ -174,6 +174,10 @@ export function showControlCenter(route?: ControlCenterRoute): void {
       sendControlRoute(route);
     }
   }
+}
+
+export function showVoiceAssistant(): void {
+  showControlCenter({ tab: "daily", focus: "voice" });
 }
 
 function fitControlWindowToDisplay(
@@ -568,6 +572,7 @@ function createTrayIcon(): NativeImage {
 function appMenuTemplate(): MenuItemConstructorOptions[] {
   return [
     { label: "查看日程", click: () => showSchedule(true, true) },
+    { label: "语音助手", click: () => showVoiceAssistant() },
     { label: "打开控制中心", click: () => showControlCenter() },
     { label: "每日回顾", click: () => showControlCenter({ tab: "review" }) },
     { label: "偏好设置", click: () => showControlCenter({ tab: "preferences" }) },

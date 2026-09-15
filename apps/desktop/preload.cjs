@@ -11,6 +11,11 @@ contextBridge.exposeInMainWorld("chroni", {
   platform: process.platform,
   storeManaged: Boolean(process.mas || process.windowsStore),
   getSnapshot: () => ipcRenderer.invoke("chroni:snapshot"),
+  getVoiceStatus: () => ipcRenderer.invoke("chroni:voice-status"),
+  transcribeVoice: (samples, sampleRate) => ipcRenderer.invoke("chroni:voice-transcribe", samples, sampleRate),
+  previewVoiceCommand: (text) => ipcRenderer.invoke("chroni:voice-preview", text),
+  confirmVoiceCommand: (id) => ipcRenderer.invoke("chroni:voice-confirm", id),
+  cancelVoiceCommand: (id) => ipcRenderer.invoke("chroni:voice-cancel", id),
   getUpdateStatus: () => ipcRenderer.invoke("chroni:update-status"),
   checkForUpdates: () => ipcRenderer.invoke("chroni:update-check"),
   installUpdate: () => ipcRenderer.invoke("chroni:update-install"),
@@ -70,6 +75,11 @@ contextBridge.exposeInMainWorld("chroni", {
     const listener = (_event, status) => callback(status);
     ipcRenderer.on("chroni:update-status", listener);
     return () => ipcRenderer.removeListener("chroni:update-status", listener);
+  },
+  onVoiceStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on("chroni:voice-status", listener);
+    return () => ipcRenderer.removeListener("chroni:voice-status", listener);
   },
   onPetAction: (callback) => {
     const listener = (_event, command) => callback(command);

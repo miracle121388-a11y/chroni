@@ -7,7 +7,6 @@ const unusedProtectedResourceKeys = [
   "NSBluetoothAlwaysUsageDescription",
   "NSBluetoothPeripheralUsageDescription",
   "NSCameraUsageDescription",
-  "NSMicrophoneUsageDescription",
 ];
 
 function plutil(args, options = {}) {

@@ -84,6 +84,12 @@ test("validatePreferencesPatch rejects invalid nested settings", () => {
   assert.throws(() => validatePreferencesPatch({ companionEnabled: "yes" }), /companionEnabled/);
   assert.throws(() => validatePreferencesPatch({ companionStyle: "purple" }), /companionStyle/);
   assert.throws(() => validatePreferencesPatch({ llm: { provider: "unknown" } }), /provider/);
+  assert.deepEqual(validatePreferencesPatch({ voiceAssistantEnabled: true, voiceRepliesEnabled: false, voiceHotkey: "CommandOrControl+Shift+Space" }), {
+    voiceAssistantEnabled: true,
+    voiceRepliesEnabled: false,
+    voiceHotkey: "CommandOrControl+Shift+Space",
+  });
+  assert.throws(() => validatePreferencesPatch({ voiceRepliesEnabled: "yes" }), /voiceRepliesEnabled/);
 });
 
 test("validateAgentMemoryPatch enforces capacity, work hours, reminder frequency, and automation flags", () => {

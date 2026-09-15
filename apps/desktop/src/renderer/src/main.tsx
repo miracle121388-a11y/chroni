@@ -20,6 +20,7 @@ import { DailyReviewWorkspace } from "./components/DailyReviewWorkspace";
 import { LearningMissionWorkspace } from "./components/LearningMissionWorkspace";
 import { UiDateTimeField } from "./components/UiDateTimeField";
 import { UiIcon } from "./components/UiIcon";
+import { VoiceAssistant } from "./components/VoiceAssistant";
 import { petAnimationFrames, petAssetMode, xiaotongDonationQr } from "virtual:chroni-pet-assets";
 import "@fontsource-variable/noto-sans-sc/wght.css";
 import "@fontsource-variable/noto-serif-sc/wght.css";
@@ -528,6 +529,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
   const [plannerDate, setPlannerDate] = useState(() => dailyDateKey(new Date()));
   const [reviewDate, setReviewDate] = useState(() => dailyDateKey(new Date()));
   const [navigation, setNavigation] = useState<{ route: ChroniControlRoute; sequence: number }>({ route: {}, sequence: 0 });
+  const [voiceOpenSignal, setVoiceOpenSignal] = useState(0);
   const pendingCount = snapshot.items.filter((item) => !item.completed).length;
   const today = new Date();
   const todayKey = dailyDateKey(today);
@@ -537,6 +539,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
     if (route.tab === "agent") setTab("schedule");
     else if (route.tab) setTab(route.tab);
     else if (route.taskId || route.focus === "clarifications") setTab("schedule");
+    if (route.focus === "voice") setVoiceOpenSignal((current) => current + 1);
     setNavigation((current) => ({ route, sequence: current.sequence + 1 }));
   }), []);
   function selectTab(next: ControlTab): void {
@@ -582,6 +585,7 @@ function ControlCenter({ snapshot, setSnapshot }: ViewProps) {
         {tab === "preferences" && <PreferencesPane preferences={snapshot.preferences} services={snapshot.services} setSnapshot={setSnapshot} />}
         {tab === "services" && <ServicesPane snapshot={snapshot} setSnapshot={setSnapshot} />}
       </section>
+      <VoiceAssistant snapshot={snapshot} setSnapshot={setSnapshot} openSignal={voiceOpenSignal} onNavigate={selectTab} />
     </main>
   );
 }
@@ -1172,6 +1176,9 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
   const [hotkeyDraft, setHotkeyDraft] = useState(preferences.hotkey);
   const [hotkeyDirty, setHotkeyDirty] = useState(false);
   const [hotkeyBusy, setHotkeyBusy] = useState(false);
+  const [voiceHotkeyDraft, setVoiceHotkeyDraft] = useState(preferences.voiceHotkey);
+  const [voiceHotkeyDirty, setVoiceHotkeyDirty] = useState(false);
+  const [voiceHotkeyBusy, setVoiceHotkeyBusy] = useState(false);
   const [settingsFeedback, setSettingsFeedback] = useState<{ message: string; tone: "ok" | "warn" } | null>(null);
 
   useEffect(() => {
@@ -1187,6 +1194,10 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
   useEffect(() => {
     if (!hotkeyDirty) setHotkeyDraft(preferences.hotkey);
   }, [hotkeyDirty, preferences.hotkey]);
+
+  useEffect(() => {
+    if (!voiceHotkeyDirty) setVoiceHotkeyDraft(preferences.voiceHotkey);
+  }, [preferences.voiceHotkey, voiceHotkeyDirty]);
 
   async function patch(next: ChroniPreferencesPatch, success = "设置已保存。"): Promise<ChroniSnapshot | null> {
     try {
@@ -1212,6 +1223,20 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
       if (!registrationFailed) setHotkeyDirty(false);
     }
     setHotkeyBusy(false);
+  }
+
+  async function saveVoiceHotkey(): Promise<void> {
+    if (voiceHotkeyBusy || !voiceHotkeyDirty) return;
+    setVoiceHotkeyBusy(true);
+    const updated = await patch({ voiceHotkey: voiceHotkeyDraft.trim() }, "语音助手快捷键已保存。");
+    if (updated) {
+      const registrationFailed = updated.companion.state === "confused" && updated.companion.bubble.includes("快捷键") && updated.companion.bubble.includes("无法注册");
+      setSettingsFeedback(registrationFailed
+        ? { message: updated.companion.bubble, tone: "warn" }
+        : { message: voiceHotkeyDraft.trim() ? "语音助手快捷键已保存并生效。" : "语音助手快捷键已关闭。", tone: "ok" });
+      if (!registrationFailed) setVoiceHotkeyDirty(false);
+    }
+    setVoiceHotkeyBusy(false);
   }
 
   function updateLlmDraft(field: keyof typeof llmDraft, value: string): void {
@@ -1261,7 +1286,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
     <div className="pane narrow settings-pane">
       <header className="pane-head">
         <div>
-          <p>桌宠、提醒、快捷键与智能模型</p>
+          <p>桌宠、语音、提醒与智能模型</p>
           <h2>偏好设置</h2>
         </div>
       </header>
@@ -1282,6 +1307,22 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
         <div className="field-grid">
           <label>开始<UiDateTimeField required type="time" value={preferences.quietHoursStart} onChange={(quietHoursStart) => void patch({ quietHoursStart })} /></label>
           <label>结束<UiDateTimeField required type="time" value={preferences.quietHoursEnd} onChange={(quietHoursEnd) => void patch({ quietHoursEnd })} /></label>
+        </div>
+      </section>
+      <section className="settings-group">
+        <div>
+          <h3>语音助手</h3>
+          <p>声音在本机转成文字；涉及日程修改时，确认后才会执行。</p>
+        </div>
+        <Toggle label="启用语音助手" checked={preferences.voiceAssistantEnabled} onChange={(value) => void patch({ voiceAssistantEnabled: value }, value ? "语音助手已开启。" : "语音助手已关闭。") } />
+        <Toggle label="语音播报结果" checked={preferences.voiceRepliesEnabled} onChange={(value) => void patch({ voiceRepliesEnabled: value }, value ? "语音播报已开启。" : "语音播报已关闭。") } />
+        <label className="text-field compact-field">唤起助手<input value={voiceHotkeyDraft} disabled={voiceHotkeyBusy || !preferences.voiceAssistantEnabled} onChange={(event) => { setVoiceHotkeyDraft(event.target.value); setVoiceHotkeyDirty(event.target.value !== preferences.voiceHotkey); setSettingsFeedback(null); }} onKeyDown={(event) => {
+          if (event.key === "Enter") void saveVoiceHotkey();
+          if (event.key === "Escape") { setVoiceHotkeyDraft(preferences.voiceHotkey); setVoiceHotkeyDirty(false); setSettingsFeedback(null); }
+        }} /></label>
+        <div className="hotkey-actions">
+          <button className="primary" type="button" disabled={voiceHotkeyBusy || !voiceHotkeyDirty || !preferences.voiceAssistantEnabled} onClick={() => void saveVoiceHotkey()}>{voiceHotkeyBusy ? "保存中..." : "保存语音快捷键"}</button>
+          {voiceHotkeyDirty && <button className="secondary" type="button" disabled={voiceHotkeyBusy} onClick={() => { setVoiceHotkeyDraft(preferences.voiceHotkey); setVoiceHotkeyDirty(false); setSettingsFeedback(null); }}>取消修改</button>}
         </div>
       </section>
       <section className="settings-group">
@@ -1426,6 +1467,13 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
         <StatusRow label="文本解析" state={snapshot.services.parser} detail="TXT、MD、CSV、JSON、ICS、DOCX、PDF、XLSX 等本地解析" />
         <StatusRow label="图片 OCR" state={snapshot.services.ocr} detail="图片与扫描 PDF 先转为文字，再进入提取流程" />
         <StatusRow label="大模型理解" state={snapshot.services.model} detail="按输入内容理解日程、任务要求、交付物与截止信息，并保留来源证据" />
+        <StatusRow
+          label="语音助手"
+          state={snapshot.preferences.voiceAssistantEnabled ? "ready" : "disabled"}
+          detail={snapshot.preferences.voiceAssistantEnabled
+            ? `本地语音转写已开启；按 ${snapshot.preferences.voiceHotkey} 可随时唤起`
+            : "已由用户关闭，可在偏好设置中重新开启"}
+        />
         <StatusRow label="本地数据" state={snapshot.services.storage} detail={snapshot.services.storageDiagnostic ? safeUserMessage(snapshot.services.storageDiagnostic, "本地数据已进入保护状态，请打开数据位置检查备份。") : "日程、任务、产出证据、来源和偏好保存到本机应用数据目录"} />
         <StatusRow label="隐私状态" state="ready" detail={safeUserMessage(snapshot.services.privacy, "敏感配置仅保存在本机。") } />
       </div>
@@ -1929,6 +1977,7 @@ function serviceStateLabel(state: string): string {
   if (state === "reset") return "已重建";
   if (state === "read-only") return "只读保护";
   if (state === "unavailable") return "不可用";
+  if (state === "disabled") return "已关闭";
   return "状态待确认";
 }
 

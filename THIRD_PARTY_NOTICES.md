@@ -35,7 +35,9 @@ The application uses Electron, React, React DOM, Vite, TypeScript, Tesseract.js,
 
 ## Models and APIs
 
-Chroni does not include model weights. Optional OpenAI-compatible services, including a user-configured endpoint or the managed beta gateway, remain subject to the selected provider's terms. Model calls are disabled unless the user enables and configures them. The no-key demo and local rules path do not require a model API.
+Chroni downloads the `onnx-community/whisper-tiny` ONNX speech-recognition model from Hugging Face on first voice use and caches it in the user's application-data directory. The converted model is based on `openai/whisper-tiny`; the upstream model is published under Apache License 2.0. Model files are not committed to this repository or embedded in release installers.
+
+Optional OpenAI-compatible services, including a user-configured endpoint or the managed beta gateway, remain subject to the selected provider's terms. The local rules and bounded voice-command paths do not require a model API. Unmatched voice transcripts enter the ordinary intake path and may use the selected model service after user confirmation.
 
 ## Historical synthetic evaluation data
 

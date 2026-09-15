@@ -13,13 +13,15 @@ import { ensureTaskPlan, extractPayload, processIntake, reprocessSource } from "
 import { clearSampleDataStore, createSampleDataStore, SAMPLE_DATA_NAMESPACE } from "./sample-data.js";
 import { testLlmConnection } from "./llm-client.js";
 import { isLlmReady, resolveLlmSettings } from "./llm-settings.js";
+import { VoiceAssistant } from "./voice-assistant.js";
+import { LocalVoiceTranscriber, validateVoiceAudio } from "./voice-transcriber.js";
 import { shouldRemindItem } from "./shared/schedule.js";
 import { formatOperationError, formatUserFacingMessage } from "./shared/errors.js";
 import { intakeProgressMessage, REPROCESS_PROGRESS_MESSAGE } from "./shared/intake-copy.js";
 import type { AgentMemoryPatch, AgentRunResult, AgentRunTrigger, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, CompanionState, DailyReviewInput, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, IntakePayload, IntakeResult, ItemPatch, LearningMissionEvidenceInput, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanUpdatePayload } from "./shared/types.js";
 import { companionStateForItems, ChroniStore, type SecretCodec } from "./store.js";
 import { ChroniUpdater } from "./updater.js";
-import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, toggleScheduleSurface, type ControlCenterRoute } from "./windows.js";
+import { applyPreferences, broadcast, createAppWindows, createTray, refreshScheduleAfterUpdate, requestPetAction, showControlCenter, showPetMenu, showSchedule, showVoiceAssistant, toggleScheduleSurface, type ControlCenterRoute } from "./windows.js";
 import { validateAgentMemoryPatch, validateBehaviorMemoryPatch, validateBoolean, validateClarificationAnswer, validateDailyReviewInput, validateDailyTaskCreate, validateDailyTaskPatch, validateExplicitPreference, validateIdentifier, validateIntakePayload, validateItemPatch, validateLearningMissionCheckpointInput, validateLearningMissionFileInput, validateLearningMissionNoteInput, validateLlmSettings, validatePreferenceStatus, validatePreferencesPatch, validateSourceText, validateTaskPlanUpdate } from "./validation.js";
 
 let store: ChroniStore;
@@ -31,6 +33,10 @@ let deadlineAgent: DeadlineAgent;
 let agentTools: DeadlineAgentTools;
 let agentScheduler: AgentScheduler;
 let applicationUpdater: ChroniUpdater;
+let voiceAssistant: VoiceAssistant;
+let voiceTranscriber: LocalVoiceTranscriber;
+let focusTimer: NodeJS.Timeout | undefined;
+let focusEndsAt: number | undefined;
 let lastTaskFingerprint = "";
 let companionBeforeFileHover: { state: CompanionState; bubble: string } | undefined;
 
@@ -53,6 +59,7 @@ if (!gotLock) {
     if (firstLaunch) primaryStore.updatePreferences({ llm: { enabled: true, mode: "managed" } });
     store = primaryStore;
     installDeadlineAgent();
+    installVoiceAssistant(userDataPath);
     applicationUpdater = createApplicationUpdater();
     lastTaskFingerprint = taskFingerprint(store.snapshot());
     installIpc();
@@ -72,7 +79,7 @@ if (!gotLock) {
       },
     });
     applyPreferences(store.snapshot().preferences);
-    registerHotkey();
+    registerHotkeys();
     startLocalApiServer();
     applicationUpdater.start();
     refreshCompanionFromSchedule();
@@ -95,11 +102,32 @@ app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("before-quit", () => {
   agentScheduler?.dispose();
   applicationUpdater?.dispose();
+  if (focusTimer) clearTimeout(focusTimer);
   if (apiServer?.listening) apiServer.close();
 });
 
 function installIpc(): void {
   ipcMain.handle("chroni:snapshot", () => store.snapshot());
+  ipcMain.handle("chroni:voice-status", () => voiceTranscriber.status());
+  ipcMain.handle("chroni:voice-transcribe", async (_event, rawSamples: unknown, rawSampleRate: unknown) => {
+    if (!store.snapshot().preferences.voiceAssistantEnabled) throw new Error("语音助手已关闭，请先在偏好设置中开启。");
+    const { samples, sampleRate } = validateVoiceAudio(rawSamples, rawSampleRate);
+    const previous = beginPetWork("我在听，正在本地识别这句话...");
+    try {
+      return await voiceTranscriber.transcribe(samples, sampleRate);
+    } catch (error) {
+      publishUnexpectedPetFailure(error, "语音转写失败");
+      throw error;
+    } finally {
+      restoreCompanionAfterWork(previous);
+    }
+  });
+  ipcMain.handle("chroni:voice-preview", (_event, text: unknown) => {
+    if (typeof text !== "string") throw new Error("语音命令格式无效。");
+    return voiceAssistant.preview(text);
+  });
+  ipcMain.handle("chroni:voice-confirm", (_event, id: string) => voiceAssistant.confirm(validateIdentifier(id, "voice preview id")));
+  ipcMain.handle("chroni:voice-cancel", (_event, id: string) => voiceAssistant.cancel(validateIdentifier(id, "voice preview id")));
   ipcMain.handle("chroni:update-status", () => applicationUpdater.status());
   ipcMain.handle("chroni:update-check", () => applicationUpdater.check());
   ipcMain.handle("chroni:update-install", () => applicationUpdater.install());
@@ -198,15 +226,30 @@ function installIpc(): void {
     validateIdentifier(evidenceId, "learning mission evidence id"),
   )));
   ipcMain.handle("chroni:preferences-update", (_event, patch: ChroniPreferencesPatch) => {
-    const previousHotkey = store.snapshot().preferences.hotkey;
+    const previous = store.snapshot().preferences;
     let snapshot = store.updatePreferences(validatePreferencesPatch(patch));
     applyPreferences(snapshot.preferences);
-    if (!registerHotkey() && snapshot.preferences.hotkey.trim()) {
-      const failedHotkey = snapshot.preferences.hotkey;
-      snapshot = store.updatePreferences({ hotkey: previousHotkey });
-      const restored = registerHotkey();
-      const recovery = !previousHotkey ? "已保持快捷键关闭" : restored ? "已保留原快捷键并继续生效" : "原快捷键当前也无法注册，请重新设置";
-      snapshot = store.setCompanion("confused", `快捷键 ${failedHotkey} 注册失败，${recovery}。可能是组合键格式不正确或已被占用。`);
+    const registration = registerHotkeys();
+    const rollback: ChroniPreferencesPatch = {};
+    const failed: string[] = [];
+    const scheduleHotkeyChanged = snapshot.preferences.hotkey !== previous.hotkey;
+    const voiceHotkeyChanged = snapshot.preferences.voiceHotkey !== previous.voiceHotkey;
+    const voiceEnabledChanged = snapshot.preferences.voiceAssistantEnabled !== previous.voiceAssistantEnabled;
+    if (!registration.schedule && snapshot.preferences.hotkey.trim()) {
+      rollback.hotkey = previous.hotkey;
+      failed.push(snapshot.preferences.hotkey);
+    }
+    if (!registration.voice && snapshot.preferences.voiceAssistantEnabled && snapshot.preferences.voiceHotkey.trim()) {
+      if (voiceHotkeyChanged) rollback.voiceHotkey = previous.voiceHotkey;
+      else if (scheduleHotkeyChanged) rollback.hotkey = previous.hotkey;
+      else if (voiceEnabledChanged) rollback.voiceAssistantEnabled = previous.voiceAssistantEnabled;
+      else rollback.voiceHotkey = previous.voiceHotkey;
+      failed.push(snapshot.preferences.voiceHotkey);
+    }
+    if (failed.length) {
+      snapshot = store.updatePreferences(rollback);
+      registerHotkeys();
+      snapshot = store.setCompanion("confused", `快捷键 ${failed.join("、")} 无法注册，已恢复原设置。可能已被其他应用占用。`);
     }
     broadcast("chroni:snapshot-updated", snapshot);
     return snapshot;
@@ -356,7 +399,7 @@ function startLocalApiServer(): void {
   apiServer = startChroniApiServer(store, (snapshot, reason) => {
     if (reason === "preferences") {
       applyPreferences(snapshot.preferences);
-      registerHotkey();
+      registerHotkeys();
     }
     const nextFingerprint = taskFingerprint(snapshot);
     if (reason === "data" && lastTaskFingerprint && nextFingerprint !== lastTaskFingerprint) agentScheduler.scheduleTaskChange();
@@ -387,7 +430,7 @@ async function switchActiveStore(nextStore: ChroniStore): Promise<void> {
   lastTaskFingerprint = taskFingerprint(store.snapshot());
   startLocalApiServer();
   applyPreferences(store.snapshot().preferences);
-  registerHotkey();
+  registerHotkeys();
   if (!activeSampleScenario) agentScheduler.startDailyChecks();
   broadcast("chroni:snapshot-updated", store.snapshot());
   refreshScheduleAfterUpdate();
@@ -572,6 +615,59 @@ function installDeadlineAgent(): void {
   });
 }
 
+function installVoiceAssistant(userDataPath: string): void {
+  voiceTranscriber = new LocalVoiceTranscriber(join(userDataPath, "cache", "voice"), (status) => {
+    broadcast("chroni:voice-status", status);
+  });
+  voiceAssistant = new VoiceAssistant(() => store, {
+    publish: (snapshot) => {
+      broadcast("chroni:snapshot-updated", snapshot);
+      refreshScheduleAfterUpdate();
+    },
+    runPlanning: async () => {
+      await runDeadlineAgentAndPublish("manual");
+      return store.snapshot();
+    },
+    runIntake: async (text) => {
+      const payload = validateIntakePayload({ kind: "text", text });
+      const previousPendingIds = pendingClarificationIds();
+      beginPetInput(payload, intakeProgressMessage(payload));
+      const result = await processIntake(payload, store);
+      broadcast("chroni:snapshot-updated", result.snapshot);
+      revealScheduleAfterIntake(result, previousPendingIds);
+      if (result.ok) scheduleAgentForTaskChange();
+      return result;
+    },
+    startFocus: startFocusSession,
+    stopFocus: stopFocusSession,
+  });
+}
+
+function startFocusSession(minutes: number): void {
+  if (focusTimer) clearTimeout(focusTimer);
+  focusEndsAt = Date.now() + minutes * 60_000;
+  focusTimer = setTimeout(() => {
+    focusTimer = undefined;
+    focusEndsAt = undefined;
+    const snapshot = store.setCompanion("celebrating", "专注时间完成，起来活动一下吧。");
+    broadcast("chroni:snapshot-updated", snapshot);
+    requestPetAction("play", "replace");
+    if (Notification.isSupported()) {
+      new Notification({ title: "Chroni · 专注完成", body: "这一段专注已经结束，休息一下再继续。", silent: false }).show();
+    }
+  }, minutes * 60_000);
+}
+
+function stopFocusSession(): boolean {
+  if (!focusTimer || !focusEndsAt) return false;
+  clearTimeout(focusTimer);
+  focusTimer = undefined;
+  focusEndsAt = undefined;
+  const snapshot = store.setCompanion("idle", "专注已经结束，接下来按你的节奏继续。");
+  broadcast("chroni:snapshot-updated", snapshot);
+  return true;
+}
+
 function exportAgentEvidence() {
   return exportRedactedAgentEvidence(
     store.snapshot(),
@@ -746,7 +842,7 @@ function controlCenterRoute(value: unknown): ControlCenterRoute | undefined {
   if (candidate.tab === "settings") route.tab = "preferences";
   if (candidate.tab === "demo" || candidate.tab === "about") route.tab = "services";
   if (typeof candidate.taskId === "string" && candidate.taskId.trim()) route.taskId = candidate.taskId.trim().slice(0, 200);
-  if (candidate.focus === "clarifications") route.focus = candidate.focus;
+  if (candidate.focus === "clarifications" || candidate.focus === "voice") route.focus = candidate.focus;
   return Object.keys(route).length ? route : undefined;
 }
 
@@ -777,18 +873,25 @@ function timeUntil(value: string): string {
   return `剩余 ${Math.ceil(hours / 24)} 天`;
 }
 
-function registerHotkey(): boolean {
+function registerHotkeys(): { schedule: boolean; voice: boolean } {
   globalShortcut.unregisterAll();
-  const hotkey = store.snapshot().preferences.hotkey.trim();
-  if (!hotkey) return true;
-  try {
-    const registered = globalShortcut.register(hotkey, () => toggleScheduleSurface());
-    if (!registered) console.warn(`Unable to register Chroni hotkey: ${hotkey}`);
-    return registered;
-  } catch {
-    console.warn(`Unable to register Chroni hotkey: ${hotkey}`);
-    return false;
-  }
+  const preferences = store.snapshot().preferences;
+  const register = (hotkey: string, callback: () => void): boolean => {
+    if (!hotkey) return true;
+    try {
+      const registered = globalShortcut.register(hotkey, callback);
+      if (!registered) console.warn(`Unable to register Chroni hotkey: ${hotkey}`);
+      return registered;
+    } catch {
+      console.warn(`Unable to register Chroni hotkey: ${hotkey}`);
+      return false;
+    }
+  };
+  const schedule = register(preferences.hotkey.trim(), () => toggleScheduleSurface());
+  const voice = preferences.voiceAssistantEnabled
+    ? register(preferences.voiceHotkey.trim(), () => showVoiceAssistant())
+    : true;
+  return { schedule, voice };
 }
 
 function createSecretCodec(): SecretCodec {

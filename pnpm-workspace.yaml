@@ -8,6 +8,9 @@ supportedArchitectures:
     - arm64
 allowBuilds:
   electron-winstaller: true
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true
   tesseract.js: true
 overrides:
   '@xmldom/xmldom': 0.8.15

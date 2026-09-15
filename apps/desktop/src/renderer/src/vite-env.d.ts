@@ -1,12 +1,12 @@
 /// <reference types="vite/client" />
 
-import type { AgentEvidenceExportResult, AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ChroniUpdateStatus, DailyReviewInput, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, LlmConnectionResult, PetActionCommand, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanResult, TaskPlanUpdatePayload } from "../../shared/types";
+import type { AgentEvidenceExportResult, AgentIcsExportResult, AgentMemoryPatch, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, ChroniLlmSettings, ChroniUpdateStatus, DailyReviewInput, DailyTaskCreateInput, DailyTaskPatch, ExplicitPreferenceInput, ChroniPreferencesPatch, ChroniSnapshot, ExtractResult, IntakePayload, IntakeResult, ItemPatch, LearningMissionCheckpointInput, LearningMissionFileInput, LearningMissionNoteInput, LlmConnectionResult, PetActionCommand, SampleDataResult, SampleDataScenario, SampleDataStatus, TaskPlanResult, TaskPlanUpdatePayload, VoiceCommandExecution, VoiceCommandPreview, VoiceEngineStatus, VoiceTranscriptionResult } from "../../shared/types";
 
 declare global {
   type ChroniControlRoute = {
     tab?: "missions" | "schedule" | "daily" | "review" | "agent" | "preferences" | "services";
     taskId?: string;
-    focus?: "clarifications";
+    focus?: "clarifications" | "voice";
   };
 
   interface Window {
@@ -14,6 +14,11 @@ declare global {
       platform: "darwin" | "win32" | "linux" | string;
       storeManaged: boolean;
       getSnapshot(): Promise<ChroniSnapshot>;
+      getVoiceStatus(): Promise<VoiceEngineStatus>;
+      transcribeVoice(samples: Float32Array, sampleRate: number): Promise<VoiceTranscriptionResult>;
+      previewVoiceCommand(text: string): Promise<VoiceCommandPreview>;
+      confirmVoiceCommand(id: string): Promise<VoiceCommandExecution>;
+      cancelVoiceCommand(id: string): Promise<ChroniSnapshot>;
       getUpdateStatus(): Promise<ChroniUpdateStatus>;
       checkForUpdates(): Promise<ChroniUpdateStatus>;
       installUpdate(): Promise<ChroniUpdateStatus>;
@@ -66,6 +71,7 @@ declare global {
       filePath(file: File): string;
       onSnapshotUpdated(callback: (snapshot: ChroniSnapshot) => void): () => void;
       onUpdateStatus(callback: (status: ChroniUpdateStatus) => void): () => void;
+      onVoiceStatus(callback: (status: VoiceEngineStatus) => void): () => void;
       onPetAction(callback: (command: PetActionCommand) => void): () => void;
       onControlNavigate(callback: (route: ChroniControlRoute) => void): () => void;
     };

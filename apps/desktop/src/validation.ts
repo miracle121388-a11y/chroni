@@ -169,15 +169,16 @@ export function validateLearningMissionCheckpointInput(value: unknown): Learning
 
 export function validatePreferencesPatch(value: unknown): ChroniPreferencesPatch {
   const patch = record(value, "preferences patch");
-  const allowed = ["companionEnabled", "remindersEnabled", "quietHoursEnabled", "quietHoursStart", "quietHoursEnd", "hotkey", "llm"];
+  const allowed = ["companionEnabled", "remindersEnabled", "quietHoursEnabled", "quietHoursStart", "quietHoursEnd", "hotkey", "voiceAssistantEnabled", "voiceRepliesEnabled", "voiceHotkey", "llm"];
   knownKeys(patch, allowed, "preferences patch");
   const result: ChroniPreferencesPatch = {};
-  for (const field of ["companionEnabled", "remindersEnabled", "quietHoursEnabled"] as const) {
+  for (const field of ["companionEnabled", "remindersEnabled", "quietHoursEnabled", "voiceAssistantEnabled", "voiceRepliesEnabled"] as const) {
     if (patch[field] !== undefined) result[field] = booleanValue(patch[field], field);
   }
   if (patch.quietHoursStart !== undefined) result.quietHoursStart = clockTime(patch.quietHoursStart, "quietHoursStart");
   if (patch.quietHoursEnd !== undefined) result.quietHoursEnd = clockTime(patch.quietHoursEnd, "quietHoursEnd");
   if (patch.hotkey !== undefined) result.hotkey = boundedString(patch.hotkey, "hotkey", 100);
+  if (patch.voiceHotkey !== undefined) result.voiceHotkey = boundedString(patch.voiceHotkey, "voiceHotkey", 100);
   if (patch.llm !== undefined) {
     const llm = record(patch.llm, "llm");
     knownKeys(llm, ["enabled", "mode", "provider", "baseUrl", "apiKey", "model"], "llm");

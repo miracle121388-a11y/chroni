@@ -17,7 +17,7 @@ import {
   CHRONI_MANAGED_LLM_MODEL,
 } from "./shared/types.js";
 import { InputValidationError } from "./validation.js";
-import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyReview, DailyReviewInput, DailyTask, DailyTaskColor, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, LearningMission, LearningMissionCheckpointInput, LearningMissionEvidence, LearningMissionEvidenceInput, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload } from "./shared/types.js";
+import type { AgentBehaviorMemory, AgentMemory, AgentMemoryPatch, AgentPlan, AgentRunResult, AgentTraceEntry, BehaviorMemoryPatch, ClarificationAnswerPayload, ClarificationResult, CompanionState, DailyReview, DailyReviewInput, DailyTask, DailyTaskColor, DailyTaskCreateInput, DailyTaskPatch, DdlItem, ExplicitPreferenceInput, ChroniPreferences, ChroniPreferencesPatch, ChroniSnapshot, ExtractedInput, IntakeDraft, ItemPatch, LearningMission, LearningMissionCheckpointInput, LearningMissionEvidence, LearningMissionEvidenceInput, PendingClarification, PetPlacement, PlanningFeedbackEvent, ReplaceSourceItemsOptions, ServiceStatus, SourceExtractionStatus, SourceRecord, TaskPlan, TaskPlanResult, TaskPlanRevision, TaskPlanUpdatePayload, VoiceInteractionRecord } from "./shared/types.js";
 
 export type SecretCodec = {
   encrypt(value: string): string;
@@ -32,6 +32,7 @@ type StoredState = {
   items: DdlItem[];
   dailyTasks: DailyTask[];
   dailyReviews: DailyReview[];
+  voiceHistory: VoiceInteractionRecord[];
   sources: SourceRecord[];
   intakeDrafts: IntakeDraft[];
   clarifications: PendingClarification[];
@@ -78,6 +79,7 @@ export class ChroniStore {
       items: [...this.#state.items].sort(compareDdlItems),
       dailyTasks: structuredClone(this.#state.dailyTasks),
       dailyReviews: structuredClone(this.#state.dailyReviews),
+      voiceHistory: structuredClone(this.#state.voiceHistory),
       sources: [...this.#state.sources].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
       intakeDrafts: structuredClone(this.#state.intakeDrafts),
       clarifications: structuredClone(this.#state.clarifications),
@@ -103,6 +105,21 @@ export class ChroniStore {
     else this.#settleCompanion({ state, bubble });
     // Companion poses and bubbles are ephemeral. In read-only recovery mode they may
     // still update in memory so startup can expose storage diagnostics to the user.
+    if (!this.#storageWriteBlocked) this.#save();
+    return this.snapshot();
+  }
+
+  recordVoiceInteraction(record: Omit<VoiceInteractionRecord, "id" | "createdAt">): ChroniSnapshot {
+    const createdAt = new Date().toISOString();
+    this.#state.voiceHistory = [{
+      id: `voice-${randomUUID()}`,
+      request: record.request.trim().slice(0, 500),
+      action: record.action,
+      status: record.status,
+      summary: record.summary.trim().slice(0, 500),
+      createdAt,
+    }, ...this.#state.voiceHistory].slice(0, 100);
+    // Voice queries remain useful while a damaged state file is in read-only recovery.
     if (!this.#storageWriteBlocked) this.#save();
     return this.snapshot();
   }
@@ -1146,9 +1163,9 @@ export class ChroniStore {
       storagePath: this.filePath,
       privacy: modelEnabled
         ? managedModel
-          ? "日程、任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用 Chroni 智能服务时，理解日程、任务与课程要求所需的文本片段和选中的结构化偏好会经 Chroni 网关发送到 DeepSeek，二进制原文件与成果文件不会直接上传。"
-          : "日程、任务、追问、计划、产出证据元数据、复盘和行为偏好保存在本机；启用 LLM 时，会把理解日程、任务与课程要求所需的文本片段（长文档可能分块覆盖全文）和选中的结构化偏好发送到自定义模型服务。"
-        : "日程、任务、来源、产出证据元数据和复盘保存在本机，未启用 LLM 时不会发送到模型服务。",
+          ? "日程、任务、追问、计划、产出证据元数据、复盘、语音文字记录和行为偏好保存在本机；语音原始音频只在内存中完成本地转写。启用 Chroni 智能服务时，理解日程、任务与课程要求所需的文本片段和选中的结构化偏好会经 Chroni 网关发送到 DeepSeek，二进制原文件、语音音频与成果文件不会直接上传。"
+          : "日程、任务、追问、计划、产出证据元数据、复盘、语音文字记录和行为偏好保存在本机；语音原始音频只在内存中完成本地转写。启用 LLM 时，会把理解日程、任务与课程要求所需的文本片段（长文档可能分块覆盖全文）和选中的结构化偏好发送到自定义模型服务。"
+        : "日程、任务、来源、产出证据元数据、复盘和语音文字记录保存在本机；语音原始音频只在内存中完成本地转写，未启用 LLM 时不会发送到模型服务。",
       notes: [
         ...(this.#storageDiagnostic ? [this.#storageDiagnostic] : []),
         ...(this.#unreadableApiKeyProtected ? ["已保留暂时无法解密的 LLM API Key 密文；在系统安全存储恢复前不会覆盖。"] : []),
@@ -1171,6 +1188,9 @@ export class ChroniStore {
           ? `提醒已开启${this.#state.preferences.quietHoursEnabled ? `，勿扰时间 ${this.#state.preferences.quietHoursStart}-${this.#state.preferences.quietHoursEnd}` : ""}。`
           : "提醒已关闭。",
         this.#state.preferences.companionEnabled ? "桌宠入口已开启。" : "桌宠入口已隐藏，可在控制中心重新开启。",
+        this.#state.preferences.voiceAssistantEnabled
+          ? `语音助手已开启，快捷键 ${this.#state.preferences.voiceHotkey}；修改日程、完成任务和启动 Agent 前均需确认。`
+          : "语音助手已关闭，可在偏好设置中重新开启。",
         "信息不完整时会保存待确认草稿；任务计划只有经用户确认后才会启用，来源材料不会被误算为学习成果。",
       ],
     };
@@ -1252,6 +1272,7 @@ export class ChroniStore {
     const itemIds = new Set(items.map((item) => item.id));
     const normalizedDailyTasks = normalizeDailyTasks(parsed.dailyTasks, itemIds);
     const normalizedDailyReviews = normalizeDailyReviews(parsed.dailyReviews);
+    const normalizedVoiceHistory = normalizeVoiceHistory(parsed.voiceHistory);
     const normalizedClarifications = normalizePendingClarifications(parsed.clarifications, draftIds, validSourceIds, itemIds);
     const clarificationIdsByDraft = new Map<string, string[]>();
     for (const clarification of normalizedClarifications.values) {
@@ -1302,6 +1323,7 @@ export class ChroniStore {
       normalizationDetail("待确认草稿", normalizedDrafts, repairedDraftLinks),
       normalizationDetail("每日任务", normalizedDailyTasks),
       normalizationDetail("日程总结", normalizedDailyReviews),
+      normalizationDetail("语音助手记录", normalizedVoiceHistory),
       normalizationDetail("追问信息", normalizedClarifications),
       normalizationDetail("任务计划", normalizedPlans),
       normalizationDetail("计划版本", normalizedRevisions),
@@ -1315,6 +1337,7 @@ export class ChroniStore {
       items,
       dailyTasks: normalizedDailyTasks.values,
       dailyReviews: normalizedDailyReviews.values,
+      voiceHistory: normalizedVoiceHistory.values,
       sources,
       intakeDrafts,
       clarifications: normalizedClarifications.values,
@@ -1411,6 +1434,9 @@ function createDefaultPreferences(): ChroniPreferences {
     quietHoursStart: "22:30",
     quietHoursEnd: "08:00",
     hotkey: "Ctrl+Shift+C",
+    voiceAssistantEnabled: true,
+    voiceRepliesEnabled: true,
+    voiceHotkey: "CommandOrControl+Shift+Space",
     llm: {
       enabled: false,
       mode: "managed",
@@ -1427,6 +1453,7 @@ function createDefaultState(): StoredState {
     items: [],
     dailyTasks: [],
     dailyReviews: [],
+    voiceHistory: [],
     sources: [],
     intakeDrafts: [],
     clarifications: [],
@@ -1458,7 +1485,7 @@ function normalizeChroniPreferences(value: unknown, llmValue: PersistedLlmSettin
   const input = plainRecord(value);
   const llm = plainRecord(llmValue);
   let repaired = value !== undefined && !input ? 1 : 0;
-  const booleanField = <K extends "companionEnabled" | "remindersEnabled" | "quietHoursEnabled">(field: K): ChroniPreferences[K] => {
+  const booleanField = <K extends "companionEnabled" | "remindersEnabled" | "quietHoursEnabled" | "voiceAssistantEnabled" | "voiceRepliesEnabled">(field: K): ChroniPreferences[K] => {
     if (!input || input[field] === undefined) return defaults[field];
     if (typeof input[field] === "boolean") return input[field] as ChroniPreferences[K];
     repaired += 1;
@@ -1490,6 +1517,11 @@ function normalizeChroniPreferences(value: unknown, llmValue: PersistedLlmSettin
     if (typeof input.hotkey === "string") hotkey = input.hotkey.slice(0, 100);
     else repaired += 1;
   }
+  let voiceHotkey = defaults.voiceHotkey;
+  if (input?.voiceHotkey !== undefined) {
+    if (typeof input.voiceHotkey === "string") voiceHotkey = input.voiceHotkey.slice(0, 100);
+    else repaired += 1;
+  }
   return {
     value: {
       companionEnabled: booleanField("companionEnabled"),
@@ -1498,6 +1530,9 @@ function normalizeChroniPreferences(value: unknown, llmValue: PersistedLlmSettin
       quietHoursStart: clockField("quietHoursStart"),
       quietHoursEnd: clockField("quietHoursEnd"),
       hotkey,
+      voiceAssistantEnabled: booleanField("voiceAssistantEnabled"),
+      voiceRepliesEnabled: booleanField("voiceRepliesEnabled"),
+      voiceHotkey,
       llm: {
         enabled: typeof llmBoolean === "boolean" ? llmBoolean : defaults.llm.enabled,
         mode: llmMode === "managed" || llmMode === "custom" ? llmMode : llm ? "custom" : defaults.llm.mode,
@@ -2580,6 +2615,45 @@ function normalizeDailyReviews(value: unknown): NormalizedCollection<DailyReview
   if (values.length > 730) dropped += values.length - 730;
   dropped += Math.max(0, value.length - 5_000);
   return { values: values.slice(0, 730), dropped, repaired };
+}
+
+function normalizeVoiceHistory(value: unknown): NormalizedCollection<VoiceInteractionRecord> {
+  if (!Array.isArray(value)) return { values: [], dropped: value === undefined ? 0 : 1, repaired: 0 };
+  const actions: VoiceInteractionRecord["action"][] = ["get-schedule", "summarize-day", "create-task", "complete-task", "reschedule-task", "run-planning", "start-focus", "stop-focus", "navigate", "intake"];
+  const statuses: VoiceInteractionRecord["status"][] = ["answered", "confirmed", "cancelled", "failed"];
+  const values: VoiceInteractionRecord[] = [];
+  const ids = new Set<string>();
+  let dropped = 0;
+  let repaired = 0;
+  for (const entry of value.slice(0, 500)) {
+    const input = plainRecord(entry);
+    const id = safeNonEmptyString(input?.id, 200);
+    const request = safeNonEmptyString(input?.request, 500);
+    const summary = safeNonEmptyString(input?.summary, 500);
+    const createdAt = normalizedDate(input?.createdAt);
+    if (!input || !id || ids.has(id) || !request || !summary || !createdAt
+      || !actions.includes(input.action as VoiceInteractionRecord["action"])
+      || !statuses.includes(input.status as VoiceInteractionRecord["status"])) {
+      dropped += 1;
+      continue;
+    }
+    ids.add(id);
+    const normalizedRequest = request.slice(0, 500);
+    const normalizedSummary = summary.slice(0, 500);
+    if (normalizedRequest !== input.request || normalizedSummary !== input.summary) repaired += 1;
+    values.push({
+      id,
+      request: normalizedRequest,
+      action: input.action as VoiceInteractionRecord["action"],
+      status: input.status as VoiceInteractionRecord["status"],
+      summary: normalizedSummary,
+      createdAt,
+    });
+  }
+  values.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  if (values.length > 100) dropped += values.length - 100;
+  dropped += Math.max(0, value.length - 500);
+  return { values: values.slice(0, 100), dropped, repaired };
 }
 
 function normalizeExtractionContext(value: unknown): DdlItem["extraction"] | undefined {

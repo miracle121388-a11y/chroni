@@ -62,6 +62,7 @@ module.exports = {
   ],
   extraResources: licenseResources,
   asar: true,
+  asarUnpack: ["node_modules/onnxruntime-node/**"],
   compression: "maximum",
   npmRebuild: false,
   forceCodeSigning: requireSigning,
@@ -102,6 +103,7 @@ module.exports = {
       CFBundleDevelopmentRegion: "zh_CN",
       CFBundleLocalizations: ["zh_CN"],
       NSHumanReadableCopyright: "Copyright © 2026 Chroni contributors",
+      NSMicrophoneUsageDescription: "Chroni 使用麦克风将你的语音命令在本机转写为文字；原始录音不会保存。",
     },
   },
   mas: {

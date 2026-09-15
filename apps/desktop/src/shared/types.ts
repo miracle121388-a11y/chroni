@@ -618,6 +618,9 @@ export type ChroniPreferences = {
   quietHoursStart: string;
   quietHoursEnd: string;
   hotkey: string;
+  voiceAssistantEnabled: boolean;
+  voiceRepliesEnabled: boolean;
+  voiceHotkey: string;
   llm: ChroniLlmSettings;
 };
 
@@ -659,6 +662,61 @@ export type ServiceStatus = {
   notes: string[];
 };
 
+export type VoiceEngineStatus = {
+  state: "idle" | "loading" | "ready" | "error";
+  modelId: string;
+  progress?: number;
+  message: string;
+};
+
+export type VoiceCommandKind =
+  | "get-schedule"
+  | "summarize-day"
+  | "create-task"
+  | "complete-task"
+  | "reschedule-task"
+  | "run-planning"
+  | "start-focus"
+  | "stop-focus"
+  | "navigate"
+  | "intake";
+
+export type VoiceCommandPreview = {
+  id?: string;
+  kind: VoiceCommandKind;
+  state: "answer" | "confirmation" | "navigation" | "error";
+  title: string;
+  message: string;
+  spokenText: string;
+  details: string[];
+  navigateTo?: "missions" | "schedule" | "daily" | "review" | "preferences" | "services";
+};
+
+export type VoiceCommandExecution = {
+  ok: boolean;
+  title: string;
+  message: string;
+  spokenText: string;
+  kind: VoiceCommandKind;
+  snapshot: ChroniSnapshot;
+  navigateTo?: VoiceCommandPreview["navigateTo"];
+};
+
+export type VoiceTranscriptionResult = {
+  text: string;
+  durationMs: number;
+  engine: "local-whisper";
+};
+
+export type VoiceInteractionRecord = {
+  id: string;
+  request: string;
+  action: VoiceCommandKind;
+  status: "answered" | "confirmed" | "cancelled" | "failed";
+  summary: string;
+  createdAt: string;
+};
+
 export type ChroniSnapshot = {
   items: DdlItem[];
   dailyTasks: DailyTask[];
@@ -676,6 +734,7 @@ export type ChroniSnapshot = {
   };
   services: ServiceStatus;
   agent: AgentSnapshot;
+  voiceHistory: VoiceInteractionRecord[];
 };
 
 export type IntakePayload = {

@@ -1,6 +1,6 @@
 # Chroni threat model
 
-Last reviewed: 2026-08-28. Scope: desktop app, local HTTP API, optional LLM gateway, updater, packaging, and GOAI demo/evidence paths.
+Last reviewed: 2026-09-16. Scope: desktop app, local voice assistant, local HTTP API, optional LLM gateway, updater, packaging, and GOAI demo/evidence paths.
 
 ## Assets and trust boundaries
 
@@ -16,6 +16,9 @@ flowchart LR
   A["Authenticated localhost API"] --> V
   V --> G["TaskPlan and Agent tools"]
   G --> S
+  M["Microphone audio in memory"] --> W["Local Whisper transcription"]
+  W --> C["Bounded command parser and confirmation"]
+  C --> V
   S --> E["Redacted evidence export"]
 ```
 
@@ -34,6 +37,8 @@ Local files and model outputs are data, never privileged instructions. The rende
 | Invalid or oversized model JSON | Bounded response parsing, candidate validation, date grounding, and local rules fallback. | LLM/intake/task-plan tests | Provider-side retention follows the configured provider's terms. |
 | Model overwrites an original DDL | Conditional/conflicting deadlines become confirmation drafts; TaskPlan cannot change task due time. | conflict regression tests, scenario C | Users can still confirm an incorrect source, so evidence remains visible. |
 | Duplicate imports | Store reconciliation and idempotent clarification answers prevent duplicate task occurrences. | store integrity and clarification tests | Semantically equivalent but heavily paraphrased sources can still require manual cleanup. |
+| Accidental or mistranscribed voice command | Audio is transcribed locally; commands are limited to an allowlist; all mutations use short-lived preview tokens and explicit confirmation. Raw audio is not persisted. | `voice-assistant.test.mjs`, typed IPC validation | A user can still confirm an incorrect transcription, so the preview must remain visible and concise. |
+| Voice model supply and cache | Model files are fetched from the declared Hugging Face repository on first use and kept in the user-data cache; the runtime package version is pinned in the lockfile. | lockfile policy, packaging tests | Model files are not currently pinned by per-file checksum; high-assurance/offline distributions should vendor and verify an approved model manifest. |
 | Public gateway abuse or cost exhaustion | Provider key stays server-side; desktop requests are constrained by source-network and global minute/day/concurrency quotas, prompt/output caps, upstream timeout, and provider-side spend limits. Raw IP and prompts are excluded from application logs. | gateway public-access, quota, logging, and client-header tests | The public client marker can be imitated and in-memory quotas reset after redeploy; provider-side budget limits remain mandatory. |
 | Gateway timeout, 429, 5xx, offline | Typed errors and local extraction/planning fallback; model benchmark is opt-in. | gateway tests, offline benchmark | Complex semantic extraction is weaker without a model. |
 | Secret or personal data in diagnostics | API keys are absent from snapshots; evidence export removes titles, raw text, paths, free-form summaries, and credentials. | evidence report test | Ordinary application logs are not a complete diagnostic package and require continued review. |

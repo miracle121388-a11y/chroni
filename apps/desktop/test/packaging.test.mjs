@@ -159,6 +159,16 @@ test("public release jobs use the verified product packaging path", () => {
   assert.doesNotMatch(releaseWorkflow, /github\.ref_type == 'tag' && '1'/);
 });
 
+test("desktop packages preserve the local voice runtime and declare microphone use", () => {
+  assert.deepEqual(builderConfig.asarUnpack, ["node_modules/onnxruntime-node/**"]);
+  assert.match(builderConfig.mac.extendInfo.NSMicrophoneUsageDescription, /本机转写/);
+  assert.doesNotMatch(afterPackSource, /"NSMicrophoneUsageDescription"/);
+  const masEntitlements = readFileSync(new URL("../build/entitlements.mas.plist", import.meta.url), "utf8");
+  const masInheritedEntitlements = readFileSync(new URL("../build/entitlements.mas.inherit.plist", import.meta.url), "utf8");
+  assert.match(masEntitlements, /com\.apple\.security\.device\.audio-input/);
+  assert.match(masInheritedEntitlements, /com\.apple\.security\.device\.audio-input/);
+});
+
 test("competition submission ships the animated companion product build", () => {
   assert.equal(workspacePackageJson.scripts["package:submission:windows"], "pnpm run package:windows");
   assert.match(submissionPackager, /buildManifest\.variant !== "product"/);

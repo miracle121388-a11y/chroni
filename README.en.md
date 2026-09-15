@@ -16,7 +16,7 @@ _Actual product UI with isolated synthetic demo data._
 
 The repository package version is `0.2.4`. Public installer availability, signatures, and notarization status must be checked on [GitHub Releases](https://github.com/miracle121388-a11y/chroni/releases).
 
-1. Install and start Chroni. The managed smart service is enabled by default and requires no API key, access code, or account. The **Today** timeline is the default workspace.
+1. Install and start Chroni. The managed smart service is enabled by default and requires no API key, access code, or account. The **Today** timeline is the default workspace; `Ctrl/Command+Shift+Space` opens the voice assistant.
 2. Drop a course file onto the companion or import it from **Smart Organize**.
 3. Review grounded goals and milestones in **Learning Tasks**, then choose **Smart plan** in **Today** to place realistic work blocks on the timeline.
 4. Complete a block, record output evidence, and let Chroni adjust the remaining plan. At the end of the day, open **Daily Review** to keep the activity trail, reflection, and carry-over items under that date.
@@ -26,6 +26,7 @@ The repository package version is `0.2.4`. Public installer availability, signat
 | Area | Current implementation |
 | --- | --- |
 | Intake | TXT, Markdown, CSV/TSV, JSON, ICS, HTML/XML/YAML/RTF, DOCX, PDF, XLSX, and common image formats; local OCR for images/scan text. |
+| Local voice assistant | On-device Whisper transcription for schedule queries, daily summaries, task creation/completion/rescheduling, Agent planning, focus timers, and navigation. Every mutation requires a visible confirmation. |
 | Grounding | Source records, date validation, deliverables, constraints, conflict/conditional detection, duplicate reconciliation, and resumable clarification. |
 | Learning Mission | Stable mission records with goals, deliverables, success criteria, milestones, next action, risk, and linked source evidence. |
 | Verification | Local file metadata and SHA-256 or note evidence, milestone-bound checkpoints, actual effort, blockers, and evidence coverage. |
@@ -40,6 +41,8 @@ The repository package version is `0.2.4`. Public installer availability, signat
 Download the platform artifact from [Releases](https://github.com/miracle121388-a11y/chroni/releases) or the [product site](https://getchroni.zeabur.app/). Windows users should prefer the x64 Setup executable; the portable executable requires no installation. macOS users should use the universal DMG. Verify `SHA256SUMS.txt` when available. Unsigned/unnotarized builds may trigger OS warnings; do not disable global security controls.
 
 See [quick start](./docs/user/quick-start.md), [install FAQ](./docs/user/install-faq.md), and [troubleshooting](./docs/user/troubleshooting.md).
+
+The voice model is downloaded from Hugging Face on first use and cached in the application-data directory. Raw microphone audio is processed in memory and is neither persisted nor uploaded. Chroni stores up to 100 local transcript/action summaries; an unmatched transcript can enter the ordinary LLM-assisted intake flow only after confirmation. See the [privacy explanation](./docs/user/privacy.md) for the exact boundary.
 
 ## Run from source
 
