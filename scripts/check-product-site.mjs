@@ -33,12 +33,14 @@ const requiredIds = [
   "macos-dmg",
   "release-version",
   "release-status",
+  "voice",
+  "voice-demo-command",
 ];
 for (const id of requiredIds) {
   if (!ids.includes(id)) throw new Error(`Missing required site element: #${id}`);
 }
 if (!html.includes("./privacy.html")) throw new Error("Product site does not link to the privacy policy.");
-for (const requiredText of ["默认保存在本机", "联网模型可随时关闭", "密钥不进入项目数据", "没有客户端访问码"]) {
+for (const requiredText of ["默认保存在本机", "语音先在本机理解", "原始音频只在内存中", "联网模型可随时关闭", "密钥不进入项目数据", "没有客户端访问码"]) {
   if (!privacy.includes(requiredText)) throw new Error(`Privacy page is missing: ${requiredText}`);
 }
 
@@ -83,8 +85,14 @@ if (`${html}\n${script}`.includes("__CHRONI_VERSION__")) {
 if (!html.includes(`"softwareVersion": "${expectedVersion}"`)) {
   throw new Error(`Product site structured version does not match ${expectedVersion}.`);
 }
-if (!html.includes("把日程、课程要求、截图或项目材料拖给我。")) {
+if (!html.includes("把材料拖给我，或直接说出下一项安排。")) {
   throw new Error("Product site intake prompt does not cover schedules and mixed materials.");
+}
+if (!html.includes("本地语音已就绪") || !html.includes("写操作需确认")) {
+  throw new Error("Product site does not explain the local voice assistant safety model.");
+}
+if (script.includes('window.addEventListener("scroll"') || script.includes("setHeroProgress")) {
+  throw new Error("Product site reintroduced continuous scroll-driven rendering.");
 }
 if (script.includes("正在理解课程材料")) {
   throw new Error("Product site contains course-only generic understanding copy.");

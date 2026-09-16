@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f7f7f3">
-    <meta name="description" content="下载 Chroni，本地优先的学习执行 Agent。理解日程、课程要求与项目材料，建立任务、安排今天，并用成果证据持续推进。">
+    <meta name="description" content="下载 Chroni，本地优先的学习执行 Agent。拖入材料或直接说出安排，由本地语音助手、每日计划和桌宠共同推进任务。">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Chroni">
     <meta property="og:title" content="Chroni - 把要求变成今天能做的事">
-    <meta property="og:description" content="无需账号和 API Key。理解日程、课程要求与项目材料，建立任务、安排今天，并用成果证据持续推进。">
+    <meta property="og:description" content="无需账号和 API Key。拖入材料或直接说出安排，由本地语音助手、每日计划和桌宠共同推进任务。">
     <meta property="og:image" content="https://getchroni.zeabur.app/assets/learning-mission.png">
     <meta property="og:url" content="https://getchroni.zeabur.app/">
     <link rel="canonical" href="https://getchroni.zeabur.app/">
@@ -31,8 +31,8 @@
         ],
         "softwareVersion": "__CHRONI_VERSION__",
         "license": "https://opensource.org/license/mit",
-        "featureList": "No account required, no API key required, local-first data, Windows and macOS support",
-        "description": "Local-first learning execution agent that turns schedules, course requirements and project materials into grounded missions, daily actions and verifiable outcomes."
+        "featureList": "No account required, no API key required, local-first data, local voice assistant, Windows and macOS support",
+        "description": "Local-first learning execution agent with on-device voice transcription that turns schedules, course requirements and project materials into grounded missions, daily actions and verifiable outcomes."
       }
     </script>
   </head>
@@ -47,6 +47,7 @@
       <nav aria-label="主导航">
         <a href="#missions">学习任务</a>
         <a href="#planner">今日执行</a>
+        <a href="#voice">语音</a>
         <a href="#companion">桌宠</a>
         <a href="#download">下载</a>
         <a class="nav-source" href="https://github.com/miracle121388-a11y/chroni">GitHub</a>
@@ -59,7 +60,7 @@
           <div class="hero-copy">
             <p class="overline">Learning execution agent</p>
             <h1 id="hero-title">Chroni<br>学习执行 Agent</h1>
-            <p class="hero-lead">把日程、课程通知、截图或项目材料交给 Chroni。它会提取截止与交付物，建立任务，排进今天，并用成果证据持续校准下一步。</p>
+            <p class="hero-lead">把日程、课程通知、截图或项目材料交给 Chroni，也可以直接说出下一项安排。它会理解目标、建立任务、排进今天，并用成果证据持续校准下一步。</p>
             <div class="hero-actions">
               <a class="download-button primary-download" id="primary-download" href="#download" data-direct-download>
                 <span id="primary-download-label">直接下载 Chroni</span>
@@ -75,6 +76,7 @@
               <li>无需账号</li>
               <li>无需 API Key</li>
               <li>本地优先</li>
+              <li>本地语音</li>
             </ul>
             <p class="mobile-desktop-note">Chroni 是桌面应用，请在 Windows 或 macOS 电脑上下载。</p>
           </div>
@@ -92,7 +94,7 @@
             </article>
 
             <div class="hero-mascot" aria-hidden="true">
-              <div class="mascot-bubble" id="hero-bubble">把日程、课程要求、截图或项目材料拖给我。</div>
+              <div class="mascot-bubble" id="hero-bubble">把材料拖给我，或直接说出下一项安排。</div>
               <div class="mascot-images">
                 <img class="mascot-frame mascot-idle" src="./assets/pet-idle.png" width="256" height="256" decoding="async" alt="">
                 <img class="mascot-frame mascot-reading" src="./assets/pet-study.png" width="256" height="256" decoding="async" alt="">
@@ -133,7 +135,7 @@
       <section class="release-bar" aria-label="发布信息">
         <div><span>当前版本</span><strong id="release-version">v__CHRONI_VERSION__</strong></div>
         <div><span>支持平台</span><strong>Windows · macOS</strong></div>
-        <div><span>开箱即用</span><strong>无需账号 · 无需 API Key</strong></div>
+        <div><span>自然交互</span><strong>本地语音 · 写操作需确认</strong></div>
         <a href="#download">选择安装包 <span aria-hidden="true">→</span></a>
       </section>
 
@@ -144,7 +146,7 @@
             <h2 id="story-title">不是把文字搬进日历。<br>是理解目标，再建立任务。</h2>
           </div>
 
-          <div class="clarity-scene" aria-label="多种材料被整理为结构化任务">
+          <div class="clarity-scene" data-reveal aria-label="多种材料被整理为结构化任务">
             <div class="source-stack" aria-label="输入材料">
               <article class="source-sheet source-chat">
                 <span>课程群</span>
@@ -310,6 +312,51 @@
         </div>
       </section>
 
+      <section class="voice-section" id="voice" aria-labelledby="voice-title">
+        <div class="voice-inner">
+          <div class="voice-copy" data-reveal>
+            <h2 id="voice-title">一句话，让计划继续往前走。</h2>
+            <p>按下 <kbd>Ctrl/Command + Shift + Space</kbd>，说出任务、时间或你想了解的安排。Chroni 在本机完成语音转写，先给出可检查的结果，再执行会改变数据的操作。</p>
+            <ul class="voice-principles">
+              <li><strong>本地转写</strong><span>原始音频不保存、不上传</span></li>
+              <li><strong>执行前确认</strong><span>创建、完成、改期与 Agent 操作先预览</span></li>
+              <li><strong>系统级陪伴</strong><span>语音回复、专注计时与桌宠提醒协同</span></li>
+            </ul>
+          </div>
+
+          <div class="voice-demo" data-voice-demo data-reveal aria-label="Chroni 语音助手交互演示">
+            <div class="voice-demo-head">
+              <span><i aria-hidden="true"></i>本地语音已就绪</span>
+              <kbd>Ctrl/⌘ + Shift + Space</kbd>
+            </div>
+            <div class="voice-demo-body">
+              <div class="voice-pet">
+                <img src="./assets/pet-response.png" width="256" height="256" loading="lazy" decoding="async" alt="Chroni 桌宠正在回应语音指令">
+                <span>Chroni</span>
+              </div>
+              <div class="voice-command-view">
+                <button class="voice-mic" type="button" data-voice-next aria-label="切换语音指令演示">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"></path></svg>
+                  <span class="voice-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                </button>
+                <p class="voice-command" id="voice-demo-command">“明天下午三点写项目报告，安排一个小时。”</p>
+                <div class="voice-preview">
+                  <span id="voice-demo-mode">修改日程 · 等待确认</span>
+                  <strong id="voice-demo-title">添加“写项目报告”</strong>
+                  <p id="voice-demo-detail">明天 15:00–16:00 · 保存到每日任务</p>
+                  <span class="voice-confirm" id="voice-demo-action">确认后执行</span>
+                </div>
+              </div>
+            </div>
+            <div class="voice-examples" role="tablist" aria-label="语音指令示例">
+              <button type="button" role="tab" aria-selected="true" data-voice-example="create">创建任务</button>
+              <button type="button" role="tab" aria-selected="false" data-voice-example="schedule">查询日程</button>
+              <button type="button" role="tab" aria-selected="false" data-voice-example="summary">总结今天</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="companion-section section" id="companion" aria-labelledby="companion-title">
         <div class="section-heading companion-heading">
           <p class="overline">Desktop companion</p>
@@ -373,7 +420,7 @@
             <p class="overline">Local-first by design</p>
             <h2 id="trust-title">学习过程先属于你自己。</h2>
           </div>
-          <p>原始文件、学习任务、成果证据元数据、计划、偏好和执行记录默认保存在本机。开启智能模型后，仅当前理解日程、任务或课程要求所需的文本会按配置发送，原始文件与成果文件不会进入 Chroni 网关。</p>
+          <p>原始文件、麦克风音频、学习任务、成果证据元数据、计划、偏好和执行记录默认留在本机。开启智能模型后，仅当前理解日程、任务或课程要求所需的文本会按配置发送，原始文件、成果文件与麦克风音频不会进入 Chroni 网关。</p>
           <div class="trust-links">
             <a href="./privacy.html">隐私说明 <span aria-hidden="true">→</span></a>
             <a href="https://github.com/miracle121388-a11y/chroni">查看源代码 <span aria-hidden="true">→</span></a>
@@ -392,7 +439,7 @@
           <article class="download-card recommended" id="windows-setup-card">
             <div class="card-topline"><span>Windows</span><span class="recommended-label">推荐 · 点击即下</span></div>
             <h3>Windows 安装版</h3>
-            <p>适用于 Windows 10/11 x64。包含开始菜单、桌面快捷方式与标准卸载入口。</p>
+            <p>适用于 Windows 10/11 x64。包含本地语音助手、开始菜单、桌面快捷方式与标准卸载入口。</p>
             <dl>
               <div><dt>格式</dt><dd>Setup EXE</dd></div>
               <div><dt>架构</dt><dd>x64</dd></div>
@@ -406,7 +453,7 @@
           <article class="download-card" id="macos-card">
             <div class="card-topline"><span>macOS · Universal</span><span class="direct-label">点击即下</span></div>
             <h3>macOS 通用版</h3>
-            <p>适用于 macOS 12 及以上版本，同时兼容 Apple Silicon 与 Intel Mac。当前版本未经 Apple 公证，首次启动需按安全提示允许打开；默认托管智能服务不使用钥匙串，只有主动保存自定义 API Key 时才会访问。</p>
+            <p>适用于 macOS 12 及以上版本，同时兼容 Apple Silicon 与 Intel Mac，并包含本地语音助手。当前版本未经 Apple 公证，首次启动需按安全提示允许打开；默认托管智能服务不使用钥匙串，只有主动保存自定义 API Key 时才会访问。</p>
             <dl>
               <div><dt>格式</dt><dd>DMG</dd></div>
               <div><dt>架构</dt><dd>Universal</dd></div>
@@ -446,6 +493,10 @@
           <details>
             <summary>文件会上传到 Chroni 服务器吗？</summary>
             <p>文件解析、PDF 文本提取和图片 OCR 在桌面端完成。开启智能模型时，当前任务所需的提取文本会发送给所选模型服务，原始文件不会进入 Chroni 网关。</p>
+          </details>
+          <details>
+            <summary>语音会上传到服务器吗？</summary>
+            <p>不会上传原始音频。Chroni 使用本地 Whisper 模型完成转写；只有本地无法直接匹配、且你确认继续理解的文字内容，才会按当前模型设置进入任务理解流程。</p>
           </details>
           <details>
             <summary>Windows 和 macOS 的功能一致吗？</summary>

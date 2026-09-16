@@ -176,99 +176,22 @@ document.querySelector("#current-year").textContent = String(new Date().getFullY
 loadLatestRelease();
 initializeDirectDownloadFeedback();
 
-const clamp = (value, minimum = 0, maximum = 1) => Math.min(maximum, Math.max(minimum, value));
-const rangeProgress = (progress, start, end) => clamp((progress - start) / (end - start));
 const reduceMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-const desktopStoryQuery = window.matchMedia("(min-width: 901px)");
+const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+const motionLite = Boolean(
+  connection?.saveData
+  || (Number.isFinite(navigator.deviceMemory) && navigator.deviceMemory <= 4)
+  || (Number.isFinite(navigator.hardwareConcurrency) && navigator.hardwareConcurrency <= 4)
+);
 
-function setHeroProgress(progress) {
-  const stage = document.querySelector(".hero-stage");
-  if (!stage) return;
-
-  const enter = rangeProgress(progress, 0, 0.15);
-  const reading = rangeProgress(progress, 0.15, 0.32);
-  const extracting = rangeProgress(progress, 0.32, 0.52);
-  const planning = rangeProgress(progress, 0.52, 0.73);
-  const reminding = rangeProgress(progress, 0.73, 0.9);
-  const readingVisibility = clamp(reading - reminding);
-
-  stage.style.setProperty("--notice-x", `${-44 * (1 - enter) + 135 * reading}px`);
-  stage.style.setProperty("--notice-y", `${26 * reading}px`);
-  stage.style.setProperty("--notice-scale", String(1 - reading * 0.24));
-  stage.style.setProperty("--notice-opacity", String(1 - planning * 0.32));
-  stage.style.setProperty("--highlight-opacity", String(reading * 0.78));
-  stage.style.setProperty("--highlight-line", String(reading * 0.62));
-  stage.style.setProperty("--extract-opacity", String(extracting));
-  stage.style.setProperty("--extract-x", `${-48 * (1 - extracting) + 30 * planning}px`);
-  stage.style.setProperty("--extract-y", `${20 * (1 - extracting) - 12 * planning}px`);
-  stage.style.setProperty("--extract-scale", String(0.92 + extracting * 0.08 - planning * 0.04));
-  stage.style.setProperty("--window-x", `${84 * (1 - planning)}px`);
-  stage.style.setProperty("--window-y", `${34 * (1 - planning)}px`);
-  stage.style.setProperty("--window-scale", String(0.84 + planning * 0.16));
-  stage.style.setProperty("--window-opacity", String(0.58 + planning * 0.42));
-  stage.style.setProperty("--insight-opacity", String(planning));
-  stage.style.setProperty("--insight-y", `${10 * (1 - planning)}px`);
-  stage.style.setProperty("--mascot-idle", String(1 - reading));
-  stage.style.setProperty("--mascot-reading", String(readingVisibility));
-  stage.style.setProperty("--mascot-reminding", String(reminding));
-  stage.style.setProperty("--mascot-y", `${-5 * reading}px`);
-  stage.style.setProperty("--progress-width", `${progress * 100}%`);
-
-  const bubble = document.querySelector("#hero-bubble");
-  if (!bubble) return;
-  const nextText = progress < 0.15
-    ? "把日程、课程要求、截图或项目材料拖给我。"
-    : progress < 0.32
-      ? "正在识别目标、交付物与提交要求…"
-      : progress < 0.52
-        ? "学习目标与验收标准已经确认。"
-        : progress < 0.73
-          ? "我正在把里程碑排进今天。"
-          : "19:00 开始第一步，完成后记得留下证据。";
-  if (bubble.textContent !== nextText) bubble.textContent = nextText;
-}
-
-function updateScrollScenes() {
-  const hero = document.querySelector(".hero-story");
-  if (hero && desktopStoryQuery.matches && !reduceMotionQuery.matches) {
-    const denominator = Math.max(1, hero.offsetHeight - window.innerHeight);
-    setHeroProgress(clamp(-hero.getBoundingClientRect().top / denominator));
-  }
-
-  const clarity = document.querySelector(".clarity-story");
-  const clarityStage = document.querySelector(".clarity-stage");
-  if (!clarity || !clarityStage) return;
-  if (!desktopStoryQuery.matches || reduceMotionQuery.matches) {
-    clarityStage.dataset.step = "3";
-    return;
-  }
-  const denominator = Math.max(1, clarity.offsetHeight - window.innerHeight);
-  const progress = clamp(-clarity.getBoundingClientRect().top / denominator);
-  clarityStage.dataset.step = progress < 0.12 ? "0" : progress < 0.36 ? "1" : progress < 0.68 ? "2" : "3";
-}
-
-function initializeScrollMotion() {
+function initializeMotion() {
   document.body.classList.add("motion-ready");
-  setHeroProgress(reduceMotionQuery.matches || !desktopStoryQuery.matches ? 1 : 0);
-  let frameRequested = false;
-  const requestUpdate = () => {
-    if (frameRequested) return;
-    frameRequested = true;
-    requestAnimationFrame(() => {
-      frameRequested = false;
-      updateScrollScenes();
-    });
-  };
-  window.addEventListener("scroll", requestUpdate, { passive: true });
-  window.addEventListener("resize", requestUpdate);
-  reduceMotionQuery.addEventListener?.("change", requestUpdate);
-  desktopStoryQuery.addEventListener?.("change", requestUpdate);
-  requestUpdate();
+  document.body.classList.toggle("motion-lite", motionLite || reduceMotionQuery.matches);
 }
 
 function initializeRevealScenes() {
   const elements = [...document.querySelectorAll("[data-reveal]")];
-  if (!("IntersectionObserver" in window) || reduceMotionQuery.matches) {
+  if (!("IntersectionObserver" in window) || reduceMotionQuery.matches || motionLite) {
     elements.forEach((element) => element.classList.add("in-view"));
     return;
   }
@@ -333,6 +256,63 @@ const mascotStates = {
   },
 };
 
+const voiceExamples = {
+  create: {
+    command: "“明天下午三点写项目报告，安排一个小时。”",
+    mode: "修改日程 · 等待确认",
+    title: "添加“写项目报告”",
+    detail: "明天 15:00–16:00 · 保存到每日任务",
+    action: "确认后执行",
+  },
+  schedule: {
+    command: "“我今天下午还有什么安排？”",
+    mode: "查询日程 · 直接回答",
+    title: "今天还有 2 项安排",
+    detail: "15:30 组会 · 19:00 数据库作业",
+    action: "只读取，不修改",
+  },
+  summary: {
+    command: "“总结一下我今天完成了什么。”",
+    mode: "每日总结 · 读取记录",
+    title: "完成 3 项 · 专注 4 小时 10 分",
+    detail: "已整理成果、阻塞原因与明日建议",
+    action: "打开今日手账",
+  },
+};
+
+function initializeVoiceDemo() {
+  const demo = document.querySelector("[data-voice-demo]");
+  if (!demo) return;
+  const buttons = [...demo.querySelectorAll("[data-voice-example]")];
+  const command = demo.querySelector("#voice-demo-command");
+  const mode = demo.querySelector("#voice-demo-mode");
+  const title = demo.querySelector("#voice-demo-title");
+  const detail = demo.querySelector("#voice-demo-detail");
+  const action = demo.querySelector("#voice-demo-action");
+  let activeIndex = 0;
+  let transitionTimer;
+
+  const selectExample = (button) => {
+    const example = voiceExamples[button.dataset.voiceExample];
+    if (!example) return;
+    activeIndex = buttons.indexOf(button);
+    buttons.forEach((candidate) => candidate.setAttribute("aria-selected", String(candidate === button)));
+    window.clearTimeout(transitionTimer);
+    demo.classList.add("is-speaking");
+    command.textContent = example.command;
+    mode.textContent = example.mode;
+    title.textContent = example.title;
+    detail.textContent = example.detail;
+    action.textContent = example.action;
+    transitionTimer = window.setTimeout(() => demo.classList.remove("is-speaking"), reduceMotionQuery.matches ? 0 : 520);
+  };
+
+  buttons.forEach((button) => button.addEventListener("click", () => selectExample(button)));
+  demo.querySelector("[data-voice-next]")?.addEventListener("click", () => {
+    selectExample(buttons[(activeIndex + 1) % buttons.length]);
+  });
+}
+
 function initializeMascotStage() {
   const stage = document.querySelector("[data-mascot-stage]");
   if (!stage) return;
@@ -362,7 +342,7 @@ function initializeMascotStage() {
       message.textContent = state.message;
       title.textContent = state.title;
       meta.textContent = state.meta;
-      timeline.style.width = `${((buttons.indexOf(button) + 1) / buttons.length) * 100}%`;
+      timeline.style.transform = `scaleX(${(buttons.indexOf(button) + 1) / buttons.length})`;
       mascot.classList.remove("changing");
     }, reduceMotionQuery.matches ? 0 : 130);
   };
@@ -380,8 +360,9 @@ function initializeMascotStage() {
   });
 }
 
-initializeScrollMotion();
+initializeMotion();
 initializeRevealScenes();
+initializeVoiceDemo();
 initializeMascotStage();
 
 document.addEventListener("visibilitychange", () => {

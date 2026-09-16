@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f7f7f3">
-    <meta name="description" content="Chroni 隐私说明：本地数据、默认托管模型调用、自定义凭据保护和数据删除方式。">
+    <meta name="description" content="Chroni 隐私说明：本地数据、本地语音转写、默认托管模型调用、自定义凭据保护和数据删除方式。">
     <link rel="canonical" href="https://getchroni.zeabur.app/privacy.html">
     <link rel="icon" href="./assets/chroni-icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./styles.css">
@@ -28,12 +28,13 @@
         <p class="overline">Privacy at Chroni</p>
         <h1>你的学习过程，<br>默认留在你的电脑里。</h1>
         <p>本说明适用于 Chroni 0.2.x。Chroni 是本地优先桌面应用，不提供账号系统、广告追踪或默认云同步。</p>
-        <span>更新日期：2026 年 8 月 28 日</span>
+        <span>更新日期：2026 年 9 月 16 日</span>
       </header>
 
       <div class="privacy-layout">
         <aside aria-label="本页目录">
           <a href="#local">本地数据</a>
+          <a href="#voice">语音助手</a>
           <a href="#model">模型调用</a>
           <a href="#credentials">凭据保护</a>
           <a href="#delete">导出与删除</a>
@@ -44,33 +45,40 @@
           <section id="local">
             <p class="privacy-index">01</p>
             <h2>默认保存在本机</h2>
-            <p>学习任务、来源、计划、每日安排、执行记录、偏好、桌宠位置和成果证据元数据保存在操作系统为 Chroni 分配的应用数据目录。Chroni 不会在后台把这些内容同步到开发者服务器。</p>
+            <p>学习任务、来源、计划、每日安排、执行记录、语音指令摘要、偏好、桌宠位置和成果证据元数据保存在操作系统为 Chroni 分配的应用数据目录。Chroni 不会在后台把这些内容同步到开发者服务器。</p>
             <p>证据文件只登记显示名、类型、大小、修改时间和校验摘要；原始成果文件不会被 Chroni 网关接收。</p>
           </section>
 
-          <section id="model">
+          <section id="voice">
             <p class="privacy-index">02</p>
+            <h2>语音先在本机理解</h2>
+            <p>原始音频只在内存中用于本地 Whisper 转写，不保存为录音文件，也不会发送到 Chroni 网关或模型服务。语音模型在首次使用时下载到本机缓存，之后可离线完成转写。</p>
+            <p>Chroni 会在本机保留最近的语音文字与执行结果，便于你查看和追溯。能够由本地命令直接处理的内容不会调用联网模型；无法匹配的文字只有在你确认继续理解后，才会按当前模型设置进入任务理解流程。</p>
+          </section>
+
+          <section id="model">
+            <p class="privacy-index">03</p>
             <h2>联网模型可随时关闭</h2>
-            <p>新安装默认启用 Chroni 智能服务。本地解析或 OCR 得到的必要文本、来源名称及时间上下文会经 Chroni 网关发送到 DeepSeek，用于任务提取和规划；你可以关闭“启用智能模型”，关闭后 Chroni 不会调用模型服务，也可以改用自己的兼容 API。</p>
+            <p>新安装默认启用 Chroni 智能服务。本地解析、OCR 或经你确认继续理解的语音文字所产生的必要文本、来源名称及时间上下文会经 Chroni 网关发送到 DeepSeek，用于任务提取和规划；原始文件与麦克风音频不会发送。你可以关闭“启用智能模型”，关闭后 Chroni 不会调用模型服务，也可以改用自己的兼容 API。</p>
             <p>Chroni 托管网关按来源网络和全局额度限流。应用日志可能包含请求标识、使用服务端密钥生成的来源网络摘要、状态、耗时和 token 数，不记录提示词正文或原始 IP，也不建立提示词数据库。部署平台日志和模型服务的数据留存规则同时适用。</p>
           </section>
 
           <section id="credentials">
-            <p class="privacy-index">03</p>
+            <p class="privacy-index">04</p>
             <h2>密钥不进入项目数据</h2>
             <p>Chroni 智能服务没有客户端访问码，DeepSeek 主密钥只存在于服务器环境变量，不会进入安装包、本机状态或桌面请求。系统安全存储采用惰性初始化；只有主动切换到自定义 API 并保存或读取自己的 Key 时，Chroni 才会调用 Electron safeStorage，macOS 此时可能要求当前账户授权。系统安全存储不可用时，自定义凭据只在本次运行中使用。</p>
             <p>本地 HTTP API 默认仅监听 127.0.0.1，并使用每次启动生成的会话令牌保护除健康检查外的接口。</p>
           </section>
 
           <section id="delete">
-            <p class="privacy-index">04</p>
+            <p class="privacy-index">05</p>
             <h2>你可以查看、导出和删除</h2>
             <p>在“运行状态”中可以打开本地数据位置。完全退出 Chroni 后删除该目录，即可移除应用保存的任务、计划、偏好、缓存和备份；卸载程序默认不会擅自删除这些数据。</p>
             <p>删除不可撤销，请先保留所需的日历或证据导出文件。托管模式不在本机保存服务凭据，也没有云端任务库；部署平台运维日志与模型服务已处理数据适用各自的留存和删除规则。</p>
           </section>
 
           <section id="contact">
-            <p class="privacy-index">05</p>
+            <p class="privacy-index">06</p>
             <h2>联系与政策更新</h2>
             <p>隐私与安全问题可通过 GitHub Security 的私密漏洞报告提交。政策发生实质变化时，本页面与应用版本说明会同步更新。</p>
             <div class="privacy-actions">
