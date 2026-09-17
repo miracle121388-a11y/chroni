@@ -1125,10 +1125,18 @@ export class ChroniStore {
     if (patch.llm?.mode === "managed") this.#unreadableApiKeyProtected = undefined;
     const impliedMode = patch.llm?.mode
       ?? (patch.llm?.apiKey?.trim() ? "custom" : this.#state.preferences.llm.mode);
+    const connectionChanged = patch.llm !== undefined && (
+      (patch.llm.mode !== undefined && patch.llm.mode !== this.#state.preferences.llm.mode)
+      || (patch.llm.baseUrl !== undefined && patch.llm.baseUrl.trim() !== this.#state.preferences.llm.baseUrl)
+      || (patch.llm.model !== undefined && patch.llm.model.trim() !== this.#state.preferences.llm.model)
+    );
+    const explicitEnable = patch.llm?.enabled === true;
     const mergedLlm = {
       ...this.#state.preferences.llm,
       ...(patch.llm ?? {}),
       mode: impliedMode,
+      ...(connectionChanged && !explicitEnable ? { enabled: false, dataSharingConsentAt: undefined } : {}),
+      ...(explicitEnable ? { dataSharingConsentAt: patch.llm?.dataSharingConsentAt ?? new Date().toISOString() } : {}),
     };
     const nextLlm = mergedLlm.mode === "managed" ? { ...mergedLlm, apiKey: "" } : mergedLlm;
     this.#state.preferences = {
@@ -1249,7 +1257,10 @@ export class ChroniStore {
     }
     if (legacyApiKey || (managedWithoutClientCredential && (rawLegacyApiKey || rawApiKeyProtected))) this.#needsSecretMigration = true;
     const normalizedPreferences = normalizeChroniPreferences(parsed.preferences, persistedLlm, apiKey);
-    if (normalizedPreferences.repaired) this.#appendStorageDiagnostic("已修复损坏或类型不正确的偏好设置，并对无效字段使用安全默认值。");
+    if (normalizedPreferences.repaired) {
+      this.#needsSecretMigration = true;
+      this.#appendStorageDiagnostic("已修复损坏或类型不正确的偏好设置，并对无效字段使用安全默认值。");
+    }
     const normalizedItems = normalizeDdlItems(parsed.items);
     if (normalizedItems.discarded) {
       this.#appendStorageDiagnostic(`已跳过 ${normalizedItems.discarded} 条损坏或不完整的日程记录，其余本地数据已正常载入。`);
@@ -1505,6 +1516,13 @@ function normalizeChroniPreferences(value: unknown, llmValue: PersistedLlmSettin
   if (llmProvider !== undefined && llmProvider !== "openai-compatible") repaired += 1;
   const llmMode = llm?.mode;
   if (llmMode !== undefined && llmMode !== "managed" && llmMode !== "custom") repaired += 1;
+  const rawConsentAt = llm?.dataSharingConsentAt;
+  const dataSharingConsentAt = typeof rawConsentAt === "string" && parseRfc3339DateTime(rawConsentAt)
+    ? parseRfc3339DateTime(rawConsentAt)?.toISOString()
+    : undefined;
+  if (rawConsentAt !== undefined && !dataSharingConsentAt) repaired += 1;
+  const llmEnabled = typeof llmBoolean === "boolean" ? llmBoolean : defaults.llm.enabled;
+  if (llmEnabled && !dataSharingConsentAt) repaired += 1;
   const llmString = (field: "baseUrl" | "model", fallback: string): string => {
     const candidate = llm?.[field];
     if (candidate === undefined) return fallback;
@@ -1534,7 +1552,8 @@ function normalizeChroniPreferences(value: unknown, llmValue: PersistedLlmSettin
       voiceRepliesEnabled: booleanField("voiceRepliesEnabled"),
       voiceHotkey,
       llm: {
-        enabled: typeof llmBoolean === "boolean" ? llmBoolean : defaults.llm.enabled,
+        enabled: llmEnabled && !!dataSharingConsentAt,
+        ...(dataSharingConsentAt ? { dataSharingConsentAt } : {}),
         mode: llmMode === "managed" || llmMode === "custom" ? llmMode : llm ? "custom" : defaults.llm.mode,
         provider: "openai-compatible",
         baseUrl: llmString("baseUrl", defaults.llm.baseUrl),

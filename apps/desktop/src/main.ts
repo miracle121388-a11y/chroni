@@ -1,5 +1,5 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, Notification, safeStorage, shell } from "electron";
-import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 import { DeadlineAgent } from "./agent/deadline-agent.js";
@@ -52,11 +52,9 @@ if (!gotLock) {
     applyMacDevelopmentIcon();
     if (process.platform === "win32") app.setAppUserModelId("app.chroni.desktop");
     const userDataPath = app.getPath("userData");
-    const firstLaunch = !existsSync(join(userDataPath, "chroni-state.json"));
     process.env.CHRONI_OCR_CACHE_PATH ||= join(userDataPath, "cache", "ocr");
     storeSecretCodec = createSecretCodec();
     primaryStore = new ChroniStore(userDataPath, storeSecretCodec);
-    if (firstLaunch) primaryStore.updatePreferences({ llm: { enabled: true, mode: "managed" } });
     store = primaryStore;
     installDeadlineAgent();
     installVoiceAssistant(userDataPath);

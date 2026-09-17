@@ -50,12 +50,15 @@ test("packaging commands never publish before release artifacts are verified", (
     assert.match(packageJson.scripts[name], /--publish never/);
     assert.match(packageJson.scripts[name], /verify-desktop-artifact\.mjs/);
   }
-  for (const name of ["package", "package:win", "package:mac", "package:linux", "package:win:store", "package:mac:store"]) {
+  for (const name of ["package", "package:win", "package:mac", "package:linux", "package:win:store"]) {
     assert.match(packageJson.scripts[name], /CHRONI_PET_ASSET_MODE=xiaotong/);
   }
-  for (const name of ["package:inner", "package:win:inner", "package:mac:inner", "package:linux:inner", "package:win:store:inner", "package:mac:store:inner"]) {
+  for (const name of ["package:inner", "package:win:inner", "package:mac:inner", "package:linux:inner", "package:win:store:inner"]) {
     assert.match(packageJson.scripts[name], /verify:product-assets/);
   }
+  assert.match(packageJson.scripts["package:mac:store"], /CHRONI_PET_ASSET_MODE=original/);
+  assert.match(packageJson.scripts["package:mac:store"], /CHRONI_BUILD_VARIANT=store/);
+  assert.match(packageJson.scripts["package:mac:store:inner"], /verify:store-assets/);
   for (const name of ["package:goai:win", "package:goai:mac"]) {
     assert.match(packageJson.scripts[name], /CHRONI_PET_ASSET_MODE=original/);
   }
@@ -70,6 +73,8 @@ test("macOS universal packaging preserves both canvas native architectures", () 
   assert.match(workspaceConfig, /supportedArchitectures:[\s\S]*cpu:[\s\S]*- x64[\s\S]*- arm64/);
   assert.match(artifactVerifier, /canvas-darwin-arm64\/skia\.darwin-arm64\.node/);
   assert.match(artifactVerifier, /canvas-darwin-x64\/skia\.darwin-x64\.node/);
+  assert.match(artifactVerifier, /onnxruntime-node\/bin\/napi-v6\/darwin\/arm64\/onnxruntime_binding\.node/);
+  assert.match(artifactVerifier, /onnxruntime-node\/bin\/napi-v6\/darwin\/x64\/onnxruntime_binding\.node/);
   assert.match(artifactVerifier, /assertArchitectures/);
 });
 
@@ -91,11 +96,12 @@ test("unsigned macOS packages do not access Keychain for unused browser cookies"
   }
 });
 
-test("fresh desktop installs use the managed model without a packaged credential", () => {
-  assert.match(mainSource, /const firstLaunch = !existsSync/);
-  assert.match(mainSource, /if \(firstLaunch\) primaryStore\.updatePreferences\(\{ llm: \{ enabled: true, mode: "managed" \} \}\)/);
+test("fresh desktop installs stay local until model data sharing is accepted", () => {
+  assert.doesNotMatch(mainSource, /firstLaunch/);
   assert.match(llmClientSource, /"x-chroni-client": "desktop"/);
   assert.match(rendererSource, /无需填写 API Key 或服务访问码/);
+  assert.match(rendererSource, /是否同意并开启/);
+  assert.match(rendererSource, /dataSharingConsentAt/);
   assert.doesNotMatch(rendererSource, /服务访问码<input/);
   assert.doesNotMatch(mainSource, /if \(!safeStorage\.isEncryptionAvailable\(\)\) return undefined/);
   assert.match(mainSource, /encrypt: \(value\) => \{[\s\S]*safeStorage\.isEncryptionAvailable\(\)/);
@@ -134,6 +140,8 @@ test("Store packages keep Chroni identity, sandbox permissions, and system-manag
   assert.equal(builderConfig.mas.entitlements, "build/entitlements.mas.plist");
   assert.equal(builderConfig.mas.entitlementsInherit, "build/entitlements.mas.inherit.plist");
   assert.deepEqual(builderConfig.mac.extendInfo.CFBundleLocalizations, ["zh_CN"]);
+  assert.equal(builderConfig.mac.extendInfo.ITSAppUsesNonExemptEncryption, false);
+  assert.match(builderConfig.mac.extendInfo.NSMicrophoneUsageDescription, /本机转写/);
   assert.equal(builderConfig.mac.extraResources.some((entry) => entry.to === "PrivacyInfo.xcprivacy"), true);
   assert.match(mainSource, /managedByStore: Boolean\(process\.mas \|\| process\.windowsStore\)/);
   assert.match(preloadSource, /storeManaged: Boolean\(process\.mas \|\| process\.windowsStore\)/);
@@ -143,6 +151,9 @@ test("Store packages keep Chroni identity, sandbox permissions, and system-manag
   assert.match(storeWorkflow, /store-verification-macos\.json/);
   assert.match(storeWorkflow, /MAC_STORE_INSTALLER_CSC_LINK/);
   assert.match(storeWorkflow, /MAC_STORE_INSTALLER_CSC_KEY_PASSWORD/);
+  assert.match(storeWorkflow, /CHRONI_MAC_BUILD_NUMBER/);
+  assert.match(storeWorkflow, /CHRONI_APP_STORE_SUPPORT_EMAIL/);
+  assert.match(storeWorkflow, /APP_STORE_CONNECT_API_PRIVATE_KEY/);
 });
 
 test("release packaging removes empty certificate variables", () => {

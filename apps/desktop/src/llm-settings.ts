@@ -11,7 +11,7 @@ export type LlmEnvironment = Partial<Record<
 >>;
 
 const fallbackSettings: ChroniLlmSettings = {
-  enabled: true,
+  enabled: false,
   mode: "managed",
   provider: "openai-compatible",
   baseUrl: CHRONI_MANAGED_LLM_BASE_URL,
@@ -34,6 +34,7 @@ export function resolveLlmSettings(settings?: ChroniLlmSettings, environment: Ll
   const current = settings ?? fallbackSettings;
   return {
     enabled: booleanEnvironmentValue(environment.CHRONI_LLM_ENABLED) ?? current.enabled,
+    ...(current.dataSharingConsentAt ? { dataSharingConsentAt: current.dataSharingConsentAt } : {}),
     mode: modeEnvironmentValue(environment.CHRONI_LLM_MODE) ?? current.mode ?? "custom",
     provider: "openai-compatible",
     baseUrl: stringEnvironmentValue(environment.CHRONI_LLM_BASE_URL) ?? current.baseUrl,

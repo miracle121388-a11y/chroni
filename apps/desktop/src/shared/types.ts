@@ -638,6 +638,8 @@ export const CHRONI_CUSTOM_LLM_MODEL = "deepseek-v4-flash";
 
 export type ChroniLlmSettings = {
   enabled: boolean;
+  /** RFC 3339 timestamp recorded only after the user accepts off-device model processing. */
+  dataSharingConsentAt?: string;
   mode: ChroniLlmMode;
   provider: ChroniLlmProvider;
   baseUrl: string;

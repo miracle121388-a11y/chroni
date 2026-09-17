@@ -1265,6 +1265,11 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
         mode: llmDraft.mode,
         baseUrl: llmDraft.baseUrl,
         model: llmDraft.model,
+        ...(llmDraft.mode !== preferences.llm.mode
+          || llmDraft.baseUrl.trim() !== preferences.llm.baseUrl
+          || llmDraft.model.trim() !== preferences.llm.model
+          ? { enabled: false, dataSharingConsentAt: undefined }
+          : {}),
         ...(llmDraft.apiKey.trim()
           ? { apiKey: llmDraft.apiKey }
           : llmDraft.mode !== preferences.llm.mode ? { apiKey: "" } : {}),
@@ -1279,6 +1284,21 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
     } finally {
       setLlmBusy(false);
     }
+  }
+  async function setLlmEnabled(value: boolean): Promise<void> {
+    if (!value) {
+      await patch({ llm: { enabled: false } }, "智能模型已关闭；任务内容不会发送到模型服务。");
+      return;
+    }
+    const destination = preferences.llm.mode === "managed" ? "Chroni 网关及 DeepSeek" : "你已保存的第三方模型服务";
+    const accepted = window.confirm(
+      `开启智能模型会将完成抽取或规划所需的解析文本、来源名称、时间上下文和已筛选偏好发送到${destination}。二进制原文件、原始录音和证据文件不会发送。是否同意并开启？`,
+    );
+    if (!accepted) {
+      setSettingsFeedback({ message: "未开启智能模型，Chroni 将继续使用本地规则。", tone: "ok" });
+      return;
+    }
+    await patch({ llm: { enabled: true, dataSharingConsentAt: new Date().toISOString() } }, "已记录授权并开启智能模型。");
   }
   const modelMode = services.model === "ready" ? "LLM 优先" : "本地规则";
   const effectiveLlmEnabled = services.modelEnabledOverride ?? preferences.llm.enabled;
@@ -1353,7 +1373,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
             : "启用智能模型（由环境变量控制）"}
           checked={effectiveLlmEnabled}
           disabled={services.modelEnabledOverride !== undefined}
-          onChange={(value) => void patch({ llm: { enabled: value } }, value ? "智能模型已开启。" : "智能模型已关闭。")}
+          onChange={(value) => void setLlmEnabled(value)}
         />
         <details className="advanced-settings">
           <summary>智能模型服务</summary>
@@ -1365,7 +1385,7 @@ function PreferencesPane({ preferences, services, setSnapshot }: { preferences: 
             <>
               <div className="managed-llm-note">
                 <strong>Chroni 托管智能服务 · DeepSeek V4 Flash</strong>
-                <span>下载后默认可用，无需填写 API Key 或服务访问码。主密钥只保存在 Chroni 服务端，安装包不包含任何模型密钥。</span>
+                <span>无需填写 API Key 或服务访问码；首次开启前会说明发送的数据与接收方并征得同意。主密钥只保存在 Chroni 服务端，安装包不包含任何模型密钥。</span>
               </div>
             </>
           ) : (

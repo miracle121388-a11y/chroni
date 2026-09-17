@@ -59,13 +59,13 @@ test("legacy settings without a mode remain custom connections", () => {
   assert.equal(resolveLlmSettings(legacy).mode, "custom");
 });
 
-test("fresh installs use the managed model without a client credential", () => {
+test("fresh installs stay offline until the managed model is explicitly enabled", () => {
   const resolved = resolveLlmSettings(undefined, {});
-  assert.equal(resolved.enabled, true);
+  assert.equal(resolved.enabled, false);
   assert.equal(resolved.mode, "managed");
   assert.equal(resolved.apiKey, "");
   assert.equal(hasLlmAccess(resolved), true);
-  assert.equal(isLlmReady(resolved), true);
-  assert.equal(isLlmReady({ ...resolved, enabled: false }), false);
+  assert.equal(isLlmReady(resolved), false);
+  assert.equal(isLlmReady({ ...resolved, enabled: true }), true);
   assert.equal(hasLlmAccess({ ...resolved, mode: "custom" }), false);
 });

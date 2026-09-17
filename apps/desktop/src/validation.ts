@@ -181,9 +181,10 @@ export function validatePreferencesPatch(value: unknown): ChroniPreferencesPatch
   if (patch.voiceHotkey !== undefined) result.voiceHotkey = boundedString(patch.voiceHotkey, "voiceHotkey", 100);
   if (patch.llm !== undefined) {
     const llm = record(patch.llm, "llm");
-    knownKeys(llm, ["enabled", "mode", "provider", "baseUrl", "apiKey", "model"], "llm");
+    knownKeys(llm, ["enabled", "dataSharingConsentAt", "mode", "provider", "baseUrl", "apiKey", "model"], "llm");
     result.llm = {};
     if (llm.enabled !== undefined) result.llm.enabled = booleanValue(llm.enabled, "llm.enabled");
+    if (llm.dataSharingConsentAt !== undefined) result.llm.dataSharingConsentAt = dateTimeString(llm.dataSharingConsentAt, "llm.dataSharingConsentAt");
     if (llm.mode !== undefined) {
       if (llm.mode !== "managed" && llm.mode !== "custom") fail("llm.mode must be managed or custom.");
       result.llm.mode = llm.mode;

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f7f3">
+    <meta name="description" content="Chroni 使用帮助、常见问题、隐私与安全支持入口。">
+    <link rel="canonical" href="https://getchroni.zeabur.app/support.html">
+    <link rel="icon" href="./assets/chroni-icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+    <title>支持与帮助 - Chroni</title>
+  </head>
+  <body class="privacy-page">
+    <a class="skip-link" href="#support-main">跳到主要内容</a>
+    <header class="site-header">
+      <a class="brand" href="./index.html" aria-label="返回 Chroni 首页">
+        <img src="./assets/chroni-icon.svg" width="30" height="30" alt="">
+        <span>Chroni</span>
+      </a>
+      <nav aria-label="支持页导航">
+        <a href="./privacy.html">隐私</a>
+        <a class="nav-source" href="https://github.com/miracle121388-a11y/chroni">GitHub</a>
+      </nav>
+    </header>
+
+    <main class="privacy-main" id="support-main">
+      <header class="privacy-hero">
+        <p class="overline">Chroni Support</p>
+        <h1>遇到问题，<br>从这里开始。</h1>
+        <p>查看安装、任务识别、模型连接与本地数据的处理方法，或提交可复现的问题。</p>
+        <span>适用于 Chroni 0.2.x</span>
+      </header>
+
+      <div class="privacy-layout">
+        <aside aria-label="本页目录">
+          <a href="#start">快速开始</a>
+          <a href="#troubleshoot">常见问题</a>
+          <a href="#report">问题反馈</a>
+          <a href="#security">隐私与安全</a>
+        </aside>
+        <article class="privacy-content">
+          <section id="start">
+            <p class="privacy-index">01</p>
+            <h2>快速开始</h2>
+            <p>安装后可直接新建日程，或把 TXT、Markdown、PDF、DOCX、XLSX、ICS 和常见图片拖入“智能整理”。新安装默认使用本地规则；如需联网语义理解，请在“偏好 → 高级”主动开启并确认数据发送说明。</p>
+            <div class="privacy-actions">
+              <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/quick-start.md">查看快速开始</a>
+              <a href="https://github.com/miracle121388-a11y/chroni/blob/main/docs/user/install-faq.md">安装与安全提示</a>
+            </div>
+          </section>
+          <section id="troubleshoot">
+            <p class="privacy-index">02</p>
+            <h2>先做这三项检查</h2>
+            <p>确认系统时间与时区正确；在“运行状态”检查本地解析、OCR 与模型状态；模型不可用时关闭智能模型，验证本地规则是否仍可处理明确日期的内容。</p>
+            <p>若应用无法正常启动或导入，请保留 Chroni 版本、macOS 版本、错误原文和最小复现步骤，不要附上真实课程文件、API Key 或本地用户名路径。</p>
+          </section>
+          <section id="report">
+            <p class="privacy-index">03</p>
+            <h2>提交问题</h2>
+            <p>公开功能问题请通过 GitHub Issues 提交。建议写明预期结果、实际结果、复现步骤和已脱敏截图。</p>
+            <div class="privacy-actions">
+              <a href="https://github.com/miracle121388-a11y/chroni/issues/new/choose">提交功能或故障问题</a>
+              <a href="https://github.com/miracle121388-a11y/chroni/releases">查看版本与更新</a>
+            </div>
+          </section>
+          <section id="security">
+            <p class="privacy-index">04</p>
+            <h2>隐私与安全</h2>
+            <p>隐私边界与删除方法见公开隐私说明。API Key 泄露、任意代码执行、鉴权绕过或数据泄露请使用私密安全报告，不要创建公开 Issue。</p>
+            <div class="privacy-actions">
+              <a href="./privacy.html">阅读隐私说明</a>
+              <a href="https://github.com/miracle121388-a11y/chroni/security/advisories/new">私密报告安全问题</a>
+            </div>
+          </section>
+        </article>
+      </div>
+    </main>
+
+    <footer>
+      <div class="footer-brand"><strong>Chroni</strong><span>Local-first Learning Execution Agent</span></div>
+      <div class="footer-links"><a href="./index.html">首页</a><a href="./privacy.html">隐私说明</a><a href="https://github.com/miracle121388-a11y/chroni">GitHub</a></div>
+      <span>© 2026 Chroni</span>
+    </footer>
+  </body>
+</html>

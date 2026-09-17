@@ -8,6 +8,7 @@ const output = join(root, "dist", "site");
 const html = readFileSync(join(output, "index.html"), "utf8");
 const script = readFileSync(join(output, "app.js"), "utf8");
 const privacy = readFileSync(join(output, "privacy.html"), "utf8");
+const support = readFileSync(join(output, "support.html"), "utf8");
 const releaseWorkflow = readFileSync(join(root, ".github", "workflows", "release-build.yml"), "utf8");
 const releaseAliases = readFileSync(join(root, "scripts", "create-release-aliases.mjs"), "utf8");
 const expectedVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
@@ -40,8 +41,12 @@ for (const id of requiredIds) {
   if (!ids.includes(id)) throw new Error(`Missing required site element: #${id}`);
 }
 if (!html.includes("./privacy.html")) throw new Error("Product site does not link to the privacy policy.");
+if (!html.includes("./support.html")) throw new Error("Product site does not link to the support page.");
 for (const requiredText of ["默认保存在本机", "语音先在本机理解", "原始音频只在内存中", "联网模型可随时关闭", "密钥不进入项目数据", "没有客户端访问码"]) {
   if (!privacy.includes(requiredText)) throw new Error(`Privacy page is missing: ${requiredText}`);
+}
+for (const requiredText of ["快速开始", "常见问题", "提交问题", "隐私与安全", "新安装默认使用本地规则"]) {
+  if (!support.includes(requiredText)) throw new Error(`Support page is missing: ${requiredText}`);
 }
 
 const requiredAssetMatchers = [

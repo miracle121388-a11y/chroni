@@ -39,7 +39,7 @@
   <a href="#开发与验证">开发</a>
 </p>
 
-> **当前版本：** `0.2.4`。公开安装包默认提供无需 API Key 的 Chroni 托管智能服务，并包含完整桌宠动画、控制中心与本地优先数据能力；签名、公证和可下载产物以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
+> **当前版本：** `0.2.4`。公开安装包默认使用本地规则；用户阅读数据发送说明并明确同意后，可开启无需 API Key 的 Chroni 托管智能服务。签名、公证和可下载产物以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
 
 > **资产许可提示：** MIT 许可覆盖 Chroni 自研代码，不自动覆盖字体、运行依赖与桌宠视觉素材；完整边界见 [第三方声明](./THIRD_PARTY_NOTICES.md)。
 
@@ -81,7 +81,7 @@ Chroni 不生成可冒充学生完成的作业，不把原始材料当成学习�
 
 ## 3 分钟上手
 
-1. 从 [Latest Release](https://github.com/miracle121388-a11y/chroni/releases/latest) 安装并启动 Chroni。新安装默认启用无需 API Key 的 Chroni 智能服务；模型不可用或手动关闭时会自动使用本地规则。
+1. 从 [Latest Release](https://github.com/miracle121388-a11y/chroni/releases/latest) 安装并启动 Chroni。新安装默认使用本地规则；需要联网语义理解时，在阅读数据发送说明并明确同意后开启无需 API Key 的 Chroni 智能服务。
 2. 在“智能整理”中选择文件，或把[课程作业示例](./examples/demo/01-course-assignment.txt)拖给桌宠。也可以按 `Ctrl+Shift+Space`（macOS 为 `Command+Shift+Space`）说出，或直接输入：
 
    ```text
@@ -256,13 +256,13 @@ grep "mac-universal.dmg" SHA256SUMS.txt
 
 Chroni 支持 OpenAI-compatible Chat Completions 接口。大模型主要增强复杂语义抽取、TaskPlan 生成和可选的每日规划，本地规则始终作为基础能力与失败回退。
 
-当前版本提供“本地规则”“Chroni 智能服务”和“自定义 API”三种实际工作方式。新安装默认使用 Chroni 智能服务，无需 API Key、访问码或账号；DeepSeek 主密钥只保存在 Zeabur 网关，永远不会写入桌面安装包。托管网关在代码中固定使用 `deepseek-v4-flash`，不会被桌面请求或遗留的 Zeabur 模型变量切换到 Pro。公共服务执行按来源网络和全局额度限制，超限或暂时不可用时自动回退本地规则。三种方式的适用范围、费用与安全边界见[模型使用方式](./docs/user/model-modes.md)，网关部署与运维见[LLM 网关](./docs/llm-gateway.md)。
+当前版本提供“本地规则”“Chroni 智能服务”和“自定义 API”三种实际工作方式。新安装默认使用本地规则；用户明确同意后可开启无需 API Key、访问码或账号的 Chroni 智能服务。DeepSeek 主密钥只保存在 Zeabur 网关，永远不会写入桌面安装包。托管网关在代码中固定使用 `deepseek-v4-flash`，不会被桌面请求或遗留的 Zeabur 模型变量切换到 Pro。公共服务执行按来源网络和全局额度限制，超限或暂时不可用时自动回退本地规则。三种方式的适用范围、费用与安全边界见[模型使用方式](./docs/user/model-modes.md)，网关部署与运维见[LLM 网关](./docs/llm-gateway.md)。
 
 ### 控制中心配置（推荐）
 
-1. 安装后直接导入材料，Chroni 智能服务已经启用，无需配置。
-2. 如需检查连接，从托盘打开“控制中心”，进入“偏好 → 高级 → 智能模型服务”，点击“测试连接”。
-3. 如需完全离线，可关闭“启用智能模型”，所有基础功能继续使用本地规则。
+1. 安装后直接导入材料，Chroni 默认使用本地规则。
+2. 如需联网语义理解，从托盘打开“控制中心”，进入“偏好 → 高级”，阅读数据发送说明并明确同意后开启智能模型；“Chroni 智能服务”无需配置 Key。
+3. 如需完全离线，保持“启用智能模型”关闭，所有基础功能继续使用本地规则。
 4. 自带 Key 的用户可以切换到“自定义 API”。DeepSeek 的 Base URL 为 `https://api.deepseek.com`，模型可填写 `deepseek-v4-flash`。
 
 模型名称和计费规则可能变化，请以 [DeepSeek API 文档](https://api-docs.deepseek.com/) 或所用服务商文档为准。

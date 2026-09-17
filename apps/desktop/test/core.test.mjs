@@ -1282,6 +1282,31 @@ test("managed model startup and preference writes never initialize secret storag
     assert.equal(encryptionAttempts, 0);
     assert.equal(decryptionAttempts, 0);
     assert.equal(store.snapshot().preferences.llm.mode, "managed");
+    assert.match(store.snapshot().preferences.llm.dataSharingConsentAt, /^\d{4}-\d{2}-\d{2}T/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("legacy enabled model settings are disabled until the user gives explicit consent", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chroni-model-consent-migration-test-"));
+  try {
+    writeFileSync(join(dir, "chroni-state.json"), JSON.stringify({
+      preferences: {
+        llm: {
+          enabled: true,
+          mode: "managed",
+          provider: "openai-compatible",
+          baseUrl: "https://api-getchroni.zeabur.app/v1",
+          model: "chroni-beta",
+        },
+      },
+    }), "utf8");
+
+    const store = new ChroniStore(dir);
+    assert.equal(store.snapshot().preferences.llm.enabled, false);
+    assert.equal(store.snapshot().preferences.llm.dataSharingConsentAt, undefined);
+    assert.equal(JSON.parse(readFileSync(store.filePath, "utf8")).preferences.llm.enabled, false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -1296,6 +1321,7 @@ test("managed service upgrades discard obsolete access codes without opening sec
       preferences: {
         llm: {
           enabled: true,
+          dataSharingConsentAt: "2026-07-12T00:00:00.000Z",
           mode: "managed",
           provider: "openai-compatible",
           baseUrl: "https://api-getchroni.zeabur.app/v1",

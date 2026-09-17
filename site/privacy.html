@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f7f7f3">
-    <meta name="description" content="Chroni 隐私说明：本地数据、本地语音转写、默认托管模型调用、自定义凭据保护和数据删除方式。">
+    <meta name="description" content="Chroni 隐私说明：本地数据、本地语音转写、可选联网模型调用、自定义凭据保护和数据删除方式。">
     <link rel="canonical" href="https://getchroni.zeabur.app/privacy.html">
     <link rel="icon" href="./assets/chroni-icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./styles.css">
@@ -28,7 +28,7 @@
         <p class="overline">Privacy at Chroni</p>
         <h1>你的学习过程，<br>默认留在你的电脑里。</h1>
         <p>本说明适用于 Chroni 0.2.x。Chroni 是本地优先桌面应用，不提供账号系统、广告追踪或默认云同步。</p>
-        <span>更新日期：2026 年 9 月 16 日</span>
+        <span>更新日期：2026 年 9 月 17 日</span>
       </header>
 
       <div class="privacy-layout">
@@ -59,7 +59,7 @@
           <section id="model">
             <p class="privacy-index">03</p>
             <h2>联网模型可随时关闭</h2>
-            <p>新安装默认启用 Chroni 智能服务。本地解析、OCR 或经你确认继续理解的语音文字所产生的必要文本、来源名称及时间上下文会经 Chroni 网关发送到 DeepSeek，用于任务提取和规划；原始文件与麦克风音频不会发送。你可以关闭“启用智能模型”，关闭后 Chroni 不会调用模型服务，也可以改用自己的兼容 API。</p>
+            <p>新安装默认关闭联网智能模型并使用本地规则。只有你在“偏好 → 高级”阅读接收方、数据类别和用途说明并明确同意后，Chroni 才会开启联网模型。本地解析、OCR 或经你确认继续理解的语音文字所产生的必要文本、来源名称、时间上下文和已筛选偏好会经 Chroni 网关发送到 DeepSeek，用于任务提取和规划；二进制原文件、证据文件与麦克风原始音频不会发送。你可以随时关闭，也可以改用自己的兼容 API；切换服务后需要重新确认。</p>
             <p>Chroni 托管网关按来源网络和全局额度限流。应用日志可能包含请求标识、使用服务端密钥生成的来源网络摘要、状态、耗时和 token 数，不记录提示词正文或原始 IP，也不建立提示词数据库。部署平台日志和模型服务的数据留存规则同时适用。</p>
           </section>
 
@@ -94,6 +94,7 @@
       <div class="footer-brand"><strong>Chroni</strong><span>Local-first Learning Execution Agent</span></div>
       <div class="footer-links">
         <a href="./index.html">首页</a>
+        <a href="./support.html">支持</a>
         <a href="https://github.com/miracle121388-a11y/chroni">GitHub</a>
         <a href="https://github.com/miracle121388-a11y/chroni/blob/main/LICENSE">MIT License</a>
       </div>

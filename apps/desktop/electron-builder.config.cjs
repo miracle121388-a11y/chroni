@@ -25,6 +25,8 @@ const windowsStorePublisher = process.env.CHRONI_WINDOWS_STORE_PUBLISHER?.trim()
 const windowsStorePublisherDisplayName = process.env.CHRONI_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME?.trim() || "Chroni";
 const macStoreProvisioningProfile = process.env.CHRONI_MAC_STORE_PROVISIONING_PROFILE?.trim() || undefined;
 const macStoreIdentity = process.env.CHRONI_MAC_STORE_IDENTITY?.trim() || undefined;
+const macBuildVersion = process.env.CHRONI_MAC_BUILD_NUMBER?.trim() || undefined;
+const macCopyright = process.env.CHRONI_MAC_STORE_COPYRIGHT?.trim() || "2026 Chroni contributors";
 const licenseResources = [
   { from: "../../LICENSE", to: "licenses/CHRONI-MIT-LICENSE.txt" },
   { from: "../../THIRD_PARTY_NOTICES.md", to: "licenses/THIRD_PARTY_NOTICES.md" },
@@ -45,12 +47,16 @@ if (process.platform === "darwin" && requireSigning && !hasMacCertificate) {
 if (process.platform === "darwin" && requireNotarization && !canNotarize) {
   throw new Error("CHRONI_REQUIRE_NOTARIZATION=1, but macOS signing or Apple notarization credentials are missing.");
 }
+if (macBuildVersion && !/^\d+(?:\.\d+){0,2}$/.test(macBuildVersion)) {
+  throw new Error("CHRONI_MAC_BUILD_NUMBER must contain one to three dot-separated non-negative integers.");
+}
 
 module.exports = {
   appId: "app.chroni.desktop",
   productName: "Chroni",
   executableName: "Chroni",
-  copyright: "Copyright © 2026 Chroni contributors",
+  copyright: macCopyright,
+  ...(macBuildVersion ? { buildVersion: macBuildVersion } : {}),
   directories: {
     output: "dist-electron",
   },
@@ -102,8 +108,9 @@ module.exports = {
     extendInfo: {
       CFBundleDevelopmentRegion: "zh_CN",
       CFBundleLocalizations: ["zh_CN"],
-      NSHumanReadableCopyright: "Copyright © 2026 Chroni contributors",
+      NSHumanReadableCopyright: macCopyright,
       NSMicrophoneUsageDescription: "Chroni 使用麦克风将你的语音命令在本机转写为文字；原始录音不会保存。",
+      ITSAppUsesNonExemptEncryption: false,
     },
   },
   mas: {

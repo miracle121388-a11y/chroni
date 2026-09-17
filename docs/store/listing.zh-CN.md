@@ -6,13 +6,13 @@
 | --- | --- |
 | 产品名 | Chroni |
 | 副标题 | 本地优先的学习执行 Agent |
-| 类别 | 教育 / 效率 |
-| 年龄分级 | 4+ / Everyone |
+| 主类别 / 次类别 | 效率 / 教育 |
+| 年龄分级 | 预计 4+；以 App Store Connect 最新问卷结果为准 |
 | 界面语言 | 简体中文（zh-CN） |
-| 支持网址 | https://github.com/miracle121388-a11y/chroni/issues |
+| 支持网址 | https://getchroni.zeabur.app/support.html |
 | 隐私政策 | https://getchroni.zeabur.app/privacy.html |
 | 产品主页 | https://getchroni.zeabur.app/ |
-| 版权 | Copyright © 2026 Chroni contributors |
+| 版权 | 2026 Chroni contributors（提交前替换为公司法定版权主体） |
 
 ## 简短描述
 
@@ -28,13 +28,13 @@ Chroni 是一款面向项目制学习的本地优先桌面应用。它从 TXT、
 
 桌面伙伴提供轻量入口：点击查看日程，拖入文件开始识别，并用动作、短气泡和系统通知呈现理解、规划、提醒与完成状态。控制中心关闭后，任务和提醒仍会在本机继续工作。
 
-Chroni 默认把任务、计划、偏好和执行记录保存在本机，不提供广告追踪或默认云同步。新安装默认启用无需 API Key、访问码或账号的 Chroni 智能服务；只有完成当前抽取或规划所需的文本会发送到模型服务，用户也可以随时关闭联网模型。
+Chroni 默认把任务、计划、偏好和执行记录保存在本机，不提供广告追踪或默认云同步。新安装默认使用本地规则，不会把任务内容发送到模型服务。用户阅读接收方、数据类别和用途说明并明确同意后，可以开启无需 API Key、访问码或账号的 Chroni 智能服务，并可随时关闭。
 
 Chroni 不替用户完成或提交作业，也不会自动宣布学习成果已经达标。模型提出结构化候选，本地系统负责来源核验、容量计算、状态变更、持久化和失败回退，最终控制权始终属于用户。
 
 ## 搜索关键词
 
-学习计划,课程任务,日程,任务管理,截止时间,学习助手,桌面伙伴,Agent,OCR,本地优先
+学习计划,课程任务,日程,截止时间,学习助手,桌面伙伴,OCR,本地优先
 
 ## 截图顺序
 
@@ -47,4 +47,4 @@ Chroni 不替用户完成或提交作业，也不会自动宣布学习成果已�
 
 截图必须使用虚构内容，不得出现 API Key、访问码、真实姓名、学号、邮箱或本地用户名路径。
 
-提交文件位于 `docs/store/assets/screenshots/zh-CN/`，六张图片均为 `1440x900`。通过 `pnpm run store:screenshots` 可从当前产品构建重新生成。
+Mac App Store 提交文件位于 `docs/store/assets/screenshots/macos/zh-CN/`，六张无 Alpha JPEG 均为 `2880x1800`，使用第一方沙漏伙伴形象。通过 `pnpm run store:screenshots:macos` 可从 MAS 专用构建重新生成。

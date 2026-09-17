@@ -9,7 +9,9 @@ app.commandLine.appendSwitch("force-device-scale-factor", "1");
 
 const desktopRoot = resolve(__dirname, "..");
 const repositoryRoot = resolve(desktopRoot, "..", "..");
-const outputDirectory = join(repositoryRoot, "docs", "store", "assets", "screenshots", "zh-CN");
+const screenshotPlatform = process.env.CHRONI_STORE_SCREENSHOT_PLATFORM?.trim();
+if (screenshotPlatform && screenshotPlatform !== "macos") throw new Error(`Unsupported CHRONI_STORE_SCREENSHOT_PLATFORM: ${screenshotPlatform}`);
+const outputDirectory = join(repositoryRoot, "docs", "store", "assets", "screenshots", ...(screenshotPlatform ? [screenshotPlatform] : []), "zh-CN");
 const screenshotSize = { width: 1440, height: 900 };
 const fixtureRoot = mkdtempSync(join(tmpdir(), "chroni-store-capture-"));
 const capturePartition = `chroni-store-capture-${process.pid}`;
@@ -34,6 +36,11 @@ app.whenReady().then(async () => {
       currentVersion: app.getVersion(),
       managedByStore: true,
       message: "当前版本由系统应用商店负责更新。",
+    }));
+    ipcMain.handle("chroni:voice-status", () => ({
+      state: "idle",
+      modelId: "onnx-community/whisper-tiny",
+      message: "本地语音模型尚未载入。",
     }));
     ipcMain.handle("chroni:sample-data-status", () => ({ active: false, namespace: "sample-data", synthetic: true, noKeyRequired: true }));
 
@@ -156,13 +163,15 @@ app.whenReady().then(async () => {
     await waitForStableFrame(petWindow);
     const petImage = await capturePageWithRetry(petWindow, "desktop companion");
     const petSize = petImage.getSize();
-    assert(!petImage.isEmpty() && petSize.width === 360 && petSize.height === 360, "Desktop companion capture is unexpectedly empty.");
+    assert(!petImage.isEmpty() && petSize.width >= 360 && petSize.width === petSize.height, `Desktop companion capture has unexpected dimensions: ${petSize.width}x${petSize.height}.`);
     const petPng = petImage.toPNG();
     assert(petPng.length > 1_000, "Desktop companion PNG has no visible content.");
+    const companionFile = screenshotPlatform === "macos" ? "05-companion.jpg" : "05-companion.png";
     await compositeCompanion(
-      join(outputDirectory, "01-today.png"),
+      join(outputDirectory, screenshotPlatform === "macos" ? "01-today.jpg" : "01-today.png"),
       petPng,
-      join(outputDirectory, "05-companion.png"),
+      join(outputDirectory, companionFile),
+      screenshotPlatform === "macos" ? "jpeg" : "png",
     );
 
     console.log(`Chroni Store screenshots written to ${outputDirectory}`);
@@ -381,6 +390,7 @@ function createCaptureWindow() {
   return new BrowserWindow({
     ...screenshotSize,
     useContentSize: true,
+    enableLargerThanScreen: true,
     show: false,
     frame: false,
     backgroundColor: "#f7f7f3",
@@ -430,9 +440,11 @@ async function capture(window, name, requiredSelector) {
   if (name === "01-today.png") await frameDailyCalendar(window);
   const dimensions = await window.webContents.executeJavaScript("({ width: window.innerWidth, height: window.innerHeight })");
   assert(dimensions.width === screenshotSize.width && dimensions.height === screenshotSize.height, `${name} viewport is ${dimensions.width}x${dimensions.height}.`);
-  const png = (await capturePageWithRetry(window, name)).toPNG();
-  assert(png.length > 50_000, `${name} is unexpectedly empty.`);
-  writeFileSync(join(outputDirectory, name), png);
+  const image = await capturePageWithRetry(window, name);
+  const outputName = screenshotPlatform === "macos" ? name.replace(/\.png$/i, ".jpg") : name;
+  const bytes = screenshotPlatform === "macos" ? image.toJPEG(95) : image.toPNG();
+  assert(bytes.length > 50_000, `${outputName} is unexpectedly empty.`);
+  writeFileSync(join(outputDirectory, outputName), bytes);
 }
 
 async function capturePageWithRetry(window, label) {
@@ -471,8 +483,9 @@ async function frameDailyCalendar(window) {
   await delay(150);
 }
 
-async function compositeCompanion(basePath, petPng, outputPath) {
+async function compositeCompanion(basePath, petPng, outputPath, format) {
   const [base, pet] = await Promise.all([loadImage(readFileSync(basePath)), loadImage(petPng)]);
+  assert(base.width / base.height === screenshotSize.width / screenshotSize.height, `Base screenshot has an unexpected aspect ratio: ${base.width}x${base.height}.`);
   const probe = createCanvas(pet.width, pet.height);
   const probeContext = probe.getContext("2d");
   probeContext.drawImage(pet, 0, 0);
@@ -480,16 +493,17 @@ async function compositeCompanion(basePath, petPng, outputPath) {
   let visiblePixels = 0;
   for (let index = 3; index < pixels.length; index += 4) if (pixels[index] > 8) visiblePixels += 1;
   assert(visiblePixels > 2_000, `Desktop companion render contains only ${visiblePixels} visible pixels.`);
-  const canvas = createCanvas(screenshotSize.width, screenshotSize.height);
+  const scale = base.width / screenshotSize.width;
+  const canvas = createCanvas(base.width, base.height);
   const context = canvas.getContext("2d");
-  context.drawImage(base, 0, 0, screenshotSize.width, screenshotSize.height);
+  context.drawImage(base, 0, 0, base.width, base.height);
   context.save();
   context.shadowColor = "rgba(20, 42, 36, 0.16)";
-  context.shadowBlur = 24;
-  context.shadowOffsetY = 8;
-  context.drawImage(pet, 1080, 535, 320, 320);
+  context.shadowBlur = 24 * scale;
+  context.shadowOffsetY = 8 * scale;
+  context.drawImage(pet, 1080 * scale, 535 * scale, 320 * scale, 320 * scale);
   context.restore();
-  writeFileSync(outputPath, canvas.toBuffer("image/png"));
+  writeFileSync(outputPath, format === "jpeg" ? canvas.toBuffer("image/jpeg", 95) : canvas.toBuffer("image/png"));
 }
 
 async function waitForSelector(window, selector, timeoutMs = 8_000) {

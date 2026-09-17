@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "platform": "macOS",
+  "bundleId": "app.chroni.desktop",
+  "sku": "chroni-macos",
+  "primaryLocale": "zh-Hans",
+  "name": "Chroni",
+  "subtitle": "本地优先的学习执行 Agent",
+  "primaryCategory": "Productivity",
+  "secondaryCategory": "Education",
+  "price": "Free",
+  "supportUrl": "https://getchroni.zeabur.app/support.html",
+  "marketingUrl": "https://getchroni.zeabur.app/",
+  "privacyPolicyUrl": "https://getchroni.zeabur.app/privacy.html",
+  "keywords": "学习计划,课程任务,日程,截止时间,学习助手,桌面伙伴,OCR,本地优先",
+  "copyright": "2026 Chroni contributors",
+  "ageRatingQuestionnaire": {
+    "userGeneratedContent": false,
+    "messagingAndChat": false,
+    "advertising": false,
+    "unrestrictedWebAccess": false,
+    "gambling": false,
+    "lootBoxes": false,
+    "medicalOrWellness": false,
+    "violenceOrMatureThemes": false,
+    "expectedGlobalRating": "4+"
+  },
+  "exportCompliance": {
+    "usesNonExemptEncryption": false,
+    "basis": "Chroni only uses operating-system HTTPS/TLS and does not implement proprietary or non-exempt encryption; confirm this answer before submission."
+  }
+}

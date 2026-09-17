@@ -66,6 +66,12 @@ jobs:
       CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.MAC_STORE_INSTALLER_CSC_KEY_PASSWORD }}
       MAC_STORE_PROVISIONING_PROFILE: ${{ secrets.MAC_STORE_PROVISIONING_PROFILE }}
       CHRONI_MAC_STORE_IDENTITY: ${{ vars.CHRONI_MAC_STORE_IDENTITY }}
+      CHRONI_MAC_BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+      CHRONI_MAC_STORE_COPYRIGHT: ${{ vars.CHRONI_MAC_STORE_COPYRIGHT }}
+      CHRONI_APP_STORE_SUPPORT_EMAIL: ${{ vars.CHRONI_APP_STORE_SUPPORT_EMAIL }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+      APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -88,15 +94,26 @@ jobs:
       - run: pnpm run audit:prod
       - run: pnpm run check
       - run: pnpm run package:macos:store
+      - name: Validate package with App Store Connect
+        run: |
+          test -n "$APP_STORE_CONNECT_API_KEY_ID"
+          test -n "$APP_STORE_CONNECT_API_ISSUER_ID"
+          test -n "$APP_STORE_CONNECT_API_PRIVATE_KEY"
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$APP_STORE_CONNECT_API_PRIVATE_KEY" > "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          chmod 600 "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          pnpm run store:validate:macos
       - uses: actions/upload-artifact@v7
         with:
           name: chroni-macos-store-${{ github.sha }}
           path: |
             apps/desktop/dist-electron/*.pkg
             apps/desktop/dist-electron/store-verification-macos.json
-            docs/store/assets/screenshots/zh-CN/*.png
+            docs/store/assets/screenshots/macos/zh-CN/*.jpg
+            docs/store/app-store-connect.zh-CN.json
             docs/store/listing.zh-CN.md
             docs/store/privacy-declarations.md
             docs/store/review-notes.md
+            site/support.html
           if-no-files-found: error
           retention-days: 14

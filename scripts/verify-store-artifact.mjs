@@ -95,17 +95,44 @@ function verifyMacArtifact() {
     "com.apple.security.files.user-selected.read-write",
     "com.apple.security.network.client",
     "com.apple.security.network.server",
+    "com.apple.security.device.audio-input",
   ]) {
     assert(entitlements.includes(`<key>${entitlement}</key>`), `Signed app is missing ${entitlement}.`);
   }
   const bundleId = execText("plutil", ["-extract", "CFBundleIdentifier", "raw", "-o", "-", infoPlist]).trim();
   assert(bundleId === "app.chroni.desktop", `Unexpected MAS bundle identifier: ${bundleId}`);
+  const info = plistToJson(readFileSync(infoPlist));
+  const packageVersion = JSON.parse(readFileSync(join(desktop, "package.json"), "utf8")).version;
+  const buildVersion = requireEnvironment("CHRONI_MAC_BUILD_NUMBER");
+  assert(info.CFBundleShortVersionString === packageVersion, `Unexpected MAS marketing version: ${info.CFBundleShortVersionString}`);
+  assert(info.CFBundleVersion === buildVersion, `Unexpected MAS build version: ${info.CFBundleVersion}; expected ${buildVersion}.`);
+  assert(info.ITSAppUsesNonExemptEncryption === false, "MAS bundle is missing its export-compliance declaration.");
+  assert(typeof info.NSMicrophoneUsageDescription === "string" && info.NSMicrophoneUsageDescription.includes("本机转写"), "MAS bundle is missing its microphone purpose string.");
+
+  const profile = plistToJson(execFileSync("security", ["cms", "-D", "-i", provisioningProfile]));
+  const teamId = Array.isArray(profile.TeamIdentifier) ? profile.TeamIdentifier[0] : undefined;
+  assert(typeof teamId === "string" && teamId, "Provisioning profile has no TeamIdentifier.");
+  assert(new Date(profile.ExpirationDate).getTime() > Date.now(), "Provisioning profile is expired.");
+  assert(profile.Entitlements?.["application-identifier"] === `${teamId}.${bundleId}`, "Provisioning profile does not match the Chroni bundle identifier.");
+  assert(profile.Entitlements?.["com.apple.developer.team-identifier"] === teamId, "Provisioning profile team identifier is inconsistent.");
+  assert(profile.Entitlements?.["get-task-allow"] !== true, "Provisioning profile is a development profile, not a distribution profile.");
+  assert(entitlements.includes(`<string>${teamId}.${bundleId}</string>`), "Signed app application identifier does not match the provisioning profile.");
+  for (const file of [
+    "Contents/Resources/licenses/CHRONI-MIT-LICENSE.txt",
+    "Contents/Resources/licenses/THIRD_PARTY_NOTICES.md",
+    "Contents/Resources/privacy/PRIVACY.md",
+  ]) assert(existsSync(join(appPath, ...file.split("/"))), `MAS app is missing ${file}.`);
+  assert(!existsSync(join(appPath, "Contents", "Resources", "licenses", "XIAOTONG-APACHE-2.0.txt")), "MAS app includes excluded XIAOTONG resources.");
   const signatureDetails = execCombined("codesign", ["--display", "--verbose=4", appPath]);
   assert(/Authority=(?:Apple Distribution|3rd Party Mac Developer Application)/i.test(signatureDetails), "Chroni.app does not report a Mac App Store application signature.");
   const packageSignature = execCombined("pkgutil", ["--check-signature", packagePath]);
   assert(/Mac Installer Distribution|3rd Party Mac Developer Installer/i.test(packageSignature), "PKG does not report a Mac App Store installer signature.");
   writeReport("macos", packagePath, {
     bundleId,
+    marketingVersion: packageVersion,
+    buildVersion,
+    provisioningProfile: profile.Name,
+    teamId,
     applicationSignature: signatureDetails.trim().split(/\r?\n/).filter((line) => /^(Identifier|Authority|TeamIdentifier)=/.test(line)),
     packageSignature: packageSignature.trim().split(/\r?\n/).slice(0, 5),
   });
@@ -189,6 +216,14 @@ function execCombined(command, args) {
   const result = spawnSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (result.status !== 0) throw new Error(`${command} failed: ${(result.stderr || result.stdout).trim()}`);
   return `${result.stdout || ""}\n${result.stderr || ""}`;
+}
+
+function plistToJson(input) {
+  return JSON.parse(execFileSync("plutil", ["-convert", "json", "-o", "-", "-"], {
+    encoding: "utf8",
+    input,
+    stdio: ["pipe", "pipe", "pipe"],
+  }));
 }
 
 function requireEnvironment(name) {

@@ -17,7 +17,7 @@ const storeBuild = args.has("--store");
 const platform = requestedPlatform || ({ darwin: "macos", win32: "windows", linux: "linux" })[process.platform];
 
 assert(["macos", "windows", "linux"].includes(platform), "Use --platform=macos, --platform=windows, or --platform=linux.");
-assert(expectedVariant === "product" || expectedVariant === "goai", "Use --variant=product or --variant=goai.");
+assert(["product", "goai", "store"].includes(expectedVariant), "Use --variant=product, --variant=goai, or --variant=store.");
 assert(existsSync(output), "Desktop package output is missing.");
 
 const require = createRequire(import.meta.url);
@@ -57,9 +57,15 @@ if (expectedVariant === "product") {
   }
   assert(!files.some((file) => /icon-source-.*\.svg$/i.test(file)), "Product artifact incorrectly contains the hourglass companion placeholder.");
 } else {
-  assert(buildManifest.petAssetMode === "original", "GOAI artifact does not declare the safe companion asset mode.");
-  assert(rendererPngs.length === 0, "GOAI artifact unexpectedly contains restricted companion PNG files.");
-  assert(files.some((file) => /icon-source-.*\.svg$/i.test(file)), "GOAI artifact is missing its safe placeholder asset.");
+  const label = expectedVariant === "store" ? "Mac App Store" : "GOAI";
+  assert(buildManifest.petAssetMode === "original", `${label} artifact does not declare the first-party companion asset mode.`);
+  assert(rendererPngs.length === 0, `${label} artifact unexpectedly contains restricted companion PNG files.`);
+  assert(files.some((file) => /icon-source-.*\.svg$/i.test(file)), `${label} artifact is missing its first-party hourglass asset.`);
+  if (expectedVariant === "store") {
+    for (const marker of ["XIAOTONG Desktop Pet", "支持原作者", "捐赠二维码", "GOAI", "复赛", "参赛"]) {
+      assert(!rendererScripts.includes(marker), `Mac App Store artifact contains excluded copy: ${marker}`);
+    }
+  }
 }
 
 if (platform === "macos") await verifyMacArtifact(packageRoot, asarPath, fileSet);
@@ -87,13 +93,20 @@ function findPackageRoot() {
 
 function verifyPortableArtifactResources(appRoot, packagedAsar, fileSet) {
   const resources = join(appRoot, "resources");
+  for (const relative of [
+    "licenses/CHRONI-MIT-LICENSE.txt",
+    "licenses/THIRD_PARTY_NOTICES.md",
+    "licenses/THIRD_PARTY_DEPENDENCIES.md",
+    "privacy/PRIVACY.md",
+  ]) assert(existsSync(join(resources, relative)), `Packaged resources are missing ${relative}.`);
   if (expectedVariant === "product") {
     for (const relative of [
       "licenses/XIAOTONG-APACHE-2.0.txt",
       "licenses/XIAOTONG-ADDITIONAL-TERMS.md",
       "licenses/XIAOTONG-NOTICE.md",
-      "privacy/PRIVACY.md",
     ]) assert(existsSync(join(resources, relative)), `Packaged resources are missing ${relative}.`);
+  } else {
+    assert(!existsSync(join(resources, "licenses", "XIAOTONG-APACHE-2.0.txt")), "First-party artifact contains XIAOTONG license resources.");
   }
   const canvasModules = [...fileSet].filter((file) => platform === "windows"
     ? /^node_modules\/@napi-rs\/canvas-win32-x64-msvc\/skia\.win32-x64-msvc\.node$/.test(file)
@@ -113,7 +126,9 @@ async function verifyMacArtifact(appPath, packagedAsar, fileSet) {
 
   assert(info.CFBundleIdentifier === "app.chroni.desktop", `Unexpected bundle identifier: ${info.CFBundleIdentifier}`);
   assert(info.CFBundleDisplayName === "Chroni" && info.CFBundleName === "Chroni", "macOS bundle name is not Chroni.");
-  assert(info.CFBundleShortVersionString === packageJson.version && info.CFBundleVersion === packageJson.version, "macOS bundle version is stale.");
+  const expectedBuildVersion = process.env.CHRONI_MAC_BUILD_NUMBER?.trim() || packageJson.version;
+  assert(info.CFBundleShortVersionString === packageJson.version, "macOS marketing version is stale.");
+  assert(info.CFBundleVersion === expectedBuildVersion, `macOS build version is ${info.CFBundleVersion}; expected ${expectedBuildVersion}.`);
   assert(info.CFBundleIconFile === "icon.icns" && existsSync(join(resources, "icon.icns")), "macOS app icon is missing.");
   verifyMacIcon(resources);
   assert(info.LSMinimumSystemVersion === "12.0", `Unexpected minimum macOS version: ${info.LSMinimumSystemVersion}`);
@@ -130,8 +145,9 @@ async function verifyMacArtifact(appPath, packagedAsar, fileSet) {
     "NSBluetoothAlwaysUsageDescription",
     "NSBluetoothPeripheralUsageDescription",
     "NSCameraUsageDescription",
-    "NSMicrophoneUsageDescription",
   ]) assert(!(key in info), `Unused protected-resource declaration remains in Info.plist: ${key}`);
+  assert(typeof info.NSMicrophoneUsageDescription === "string" && info.NSMicrophoneUsageDescription.includes("本机转写"), "macOS microphone purpose string is missing or inaccurate.");
+  assert(info.ITSAppUsesNonExemptEncryption === false, "macOS export-compliance declaration is missing or incorrect.");
   assert(info.NSAppTransportSecurity?.NSAllowsArbitraryLoads !== true, "macOS bundle permits arbitrary insecure network loads.");
 
   const integrity = info.ElectronAsarIntegrity?.["Resources/app.asar"];
@@ -142,6 +158,8 @@ async function verifyMacArtifact(appPath, packagedAsar, fileSet) {
   for (const [modulePath, architecture] of [
     ["node_modules/@napi-rs/canvas-darwin-arm64/skia.darwin-arm64.node", "arm64"],
     ["node_modules/@napi-rs/canvas-darwin-x64/skia.darwin-x64.node", "x86_64"],
+    ["node_modules/onnxruntime-node/bin/napi-v6/darwin/arm64/onnxruntime_binding.node", "arm64"],
+    ["node_modules/onnxruntime-node/bin/napi-v6/darwin/x64/onnxruntime_binding.node", "x86_64"],
   ]) {
     assert(fileSet.has(modulePath), `Universal ASAR is missing ${modulePath}.`);
     const unpackedPath = join(`${packagedAsar}.unpacked`, modulePath);
@@ -149,22 +167,39 @@ async function verifyMacArtifact(appPath, packagedAsar, fileSet) {
     assertArchitectures(unpackedPath, [architecture], modulePath);
   }
 
+  for (const relative of [
+    "licenses/CHRONI-MIT-LICENSE.txt",
+    "licenses/THIRD_PARTY_NOTICES.md",
+    "licenses/THIRD_PARTY_DEPENDENCIES.md",
+    "privacy/PRIVACY.md",
+  ]) assert(existsSync(join(resources, relative)), `macOS bundle is missing ${relative}.`);
   if (expectedVariant === "product") {
     for (const relative of [
       "licenses/XIAOTONG-APACHE-2.0.txt",
       "licenses/XIAOTONG-ADDITIONAL-TERMS.md",
       "licenses/XIAOTONG-NOTICE.md",
-      "privacy/PRIVACY.md",
     ]) assert(existsSync(join(resources, relative)), `macOS bundle is missing ${relative}.`);
+  } else {
+    assert(!existsSync(join(resources, "licenses", "XIAOTONG-APACHE-2.0.txt")), "First-party macOS bundle contains XIAOTONG license resources.");
   }
 
   execFileSync("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath], { stdio: "pipe" });
   const entitlements = execCombined("/usr/bin/codesign", ["--display", "--entitlements", ":-", appPath]);
-  for (const entitlement of [
-    "com.apple.security.cs.allow-jit",
-    "com.apple.security.cs.allow-unsigned-executable-memory",
-    "com.apple.security.cs.disable-library-validation",
-  ]) assert(entitlements.includes(`<key>${entitlement}</key>`), `macOS signature is missing ${entitlement}.`);
+  const requiredEntitlements = storeBuild
+    ? [
+        "com.apple.security.app-sandbox",
+        "com.apple.security.cs.allow-jit",
+        "com.apple.security.files.user-selected.read-write",
+        "com.apple.security.network.client",
+        "com.apple.security.network.server",
+        "com.apple.security.device.audio-input",
+      ]
+    : [
+        "com.apple.security.cs.allow-jit",
+        "com.apple.security.cs.allow-unsigned-executable-memory",
+        "com.apple.security.cs.disable-library-validation",
+      ];
+  for (const entitlement of requiredEntitlements) assert(entitlements.includes(`<key>${entitlement}</key>`), `macOS signature is missing ${entitlement}.`);
   const signature = execCombined("/usr/bin/codesign", ["--display", "--verbose=4", appPath]);
   const fuseWire = await getCurrentFuseWire(appPath);
   const cookieEncryptionEnabled = fuseWire[FuseV1Options.EnableCookieEncryption] === "1".charCodeAt(0);
