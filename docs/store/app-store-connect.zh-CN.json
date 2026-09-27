@@ -27,6 +27,6 @@
   },
   "exportCompliance": {
     "usesNonExemptEncryption": false,
-    "basis": "Chroni only uses operating-system HTTPS/TLS and does not implement proprietary or non-exempt encryption; confirm this answer before submission."
+    "basis": "Chroni uses standard HTTPS/TLS and Electron/Node cryptography for transport, local credential protection and integrity checks; it is not a general-purpose encryption product and does not implement proprietary cryptography. Electron bundles cryptographic implementations, so this is not an operating-system-only claim."
   }
 }
