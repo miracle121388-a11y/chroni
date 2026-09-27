@@ -41,7 +41,7 @@ $kit = "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\appcert.e
 - [x] MAS 专用包只使用 Chroni 第一方沙漏伙伴，不包含 XIAOTONG 素材、外部赠与二维码或付费入口。
 - [x] App Sandbox、用户选择文件读写、网络客户端/本地回环服务、麦克风权限与隐私清单已配置。
 - [x] `CFBundleShortVersionString` 与产品版本一致，`CFBundleVersion` 支持独立递增构建号。
-- [x] 已声明仅使用系统 HTTPS/TLS，不使用非豁免加密；提交前仍由公司负责人复核出口合规答案。
+- [x] 已声明使用标准传输、凭据保护和完整性校验，不使用非豁免加密；Electron 自带加密实现，不属于“仅系统加密”；提交前仍由公司负责人复核出口合规答案。
 - [x] 中文元数据、隐私申报、审核路径、无 Alpha 截图与公开支持页框架已准备。
 
 ### 公司会员开通后的提交步骤
