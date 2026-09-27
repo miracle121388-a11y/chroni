@@ -1,0 +1,4 @@
+interface:
+  display_name: "App Store 上架"
+  short_description: "完成 macOS 与 iOS 应用签名、资料准备、隐私核验、上传和审核提交"
+  default_prompt: "使用 $app-store-release 检查当前应用并完成 App Store 上架，复用已有配置，说明最终审核状态和剩余事项。"
