@@ -71,7 +71,7 @@ for (const expected of [
   "NSPrivacyAccessedAPITypes",
 ]) assert(privacyManifest.includes(expected), `Privacy manifest is missing ${expected}.`);
 assert(/<key>NSPrivacyTracking<\/key>\s*<false\/>/.test(privacyManifest), "Chroni must not declare tracking.");
-assert(!/<key>NSPrivacyCollectedDataTypeLinked<\/key>\s*<true\/>/.test(privacyManifest), "Chroni has no account or device identity to link collected model data to.");
+assert(/<string>NSPrivacyCollectedDataTypeOtherUserContent<\/string>\s*<key>NSPrivacyCollectedDataTypeLinked<\/key>\s*<true\/>/.test(privacyManifest), "Model input may contain identifying information and must be declared as linked user content.");
 
 const privacyPolicy = readFileSync(join(root, "docs", "user", "privacy.md"), "utf8");
 for (const marker of ["默认保存在本机", "明确同意", "可能发送到模型服务的数据", "模型服务如何留存", "删除本地数据", "安全问题"]) {
