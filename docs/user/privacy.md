@@ -122,4 +122,6 @@ Learning Mission 的证据文件不会发送给模型服务。当前模型规划
 
 ## 安全问题
 
+Chroni 由引力回响（苏州）科技有限公司（Gravity Echo (Suzhou) Technology Co., Ltd.）提供。隐私与支持联系：[developer@twintalk.cn](mailto:developer@twintalk.cn)，公司官网：[twintalk.cn](https://twintalk.cn)。
+
 API Key 泄露、任意代码执行、鉴权绕过、恶意文件解析、更新劫持或用户数据泄露，请使用 [GitHub Private vulnerability reporting](https://github.com/miracle121388-a11y/chroni/security/advisories/new)，不要创建公开 Issue。

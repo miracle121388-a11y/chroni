@@ -26,7 +26,7 @@ const windowsStorePublisherDisplayName = process.env.CHRONI_WINDOWS_STORE_PUBLIS
 const macStoreProvisioningProfile = process.env.CHRONI_MAC_STORE_PROVISIONING_PROFILE?.trim() || undefined;
 const macStoreIdentity = process.env.CHRONI_MAC_STORE_IDENTITY?.trim() || undefined;
 const macBuildVersion = process.env.CHRONI_MAC_BUILD_NUMBER?.trim() || undefined;
-const macCopyright = process.env.CHRONI_MAC_STORE_COPYRIGHT?.trim() || "2026 Chroni contributors";
+const macCopyright = process.env.CHRONI_MAC_STORE_COPYRIGHT?.trim() || "2026 引力回响（苏州）科技有限公司";
 const licenseResources = [
   { from: "../../LICENSE", to: "licenses/CHRONI-MIT-LICENSE.txt" },
   { from: "../../THIRD_PARTY_NOTICES.md", to: "licenses/THIRD_PARTY_NOTICES.md" },

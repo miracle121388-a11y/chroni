@@ -2,7 +2,11 @@
 
 本目录保存 Microsoft Store 与 Mac App Store 的提交文案、审核说明和发布检查表。普通 GitHub Release 仍使用 NSIS、Portable、DMG 与 ZIP；商店包使用独立命令，且由系统应用商店负责后续更新。
 
-当前状态：Mac App Store 的代码、第一方资产、沙盒配置、隐私授权、元数据、截图和自动校验已就绪。公司 Apple Developer 资质通过前，无法完成发行证书、distribution profile、App Store Connect App 记录、Apple 在线验证与上传；提交前还须由公司提供法定版权主体和公开支持联系方式。这些是明确的外部输入，不是代码缺口。
+当前状态：公司已确认 Apple Developer Program 会员开通；Chroni 按免费 macOS 应用提交，版权主体为引力回响（苏州）科技有限公司，支持邮箱为 developer@twintalk.cn，公司官网为 https://twintalk.cn。产品支持与隐私 URL 继续使用现有 Chroni 产品站。发行证书、distribution profile、App Store Connect App 记录、Apple 在线验证与上传须在登录公司团队后完成；本地准备检查通过不代表已提交审核。
+
+## 最近核验
+
+2026-09-27：公司会员开通状态由负责人确认；公司版权、公开支持邮箱和隐私联系信息已写入项目。`store:prepare:macos`、`site:check`、`release:verify` 通过；Xcode 27.0 许可检查通过。本机尚无可用代码签名身份；公开产品首页与隐私页返回 HTTP 200，支持页 `/support.html` 返回 HTTP 404，须完成部署修复。尚未生成签名 MAS 包、执行 Apple 在线验证或提交审核。
 
 ## 一次性准备
 

@@ -44,12 +44,12 @@ $kit = "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\appcert.e
 - [x] 已声明仅使用系统 HTTPS/TLS，不使用非豁免加密；提交前仍由公司负责人复核出口合规答案。
 - [x] 中文元数据、隐私申报、审核路径、无 Alpha 截图与公开支持页框架已准备。
 
-### 资质通过后必须补齐
+### 公司会员开通后的提交步骤
 
 1. 在构建 Mac 上运行 `sudo xcodebuild -license` 阅读并接受 Xcode 许可协议；同时接受 Apple Developer 与 App Store Connect 最新协议，在 Certificates, Identifiers & Profiles 创建 Bundle ID `app.chroni.desktop`。
 2. 创建 Mac App Distribution 证书、Mac Installer Distribution 证书与匹配 Bundle ID 的 Mac App Store distribution provisioning profile。
-3. 在 App Store Connect 新建 macOS App，确认名称可用，并填写 SKU、主语言、类别、隐私政策和支持 URL。按 `app-store-connect.zh-CN.json` 录入，但先将版权字段替换为“年份 + 公司法定版权主体”（Apple 会自动添加版权符号）。
-4. 在 `site/support.html` 加入公司的公开支持邮箱，并按适用法律补充电话或地址；同时填写 App Review 联系人姓名、邮箱、电话，以及适用的贸易商身份、税务/银行、地区合规和内容权利信息。这些公司字段不得使用占位值。
+3. 在 App Store Connect 新建 macOS App，确认名称可用，并填写 SKU、主语言、类别、隐私政策和支持 URL。按 `app-store-connect.zh-CN.json` 录入，版权已填写为“2026 引力回响（苏州）科技有限公司”（Apple 会自动添加版权符号）；价格选择免费（0）。
+4. `site/support.html` 已加入 `developer@twintalk.cn` 和公司信息；确认这些内容已部署到公开支持页，并按适用法律补充电话或地址；同时填写 App Review 联系人姓名、邮箱、电话，以及适用的贸易商身份、税务/银行、地区合规和内容权利信息。这些公司字段不得使用占位值。
 5. 在 macOS 设置递增构建号和法定版权主体：
 
 ```bash
@@ -59,8 +59,8 @@ export CSC_KEY_PASSWORD="应用证书导出密码"
 export CSC_INSTALLER_LINK="$HOME/Certificates/Chroni-Installer-Distribution.p12"
 export CSC_INSTALLER_KEY_PASSWORD="安装器证书导出密码"
 export CHRONI_MAC_BUILD_NUMBER="1"
-export CHRONI_MAC_STORE_COPYRIGHT="2026 公司法定名称"
-export CHRONI_APP_STORE_SUPPORT_EMAIL="support@example.com"
+export CHRONI_MAC_STORE_COPYRIGHT="2026 引力回响（苏州）科技有限公司"
+export CHRONI_APP_STORE_SUPPORT_EMAIL="developer@twintalk.cn"
 # 仅在自动选择证书不可靠时设置证书主体，不要包含 Apple Distribution 前缀
 export CHRONI_MAC_STORE_IDENTITY="Your Name (TEAMID)"
 npx pnpm@11.7.0 run package:macos:store
