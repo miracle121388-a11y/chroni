@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { matchesGlob } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import builderConfig from "../electron-builder.config.cjs";
@@ -68,8 +69,16 @@ test("packaging commands never publish before release artifacts are verified", (
   }
 });
 
-test("macOS universal packaging preserves both canvas native architectures", () => {
-  assert.equal(builderConfig.mac.x64ArchFiles, "**/node_modules/@napi-rs/canvas-darwin-*/**");
+test("macOS universal packaging preserves architecture-specific native dependencies", () => {
+  for (const architecture of ["arm64", "x64"]) {
+    for (const file of [
+      `@napi-rs/canvas-darwin-${architecture}/skia.darwin-${architecture}.node`,
+      `@img/sharp-darwin-${architecture}/lib/sharp-darwin-${architecture}.node`,
+      `@img/sharp-libvips-darwin-${architecture}/lib/libvips-cpp.dylib`,
+      `onnxruntime-node/bin/napi-v6/darwin/${architecture}/onnxruntime_binding.node`,
+    ]) assert(matchesGlob(`Contents/Resources/app.asar.unpacked/node_modules/${file}`, builderConfig.mac.x64ArchFiles));
+  }
+  assert(!matchesGlob("Contents/Frameworks/Electron Framework.framework/Electron Framework", builderConfig.mac.x64ArchFiles));
   assert.match(workspaceConfig, /supportedArchitectures:[\s\S]*cpu:[\s\S]*- x64[\s\S]*- arm64/);
   assert.match(artifactVerifier, /canvas-darwin-arm64\/skia\.darwin-arm64\.node/);
   assert.match(artifactVerifier, /canvas-darwin-x64\/skia\.darwin-x64\.node/);
