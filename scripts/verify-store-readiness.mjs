@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadImage } from "@napi-rs/canvas";
+import { readMacOSProfile } from "./read-macos-profile.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const desktop = join(root, "apps", "desktop");
@@ -178,17 +179,12 @@ async function assertAcceptedScreenshot(filePath, label, rejectAlpha) {
 }
 
 function verifyProvisioningProfile(profilePath) {
-  const xml = execFileSync("security", ["cms", "-D", "-i", profilePath]);
-  const profile = plistToJson(xml);
+  const profile = readMacOSProfile(profilePath);
   const teamId = Array.isArray(profile.TeamIdentifier) ? profile.TeamIdentifier[0] : undefined;
   assert(typeof teamId === "string" && teamId, "Provisioning profile has no TeamIdentifier.");
-  assert(profile.Entitlements?.["application-identifier"] === `${teamId}.app.chroni.desktop`, "Provisioning profile does not match app.chroni.desktop.");
-  assert(profile.Entitlements?.["get-task-allow"] !== true, "Provisioning profile must be a distribution profile.");
+  assert(profile.Entitlements?.["com.apple.application-identifier"] === `${teamId}.app.chroni.desktop`, "Provisioning profile does not match app.chroni.desktop.");
+  assert(profile.Entitlements?.["get-task-allow"] !== true && profile.Entitlements?.["com.apple.security.get-task-allow"] !== true, "Provisioning profile must be a distribution profile.");
   assert(new Date(profile.ExpirationDate).getTime() > Date.now(), "Provisioning profile is expired.");
-}
-
-function plistToJson(input) {
-  return JSON.parse(execFileSync("plutil", ["-convert", "json", "-o", "-", "-"], { encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"] }));
 }
 
 function codePoints(value) {

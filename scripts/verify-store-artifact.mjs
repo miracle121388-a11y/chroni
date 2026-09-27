@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, w
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readMacOSProfile } from "./read-macos-profile.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const desktop = join(root, "apps", "desktop");
@@ -109,13 +110,13 @@ function verifyMacArtifact() {
   assert(info.ITSAppUsesNonExemptEncryption === false, "MAS bundle is missing its export-compliance declaration.");
   assert(typeof info.NSMicrophoneUsageDescription === "string" && info.NSMicrophoneUsageDescription.includes("本机转写"), "MAS bundle is missing its microphone purpose string.");
 
-  const profile = plistToJson(execFileSync("security", ["cms", "-D", "-i", provisioningProfile]));
+  const profile = readMacOSProfile(provisioningProfile);
   const teamId = Array.isArray(profile.TeamIdentifier) ? profile.TeamIdentifier[0] : undefined;
   assert(typeof teamId === "string" && teamId, "Provisioning profile has no TeamIdentifier.");
   assert(new Date(profile.ExpirationDate).getTime() > Date.now(), "Provisioning profile is expired.");
-  assert(profile.Entitlements?.["application-identifier"] === `${teamId}.${bundleId}`, "Provisioning profile does not match the Chroni bundle identifier.");
+  assert(profile.Entitlements?.["com.apple.application-identifier"] === `${teamId}.${bundleId}`, "Provisioning profile does not match the Chroni bundle identifier.");
   assert(profile.Entitlements?.["com.apple.developer.team-identifier"] === teamId, "Provisioning profile team identifier is inconsistent.");
-  assert(profile.Entitlements?.["get-task-allow"] !== true, "Provisioning profile is a development profile, not a distribution profile.");
+  assert(profile.Entitlements?.["get-task-allow"] !== true && profile.Entitlements?.["com.apple.security.get-task-allow"] !== true, "Provisioning profile is a development profile, not a distribution profile.");
   assert(entitlements.includes(`<string>${teamId}.${bundleId}</string>`), "Signed app application identifier does not match the provisioning profile.");
   for (const file of [
     "Contents/Resources/licenses/CHRONI-MIT-LICENSE.txt",
