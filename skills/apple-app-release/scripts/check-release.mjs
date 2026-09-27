@@ -18,6 +18,15 @@ export async function checkRelease(record, baseDir) {
     if (!present(target[field])) fail(`target.${field}`, '缺少明确目标');
   }
   if (!['IOS', 'MAC_OS'].includes(target.platform)) fail('target.platform', '此预检仅支持 IOS 或 MAC_OS');
+  const allowedFamilies = target.platform === 'IOS' ? ['iPhone', 'iPad'] : ['Mac'];
+  const families = target.deviceFamilies;
+  if (!Array.isArray(families) || !families.length || new Set(families).size !== families.length || families.some(f => !allowedFamilies.includes(f))) {
+    fail('target.deviceFamilies', '设备家族必须明确，且与商店平台匹配');
+  }
+  const builtFamilies = record.build?.deviceFamilies;
+  if (!Array.isArray(builtFamilies) || !Array.isArray(families) || JSON.stringify([...builtFamilies].sort()) !== JSON.stringify([...families].sort())) {
+    fail('build.deviceFamilies', '产物实际设备支持与发布目标不一致');
+  }
   if (!['prepare', 'upload', 'submit', 'status'].includes(record.intent)) fail('intent', '未知发布意图');
   if (record.intent !== 'submit') fail('intent', '此预检用于最终送审；当前意图不能据此送审');
   if (record.remote?.submissionState !== 'NONE' && record.remote?.submissionState !== 'READY_FOR_REVIEW') {

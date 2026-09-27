@@ -10,7 +10,7 @@ const body = 'test artifact';
 writeFileSync(join(root, 'app.pkg'), body);
 const keys = ['identity','artifact','runtime','releaseReview','metadata','privacy','websites','pricingAvailability','reviewAccess','exportCompliance','releaseMode','ascValidation','submissionLookup'];
 function fixture() {
-  return {schemaVersion:1,intent:'submit',target:{teamId:'TEAM',appId:'123',bundleId:'com.example.test',platform:'MAC_OS',version:'1.0',versionId:'v1',buildNumber:'1',buildId:'b1'},build:{appId:'123',platform:'MAC_OS',version:'1.0',buildNumber:'1',buildId:'b1'},remote:{buildState:'VALID',submissionState:'NONE',submissionId:null},artifact:{path:'app.pkg',sha256:createHash('sha256').update(body).digest('hex')},features:{digitalGoods:false,gameCenter:false},checks:Object.fromEntries(keys.map(k=>[k,{status:'pass',evidence:'fixture verification',checkedAt:'2026-09-27T08:00:00Z'}])),blockers:[]};
+  return {schemaVersion:1,intent:'submit',target:{teamId:'TEAM',appId:'123',bundleId:'com.example.test',platform:'MAC_OS',deviceFamilies:['Mac'],version:'1.0',versionId:'v1',buildNumber:'1',buildId:'b1'},build:{appId:'123',platform:'MAC_OS',deviceFamilies:['Mac'],version:'1.0',buildNumber:'1',buildId:'b1'},remote:{buildState:'VALID',submissionState:'NONE',submissionId:null},artifact:{path:'app.pkg',sha256:createHash('sha256').update(body).digest('hex')},features:{digitalGoods:false,gameCenter:false},checks:Object.fromEntries(keys.map(k=>[k,{status:'pass',evidence:'fixture verification',checkedAt:'2026-09-27T08:00:00Z'}])),blockers:[]};
 }
 try {
   await test('a complete internally consistent record passes',async()=>assert.equal((await checkRelease(fixture(),root)).ready,true));
@@ -28,5 +28,11 @@ try {
     ['missing runtime evidence',r=>r.checks.runtime.evidence='','checks.runtime'],
   ]) await test(label,async()=>{const r=fixture();change(r);const report=await checkRelease(r,root);assert.equal(report.ready,false);assert.ok(report.issues.some(i=>i.field===field));});
   await test('a resolved existing draft can be reused',async()=>{const r=fixture();r.remote={buildState:'VALID',submissionState:'READY_FOR_REVIEW',submissionId:'s1'};assert.equal((await checkRelease(r,root)).ready,true);});
+  for (const devices of [['iPhone'], ['iPad'], ['iPhone','iPad']]) {
+    await test('IOS supports '+devices.join('+'),async()=>{const r=fixture();r.target.platform=r.build.platform='IOS';r.target.deviceFamilies=r.build.deviceFamilies=devices;assert.equal((await checkRelease(r,root)).ready,true);});
+  }
+  await test('iPadOS is not a separate ASC platform',async()=>{const r=fixture();r.target.platform=r.build.platform='IPADOS';assert.equal((await checkRelease(r,root)).ready,false);});
+  await test('iPad advertised but absent in artifact blocks',async()=>{const r=fixture();r.target.platform=r.build.platform='IOS';r.target.deviceFamilies=['iPhone','iPad'];r.build.deviceFamilies=['iPhone'];const result=await checkRelease(r,root);assert.ok(result.issues.some(i=>i.field==='build.deviceFamilies'));});
+  await test('Mac device family cannot be submitted as IOS',async()=>{const r=fixture();r.target.platform=r.build.platform='IOS';assert.equal((await checkRelease(r,root)).ready,false);});
   await test('invalid input fails closed',async()=>assert.equal((await checkRelease(null,root)).ready,false));
 } finally { rmSync(root,{recursive:true,force:true}); }

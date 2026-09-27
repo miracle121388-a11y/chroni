@@ -1,11 +1,11 @@
 ---
-name: app-store-release
-description: 完成 Apple App Store 首次上架、版本更新及拒审后的修复再提交，覆盖 macOS 与 iOS 的项目核验、签名打包、商店资料、隐私声明、网站验证、上传和送审。适用于用户要求上架或继续处理发布；仅生成普通桌面安装包、发布 GitHub Release 或其他应用商店时不使用。
+name: apple-app-release
+description: 统一处理 iOS、iPadOS 和 macOS 应用的开发阶段发行准备、发布前工程审核、签名归档、TestFlight、App Store 首次上架、版本更新及拒审修复。用于准备或执行 Apple 应用发行；不用于与发行无关的普通功能开发、其他应用商店或单纯 GitHub Release。
 ---
 
-# App Store 发布
+# Apple App Release
 
-把当前项目推进到用户要求的发布阶段，凭 Apple 实际状态报告结果。先识别平台与已有进度，复用已完成工作。用户说“帮我上架”包含必要准备、上传和普通送审操作；“准备上架资料”不包含最终提交。不要把本 skill 当作额外授权来源。
+把当前项目推进到用户要求的发布阶段，凭 Apple 实际状态报告结果。先识别平台与已有进度，复用已完成工作。用户说“帮我上架”包含必要准备、上传和普通送审操作；“准备上架资料”不包含最终提交；“发布 TestFlight”不包含正式商店送审。开发阶段只完成发行相关准备，不自动升级为发布任务。不要把本 skill 当作额外授权来源。
 
 ## 执行入口与按需参考
 
@@ -13,7 +13,8 @@ description: 完成 Apple App Store 首次上架、版本更新及拒审后的�
 
 - 每次执行先读 [公司与多应用配置](references/company-profile.md)，再读 [ASC CLI 流程](references/asc-cli.md) 建立认证、目标和发布路径；无 CLI 时按其中回退。
 - 首发、更新或拒审修复在送审前读 [工程发布审核](references/release-review.md)，检查实际代码与产物；仅查询状态无需重做审核。
-- Electron MAS 读取专用签名参考；最后读取发布检查与状态参考。
+- iOS/iPadOS 读取 [移动平台开发验证与发行](references/ios-ipados.md)，区分 iPhone/iPad 设备家族与 IOS 商店平台；Electron macOS 读取 [MAS 签名](references/electron-mas.md)。原生 macOS 复用 Xcode/CLI 与工程审核流程。
+- 最后读取 [发布检查与状态](references/release-checks.md)。TestFlight 路径使用移动平台参考中的独立完成条件，不强套正式商店送审预检。
 - 可选本地记录预检：`node <skill目录>/scripts/check-release.mjs <发布记录.json>`。填写模板的真实检查证据后运行；通过不能取代 Apple 校验。
 - [来源与维护](references/sources.md) 记录上游版本、采用内容与未采用规则。
 
@@ -21,7 +22,7 @@ description: 完成 Apple App Store 首次上架、版本更新及拒审后的�
 
 读取项目规则、构建配置、发布文档、Git 状态和现有商店记录，形成一份简短的当前发布记录，沿用项目既有位置。记录以下事实，未知且影响后续操作的才询问：
 
-- 平台和技术栈：Electron macOS、原生 macOS、iOS 或多平台；不得因为叫 App 就选择 iOS。
+- 平台和技术栈：Electron macOS、原生 macOS、iOS/iPadOS 或多平台，并明确 iPhone-only、iPad-only、通用设备支持及是否有扩展；不得因为叫 App 就选择 iOS。
 - 发行主体、Developer Team、会员状态和当前账号权限；公司主体与个人主体不要混用。
 - Bundle ID、SKU、App Store Connect App ID、版本号和 build number；首次上传前核准身份，更新使用原有记录。
 - 免费/付费/内购、发布地区、主语言、支持与隐私 URL、审核联系人、自动或手动发布。

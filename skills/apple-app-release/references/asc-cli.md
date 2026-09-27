@@ -23,7 +23,7 @@ asc review submissions list --app "$RELEASE_APP_ID" --paginate --output json
 
 Bundle ID 字符串、Developer Portal Bundle 资源 ID、ASC App ID、版本字符串、Version ID、build number、Build ID、Submission ID 各不相同。只在结果唯一且关联吻合时继续；多个结果要进一步限定，不能选第一个或全局 latest。
 
-平台从项目确定：macOS 通常为 `MAC_OS`，iOS 为 `IOS`，在相应命令帮助中核准。某个高层命令若无平台参数，必须验证它能从指定的资源推导目标平台，否则换明确平台的操作；绝不默认 iOS。
+平台从项目确定：macOS 通常为 `MAC_OS`，iOS/iPadOS 共用的商店平台为 `IOS`（设备支持另行记录），在相应命令帮助中核准。某个高层命令若无平台参数，必须验证它能从指定的资源推导目标平台，否则换明确平台的操作；绝不默认 iOS。
 
 ## 元数据同步
 

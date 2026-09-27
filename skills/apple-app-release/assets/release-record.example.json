@@ -9,14 +9,16 @@
     "version": "",
     "versionId": "",
     "buildNumber": "",
-    "buildId": ""
+    "buildId": "",
+    "deviceFamilies": []
   },
   "build": {
     "appId": "",
     "platform": "",
     "version": "",
     "buildNumber": "",
-    "buildId": ""
+    "buildId": "",
+    "deviceFamilies": []
   },
   "remote": {
     "buildState": "UNKNOWN",

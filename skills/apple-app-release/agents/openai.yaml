@@ -1,0 +1,4 @@
+interface:
+  display_name: "Apple App Release"
+  short_description: "统一 iOS、iPadOS、macOS 的发行准备、工程审核、TestFlight 与 App Store 发布"
+  default_prompt: "使用 $apple-app-release 处理当前 Apple 应用的发行准备或发布，识别目标设备和阶段，复用公司配置并验证最终状态。"
