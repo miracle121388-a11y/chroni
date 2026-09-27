@@ -5,11 +5,12 @@ import { extname, join, resolve } from "node:path";
 if (process.platform !== "darwin") throw new Error("App Store package validation must run on macOS.");
 const packageDirectory = resolve("apps/desktop/dist-electron");
 assert(existsSync(packageDirectory), "Mac App Store package directory is missing.");
-const packages = readdirSync(packageDirectory).filter((name) => extname(name).toLowerCase() === ".pkg");
+const packages = [packageDirectory, join(packageDirectory, "mas-universal")].filter(existsSync)
+  .flatMap((directory) => readdirSync(directory).filter((name) => extname(name).toLowerCase() === ".pkg").map((name) => join(directory, name)));
 assert(packages.length === 1, `Expected one Mac App Store PKG, found ${packages.length}.`);
 const keyId = requireEnvironment("APP_STORE_CONNECT_API_KEY_ID");
 const issuerId = requireEnvironment("APP_STORE_CONNECT_API_ISSUER_ID");
-const packagePath = join(packageDirectory, packages[0]);
+const packagePath = packages[0];
 
 execFileSync("xcrun", [
   "altool",

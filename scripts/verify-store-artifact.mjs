@@ -141,9 +141,10 @@ function verifyMacArtifact() {
 
 function onlyArtifact(extension) {
   assert(existsSync(output), "Store package output directory is missing.");
-  const artifacts = readdirSync(output)
+  const directories = [output, ...(extension === ".pkg" ? [join(output, "mas-universal")] : [])].filter(existsSync);
+  const artifacts = directories.flatMap((directory) => readdirSync(directory)
     .filter((name) => extname(name).toLowerCase() === extension)
-    .map((name) => join(output, name));
+    .map((name) => join(directory, name)));
   assert(artifacts.length === 1, `Expected one ${extension} artifact, found ${artifacts.length}.`);
   return artifacts[0];
 }

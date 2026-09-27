@@ -210,8 +210,12 @@ async function verifyMacArtifact(appPath, packagedAsar, fileSet) {
     assert(cookieEncryptionEnabled, "Signed macOS package does not protect Chromium cookies with the system Keychain.");
   }
   if (process.env.CHRONI_REQUIRE_SIGNING === "1") {
-    assert(/Authority=Developer ID Application:/i.test(signature), "Public macOS artifact is not signed with Developer ID Application.");
-    assert(/flags=.*runtime/i.test(signature), "Public macOS artifact does not enable hardened runtime.");
+    if (storeBuild) {
+      assert(/Authority=(?:Apple Distribution|3rd Party Mac Developer Application):/i.test(signature), "MAS artifact is not signed with a distribution certificate.");
+    } else {
+      assert(/Authority=Developer ID Application:/i.test(signature), "Public macOS artifact is not signed with Developer ID Application.");
+      assert(/flags=.*runtime/i.test(signature), "Public macOS artifact does not enable hardened runtime.");
+    }
     assert(/TeamIdentifier=(?!not set)/i.test(signature), "Public macOS artifact has no signing TeamIdentifier.");
   }
   if (process.env.CHRONI_REQUIRE_NOTARIZATION === "1") {
