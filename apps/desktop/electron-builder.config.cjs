@@ -98,7 +98,7 @@ module.exports = {
     // pnpm installs both Darwin CPU variants (see pnpm-workspace.yaml). The
     // two target ASARs intentionally contain the same pair of thin binaries;
     // runtime module selection then chooses the matching process architecture.
-    x64ArchFiles: "**/node_modules/{@napi-rs/canvas-darwin-*,@img/sharp-darwin-*,@img/sharp-libvips-darwin-*}/**",
+    x64ArchFiles: "**/node_modules/{@napi-rs/canvas-darwin-*,@img/sharp-darwin-*,@img/sharp-libvips-darwin-*,onnxruntime-node/bin/napi-v6/darwin}/**",
     identity: hasMacCertificate ? undefined : "-",
     hardenedRuntime: hasMacCertificate,
     gatekeeperAssess: false,
