@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "intent": "prepare",
+  "target": {
+    "teamId": "",
+    "appId": "",
+    "bundleId": "",
+    "platform": "",
+    "version": "",
+    "versionId": "",
+    "buildNumber": "",
+    "buildId": ""
+  },
+  "build": {
+    "appId": "",
+    "platform": "",
+    "version": "",
+    "buildNumber": "",
+    "buildId": ""
+  },
+  "remote": {
+    "buildState": "UNKNOWN",
+    "submissionState": "UNKNOWN",
+    "submissionId": null
+  },
+  "artifact": {
+    "path": "",
+    "sha256": ""
+  },
+  "features": {
+    "digitalGoods": null,
+    "gameCenter": null
+  },
+  "checks": {
+    "identity": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "artifact": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "runtime": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "releaseReview": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "metadata": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "privacy": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "websites": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "pricingAvailability": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "reviewAccess": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "exportCompliance": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "releaseMode": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "ascValidation": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    },
+    "submissionLookup": {
+      "status": "unknown",
+      "evidence": "",
+      "checkedAt": ""
+    }
+  },
+  "blockers": []
+}
