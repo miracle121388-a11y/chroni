@@ -16,7 +16,7 @@
 
 | Apple 数据类型 | 是否可能收集 | 是否可能关联 | 原因 |
 | --- | --- | --- | --- |
-| User Content -> Other User Content | 是 | 否 | 托管模型发送解析文本和规划上下文，但 Chroni 没有账号；自定义服务的关联规则由用户选择的服务商决定。 |
+| User Content -> Other User Content | 是 | 是 | 联网模型接收用户提供的解析文本和规划上下文；文本可能含身份信息，且发送前不保证匿名化。没有账号不能单独作为“不关联身份”的依据。 |
 | Other Data -> Other Data Types | 是 | 否 | 托管网关使用服务端密钥生成来源网络摘要，只用于公平限流。 |
 | Usage Data -> Other Usage Data | 是 | 否 | 托管服务可能记录请求状态、耗时和 token 数，但不建立用户档案。 |
 

@@ -12,7 +12,7 @@
 | 支持网址 | https://getchroni.zeabur.app/support.html |
 | 隐私政策 | https://getchroni.zeabur.app/privacy.html |
 | 产品主页 | https://getchroni.zeabur.app/ |
-| 版权 | 2026 Chroni contributors（提交前替换为公司法定版权主体） |
+| 版权 | 2026 引力回响（苏州）科技有限公司 |
 
 ## 简短描述
 
