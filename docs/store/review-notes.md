@@ -37,7 +37,7 @@
 
 ## 2026-09-28：Guideline 2.1 补充材料
 
-状态：根据负责人转述，Apple 要求六项补充信息。以下英文正文为待提交稿；真机 QA、录像及录像引用尚未补齐，未回复 Apple，未更新线上 Notes。真机测试已发现 `0.2.4 (1)` 辅助进程沙盒初始化崩溃；构建 2 已验证启动修复；正式录屏与送审改用恢复小童形象的构建 3，需先完成新构建真机核验。最终将同一份完整正文写入审核消息和 App Review Information 的 Notes。
+状态：构建 3 已在 macOS 27.0（26A428）、Mac17,3 真机通过核心流程与重启数据保留验证，2026-09-28 已完成 4 分钟连续录像，文件名 `Chroni-0.2.4-build3-demo.mp4`，保存在仓库外。下方正文已补齐六项要求。App Store Connect 界面操作暂时返回 noWindowsAvailable／键盘超时，已请负责人解锁并将 Safari 置于前台；线上 Notes、构建关联、审核消息与再次提交仍未完成。
 
 ### 真机 QA 与录像清单
 
@@ -55,12 +55,12 @@
 
 录像保存到仓库外，发送前检查没有个人课程材料、私人通知、账号信息或凭据。优先作为审核消息附件；如使用链接，应无需登录且审核人员可访问。补齐实际附件名或 URL，并在 Notes 中引用相同录像。不要提交下方的未完成占位内容。
 
-### 英文回复与 Notes 共用正文（待补录像及 QA 后提交）
+### 英文回复与 Notes 共用正文（材料齐备，待线上提交）
 
 Thank you for reviewing Chroni 0.2.4 (build 3).
 
 1. Physical-device recording and testing
-[PENDING: actual recording attachment name, Mac model, macOS version, test date and verified build 3 QA results.]
+Attached: Chroni-0.2.4-build3-demo.mp4 (4 minutes). Recorded on a physical Mac (Mac17,3), macOS 27.0 (26A428), on September 28, 2026, using TestFlight build 3. It starts with launching the app and shows the XIAOTONG companion, task creation, progress evidence, scheduling, daily review, optional AI consent/use, licenses and restart. We verified these flows and saved-data persistence without a crash.
 
 2. Purpose and audience
 Chroni is a free, local-first macOS productivity app for students and independent learners, available to the general public. It turns course requirements and personal project materials into learning tasks, deadlines, schedules and progress records. Users control their plans; Chroni does not complete or submit assignments for them. It is not restricted to an institution or employer.
