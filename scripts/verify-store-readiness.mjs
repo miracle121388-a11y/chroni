@@ -45,6 +45,10 @@ assert(JSON.stringify(builderConfig.mac?.extendInfo?.CFBundleLocalizations) === 
 assert(builderConfig.mac?.extendInfo?.ITSAppUsesNonExemptEncryption === false, "macOS export-compliance metadata must declare no non-exempt encryption.");
 assert(typeof builderConfig.mac?.extendInfo?.NSMicrophoneUsageDescription === "string", "macOS microphone purpose text is missing.");
 
+const inheritedEntitlements = readFileSync(join(desktop, "build", "entitlements.mas.inherit.plist"), "utf8");
+const inheritedKeys = [...inheritedEntitlements.matchAll(/<key>(.*?)<\/key>/g)].map((match) => match[1]).sort();
+assert(JSON.stringify(inheritedKeys) === JSON.stringify(["com.apple.security.app-sandbox", "com.apple.security.inherit"]), "MAS helpers must only declare sandbox and inheritance rights; other sandbox rights abort startup.");
+
 if (requestedPlatform !== "macos") {
   assert(builderConfig.appx?.applicationId === "Chroni" && builderConfig.appx?.displayName === "Chroni", "AppX identity is incorrect.");
   assert(JSON.stringify(builderConfig.appx?.languages) === JSON.stringify(["zh-CN"]), "AppX must advertise only the shipped zh-CN interface.");

@@ -100,6 +100,14 @@ function verifyMacArtifact() {
   ]) {
     assert(entitlements.includes(`<key>${entitlement}</key>`), `Signed app is missing ${entitlement}.`);
   }
+  const frameworks = join(appPath, "Contents", "Frameworks");
+  const helpers = readdirSync(frameworks).filter((name) => name.startsWith("Chroni Helper") && name.endsWith(".app"));
+  assert(helpers.length > 0, "MAS helper applications are missing.");
+  for (const helper of helpers) {
+    const rights = plistToJson(Buffer.from(execText("codesign", ["--display", "--entitlements", ":-", join(frameworks, helper)])));
+    const sandboxKeys = Object.keys(rights).filter((key) => key.startsWith("com.apple.security.")).sort();
+    assert(JSON.stringify(sandboxKeys) === JSON.stringify(["com.apple.security.app-sandbox", "com.apple.security.inherit"]) && rights["com.apple.security.app-sandbox"] === true && rights["com.apple.security.inherit"] === true, `${helper}: invalid sandbox inheritance entitlements.`);
+  }
   const bundleId = execText("plutil", ["-extract", "CFBundleIdentifier", "raw", "-o", "-", infoPlist]).trim();
   assert(bundleId === "app.chroni.desktop", `Unexpected MAS bundle identifier: ${bundleId}`);
   const info = plistToJson(readFileSync(infoPlist));

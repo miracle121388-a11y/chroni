@@ -186,7 +186,10 @@ test("desktop packages preserve the local voice runtime and declare microphone u
   const masEntitlements = readFileSync(new URL("../build/entitlements.mas.plist", import.meta.url), "utf8");
   const masInheritedEntitlements = readFileSync(new URL("../build/entitlements.mas.inherit.plist", import.meta.url), "utf8");
   assert.match(masEntitlements, /com\.apple\.security\.device\.audio-input/);
-  assert.match(masInheritedEntitlements, /com\.apple\.security\.device\.audio-input/);
+  // Additional App Sandbox rights abort inherited helper processes at launch.
+  assert.deepEqual([...masInheritedEntitlements.matchAll(/<key>(.*?)<\/key>/g)].map((match) => match[1]).sort(), [
+    "com.apple.security.app-sandbox", "com.apple.security.inherit",
+  ]);
 });
 
 test("competition submission ships the animated companion product build", () => {
