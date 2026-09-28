@@ -128,10 +128,12 @@ function verifyMacArtifact() {
   assert(entitlements.includes(`<string>${teamId}.${bundleId}</string>`), "Signed app application identifier does not match the provisioning profile.");
   for (const file of [
     "Contents/Resources/licenses/CHRONI-MIT-LICENSE.txt",
+    "Contents/Resources/licenses/XIAOTONG-APACHE-2.0.txt",
+    "Contents/Resources/licenses/XIAOTONG-ADDITIONAL-TERMS.md",
+    "Contents/Resources/licenses/XIAOTONG-NOTICE.md",
     "Contents/Resources/licenses/THIRD_PARTY_NOTICES.md",
     "Contents/Resources/privacy/PRIVACY.md",
   ]) assert(existsSync(join(appPath, ...file.split("/"))), `MAS app is missing ${file}.`);
-  assert(!existsSync(join(appPath, "Contents", "Resources", "licenses", "XIAOTONG-APACHE-2.0.txt")), "MAS app includes excluded XIAOTONG resources.");
   const signatureDetails = execCombined("codesign", ["--display", "--verbose=4", appPath]);
   assert(/Authority=(?:Apple Distribution|3rd Party Mac Developer Application)/i.test(signatureDetails), "Chroni.app does not report a Mac App Store application signature.");
   const packageSignature = execCombined("pkgutil", ["--check-signature", packagePath]);
