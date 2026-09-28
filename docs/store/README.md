@@ -2,9 +2,11 @@
 
 本目录保存 Microsoft Store 与 Mac App Store 的提交文案、审核说明和发布检查表。普通 GitHub Release 仍使用 NSIS、Portable、DMG 与 ZIP；商店包使用独立命令，且由系统应用商店负责后续更新。
 
-当前状态：公司已确认 Apple Developer Program 会员开通；Chroni 按免费 macOS 应用提交，版权主体为引力回响（苏州）科技有限公司，支持邮箱为 developer@twintalk.cn，公司官网为 https://twintalk.cn。产品支持与隐私 URL 继续使用现有 Chroni 产品站。团队 RJ9LMC47V5、Bundle ID `app.chroni.desktop` 和 App Store Connect App `6816595577` 已建立；版本 `0.2.4 (1)` 已提交 Apple 审核，当前状态为“正在等待审核”，尚未获批或上架。
+当前状态：公司已确认 Apple Developer Program 会员开通；Chroni 按免费 macOS 应用提交，版权主体为引力回响（苏州）科技有限公司，支持邮箱为 developer@twintalk.cn，公司官网为 https://twintalk.cn。产品支持与隐私 URL 继续使用现有 Chroni 产品站。团队 RJ9LMC47V5、Bundle ID `app.chroni.desktop` 和 App Store Connect App `6816595577` 已建立；版本 `0.2.4 (1)` 已提交 Apple 审核，2026-09-28 据负责人提供的 Apple 消息，审核因 Guideline 2.1 要求补充信息而受阻，尚未获批或上架。
 
 ## 最近核验
+
+2026-09-28：已整理[六项英文补充材料与真机录屏清单](./review-notes.md#2026-09-28guideline-21-补充材料)。当前缺少提交构建的真机 QA 记录及录像；App Store Connect 登录已失效，未更新线上 Notes、未回复审核消息或重新提交。网关健康检查返回 `ok`，不能据此认定全部模型功能真机测试通过。
 
 2026-09-27：已创建应用及安装器发行证书、distribution profile；已保存版本 0.2.4、六张截图、审核联系信息、免费定价、效率/教育类别与 4+ 分级，发布范围为中国大陆、香港、澳门、台湾、新加坡、马来西亚。隐私标签经负责人确认后已发布。版本 `0.2.4 (1)` 的 universal MAS 包已包含最新隐私声明，应用签名、安装器签名及全部本地检查通过；2026-09-27 13:46（中国标准时间）Transporter 确认交付成功，Apple 已完成处理；构建已关联至版本，App Store Connect 资料检查通过并完成提交，状态为“正在等待审核”。`store:prepare:macos`、`site:check` 通过；产品站经 Zeabur 本地上传部署后，`/support.html` 与 `/privacy.html` 均返回 HTTP 200，已确认包含公司名称和支持邮箱。审核提交 ID：`a533c206-dc2e-4b72-8881-e3beeb491e03`；设置为审核通过后自动发布。Zeabur 服务仍显示旧 GitHub 来源，后续网站更新应核对实际部署来源，不能假定当前仓库推送会自动部署。
 
