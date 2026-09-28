@@ -57,29 +57,30 @@
 
 ### 英文回复与 Notes 共用正文（待补录像及 QA 后提交）
 
-Thank you for reviewing Chroni 0.2.4 (build 2). Here is the requested information.
+Thank you for reviewing Chroni 0.2.4 (build 3).
 
 1. Physical-device recording and testing
-[PENDING: insert the actual recording attachment name or accessible URL, Mac model, macOS version, test date and verified QA results. The recording must begin with launching the submitted build and show the typical user flow.]
+[PENDING: actual recording attachment name, Mac model, macOS version, test date and verified build 3 QA results.]
 
 2. Purpose and audience
-Chroni is a free, local-first macOS productivity app for students and independent learners, available to the general public. It helps turn course requirements and personal project materials into actionable learning tasks, deadlines, daily schedules and progress records. Users review and confirm extracted information. Chroni does not complete or submit assignments on their behalf and is not an institution-only or employee-only app.
+Chroni is a free, local-first macOS productivity app for students and independent learners, available to the general public. It turns course requirements and personal project materials into learning tasks, deadlines, schedules and progress records. Users control their plans; Chroni does not complete or submit assignments for them. It is not restricted to an institution or employer.
 
 3. Setup and main features
-No account, login credentials, purchase, subscription, API key or access code is required for the default experience or the optional managed AI service. Launch Chroni, then open the control center from its menu-bar icon. In Smart Organize (智能整理), enter this fictional sample: 明天 18:00 提交数据库实验报告，预计需要 60 分钟。
-Review and save the extracted task. Open Learning Tasks (学习任务) to inspect its deadline, source and deliverables. In Today (今日执行), choose Smart Schedule (智能安排) to create time blocks. Record progress and use Daily Review (每日回顾) to edit and save a summary. No sample file is required for this flow.
-New installations use local rules. To test optional AI, open Preferences > Advanced (偏好 > 高级), read the data-sharing disclosure, explicitly consent and enable the managed service. Closing the control-center window leaves the menu-bar app running; choose Quit Completely (完全退出) to exit.
-There is no account creation, login or account-deletion flow. User-created tasks and notes are private productivity data: the app has no public feed, publishing, messaging or interactions between users, so social reporting/blocking flows are not applicable. There are no paid features.
+No account, credentials, purchase, subscription, API key or access code is required, including for the optional managed AI service. Launch Chroni and open the control center from the companion or menu-bar icon.
+In Smart Organize (智能整理), enter: 明天 18:00 提交数据库实验报告，预计需要 60 分钟。
+Run organization, then open Learning Tasks (学习任务) to inspect the saved task, deadline, source and deliverables. Record a progress note. In Today (今日执行), choose Smart Schedule (智能安排) to create time blocks. In Daily Review (每日回顾), edit and save a summary. No sample file is required.
+New installations use local rules. For optional AI, open Preferences > Advanced (偏好 > 高级), read the data-sharing disclosure and explicitly enable the managed service. You can disable it at any time. Closing the control center leaves the menu-bar app running; use Quit Completely (完全退出) to exit.
+There is no registration, login or account-deletion flow. Tasks and notes are private productivity data; there is no public feed, publishing, messaging or interaction between users. Social reporting/blocking flows are not applicable. There are no paid features.
 
 4. External services and tools
-Local storage, file parsing, OCR, scheduling and progress tracking run on the Mac. The desktop runtime is Electron. Optional managed AI sends necessary extracted text through our Chroni gateway, hosted on Zeabur, to DeepSeek after explicit consent. No DeepSeek key is distributed in the app. Users may alternatively configure an OpenAI-compatible provider; this is optional and requires renewed consent. Managed-service failures or usage limits fall back to local rules.
-Optional speech transcription downloads onnx-community/whisper-tiny model files from Hugging Face on first use, then runs locally. Raw microphone audio is not uploaded to our gateway or DeepSeek. Zeabur also hosts the support/privacy website. Updates are delivered by the Mac App Store. There are no authentication, payment or advertising services.
+Electron provides the desktop runtime. Local storage, file parsing, OCR, scheduling and progress tracking run on the Mac. After explicit consent, optional managed AI sends necessary text through our Chroni gateway on Zeabur to DeepSeek. No DeepSeek key is shipped in the app. Users may optionally configure another OpenAI-compatible provider, with renewed consent. Service failures or usage limits fall back to local rules.
+Optional speech transcription downloads onnx-community/whisper-tiny model files from Hugging Face on first use, then runs locally. Raw microphone audio is not uploaded to our gateway or DeepSeek. Zeabur hosts our support/privacy website. Updates come from the Mac App Store. There are no authentication, payment or advertising services.
 
 5. Regional behavior
-The same app functionality and content are offered in mainland China, Hong Kong, Macao, Taiwan, Singapore and Malaysia. Chroni does not intentionally enable different features by region. Availability of optional third-party network services depends on connectivity and provider availability; local features remain available without enabling AI.
+Functionality and content are consistent across mainland China, Hong Kong, Macao, Taiwan, Singapore and Malaysia. We do not enable different features by region. Optional network services depend on connectivity and provider availability; local features remain usable without AI.
 
 6. Regulated services and third-party materials
-Chroni is a personal productivity tool and does not provide regulated medical, financial, gambling or similar services. The Mac App Store build uses XIAOTONG Desktop Pet artwork under its included Apache-2.0 license and additional terms. The original attribution, repository link, author contact and donation information are retained in Runtime Status. Chroni itself has no paid features. It does not distribute a third-party course or media catalog. Users import their own materials for private organization. Open-source components and model assets remain subject to their licenses; acknowledgements are accessible under Runtime Status (运行状态) > Open-source Licenses and Asset Information (开源许可与素材信息).
+Chroni does not provide regulated medical, financial, gambling or similar services. XIAOTONG Desktop Pet artwork is included under its Apache-2.0 license and additional terms. The complete licenses and original author attribution, repository link, contact and donation information are retained. Chroni is free with no paid features or advertising. It distributes no third-party course/media catalog; users import their own materials for private organization. Licenses and asset information are accessible in Runtime Status (运行状态).
 
 Support: https://getchroni.zeabur.app/support.html
 Privacy: https://getchroni.zeabur.app/privacy.html
