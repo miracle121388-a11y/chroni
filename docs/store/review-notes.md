@@ -41,7 +41,7 @@
 
 ### 真机 QA 与录像清单
 
-使用真实 Mac 上通过 TestFlight 安装的 `0.2.4 (1)`，不要用开发服务器、旧 DMG 或截图拼接代替提交版本。先核对“关于本机”的系统版本、机型以及 TestFlight 的版本/构建号。录屏建议 3–5 分钟（非 Apple 强制时长），开始录制后才启动 Chroni，连续展示典型流程，仅使用虚构材料。
+使用真实 Mac 上通过 TestFlight 安装的 `0.2.4 (2)`，不要用开发服务器、旧 DMG 或截图拼接代替提交版本。先核对“关于本机”的系统版本、机型以及 TestFlight 的版本/构建号。录屏建议 3–5 分钟（非 Apple 强制时长），开始录制后才启动 Chroni，连续展示典型流程，仅使用虚构材料。
 
 1. 启动应用，展示沙漏伙伴，从菜单栏打开控制中心。
 2. 在“智能整理”输入 `明天 18:00 提交数据库实验报告，预计需要 60 分钟。`，确认提取结果并保存。
@@ -57,7 +57,7 @@
 
 ### 英文回复与 Notes 共用正文（待补录像及 QA 后提交）
 
-Thank you for reviewing Chroni 0.2.4 (build 1). Here is the requested information.
+Thank you for reviewing Chroni 0.2.4 (build 2). Here is the requested information.
 
 1. Physical-device recording and testing
 [PENDING: insert the actual recording attachment name or accessible URL, Mac model, macOS version, test date and verified QA results. The recording must begin with launching the submitted build and show the typical user flow.]
