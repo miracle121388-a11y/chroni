@@ -19,7 +19,7 @@ const hasAppleIdCredentials = Boolean(
 const requireSigning = process.env.CHRONI_REQUIRE_SIGNING === "1";
 const requireNotarization = process.env.CHRONI_REQUIRE_NOTARIZATION === "1";
 const canNotarize = hasMacCertificate && (hasAppleApiCredentials || hasAppleIdCredentials);
-const petAssetMode = process.env.CHRONI_PET_ASSET_MODE === "original" ? "original" : "xiaotong";
+const { petAssetMode } = require("./scripts/build-variant.cjs").resolveBuildVariant();
 const windowsStoreIdentityName = process.env.CHRONI_WINDOWS_STORE_IDENTITY_NAME?.trim() || "Chroni";
 const windowsStorePublisher = process.env.CHRONI_WINDOWS_STORE_PUBLISHER?.trim() || undefined;
 const windowsStorePublisherDisplayName = process.env.CHRONI_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME?.trim() || "Chroni";

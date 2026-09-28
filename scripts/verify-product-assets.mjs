@@ -9,7 +9,8 @@ const expectedCompanionDigest = "de2c82d469e902723c7289374c69d70a8d0e4385cd72027
 const renderer = join(desktop, "dist", "renderer");
 if (!existsSync(renderer)) throw new Error("Chroni renderer build is missing. Run pnpm run build first.");
 const buildManifest = JSON.parse(readFileSync(join(desktop, "dist", "build-manifest.json"), "utf8"));
-assert(buildManifest.variant === "product", `Expected product build, received ${buildManifest.variant}.`);
+const expectedVariant = process.argv.includes("--store") ? "store" : "product";
+assert(buildManifest.variant === expectedVariant, `Expected ${expectedVariant} build, received ${buildManifest.variant}.`);
 assert(buildManifest.petAssetMode === "xiaotong", `Expected xiaotong companion assets, received ${buildManifest.petAssetMode}.`);
 assert(buildManifest.version === JSON.parse(readFileSync(join(desktop, "package.json"), "utf8")).version, "Build manifest version does not match package.json.");
 

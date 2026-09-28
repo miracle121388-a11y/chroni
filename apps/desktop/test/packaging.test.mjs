@@ -57,7 +57,8 @@ test("packaging commands never publish before release artifacts are verified", (
   for (const name of ["package:inner", "package:win:inner", "package:mac:inner", "package:linux:inner", "package:win:store:inner"]) {
     assert.match(packageJson.scripts[name], /verify:product-assets/);
   }
-  assert.match(packageJson.scripts["package:mac:store"], /CHRONI_PET_ASSET_MODE=original/);
+  assert.match(packageJson.scripts["package:mac:store"], /CHRONI_PET_ASSET_MODE=xiaotong/);
+  assert.match(packageJson.scripts["store:screenshots:mac"], /CHRONI_PET_ASSET_MODE=xiaotong/);
   assert.match(packageJson.scripts["package:mac:store"], /CHRONI_BUILD_VARIANT=store/);
   assert.match(packageJson.scripts["package:mac:store:inner"], /verify:store-assets/);
   for (const name of ["package:goai:win", "package:goai:mac"]) {
@@ -251,4 +252,15 @@ test("daily review is a date-based persisted workspace instead of a blocking dia
   assert.match(dailyReviewSource, /unsavedDrafts/);
   assert.match(dailyReviewSource, /snapshot\.dailyReviews/);
   assert.doesNotMatch(dailyReviewSource, /aria-modal|daily-review-dialog|daily-review-backdrop/);
+});
+
+ test("all public variants reject the hourglass fallback and preserve xiaotong", () => {
+  const { resolveBuildVariant } = require("../scripts/build-variant.cjs");
+  for (const variant of ["product", "store"]) {
+    assert.deepEqual(resolveBuildVariant({ CHRONI_BUILD_VARIANT: variant }), { variant, petAssetMode: "xiaotong" });
+    assert.throws(() => resolveBuildVariant({ CHRONI_BUILD_VARIANT: variant, CHRONI_PET_ASSET_MODE: "original" }), /refusing an appearance fallback/);
+  }
+  assert.deepEqual(resolveBuildVariant({}), { variant: "product", petAssetMode: "xiaotong" });
+  assert.deepEqual(resolveBuildVariant({ CHRONI_BUILD_VARIANT: "goai", CHRONI_PET_ASSET_MODE: "original" }), { variant: "goai", petAssetMode: "original" });
+  assert.throws(() => resolveBuildVariant({ CHRONI_PET_ASSET_MODE: "typo" }), /Unsupported/);
 });

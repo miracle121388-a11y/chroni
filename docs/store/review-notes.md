@@ -32,7 +32,7 @@
 
 - 公开隐私政策：https://getchroni.zeabur.app/privacy.html
 - 应用内路径：运行状态 -> 查看隐私说明
-- Mac App Store 包使用 Chroni 第一方沙漏伙伴形象，不包含 XIAOTONG 素材、外部赠与二维码或付费入口。
+- Mac App Store 包使用 XIAOTONG 小童动画，完整保留 Apache-2.0、附加条款和原作者 About 信息（运行状态内可见）；应用本身免费，无付费功能。
 - 开源依赖信息：运行状态 -> 开源许可与素材信息
 
 ## 2026-09-28：Guideline 2.1 补充材料
@@ -43,7 +43,7 @@
 
 使用真实 Mac 上通过 TestFlight 安装的 `0.2.4 (2)`，不要用开发服务器、旧 DMG 或截图拼接代替提交版本。先核对“关于本机”的系统版本、机型以及 TestFlight 的版本/构建号。录屏建议 3–5 分钟（非 Apple 强制时长），开始录制后才启动 Chroni，连续展示典型流程，仅使用虚构材料。
 
-1. 启动应用，展示沙漏伙伴，从菜单栏打开控制中心。
+1. 启动应用，展示小童伙伴，从菜单栏打开控制中心。
 2. 在“智能整理”输入 `明天 18:00 提交数据库实验报告，预计需要 60 分钟。`，确认提取结果并保存。
 3. 在“学习任务”打开新任务，查看截止时间、来源、目标与交付物；按实际界面补充并保存完成标准。
 4. 在“今日执行”执行智能安排，展示任务时间块；登记一条虚构进度或成果证据。
@@ -79,7 +79,7 @@ Optional speech transcription downloads onnx-community/whisper-tiny model files 
 The same app functionality and content are offered in mainland China, Hong Kong, Macao, Taiwan, Singapore and Malaysia. Chroni does not intentionally enable different features by region. Availability of optional third-party network services depends on connectivity and provider availability; local features remain available without enabling AI.
 
 6. Regulated services and third-party materials
-Chroni is a personal productivity tool and does not provide regulated medical, financial, gambling or similar services. The Mac App Store build uses our first-party hourglass companion artwork. It does not distribute a third-party course or media catalog. Users import their own materials for private organization. Open-source components and model assets remain subject to their licenses; acknowledgements are accessible under Runtime Status (运行状态) > Open-source Licenses and Asset Information (开源许可与素材信息).
+Chroni is a personal productivity tool and does not provide regulated medical, financial, gambling or similar services. The Mac App Store build uses XIAOTONG Desktop Pet artwork under its included Apache-2.0 license and additional terms. The original attribution, repository link, author contact and donation information are retained in Runtime Status. Chroni itself has no paid features. It does not distribute a third-party course or media catalog. Users import their own materials for private organization. Open-source components and model assets remain subject to their licenses; acknowledgements are accessible under Runtime Status (运行状态) > Open-source Licenses and Asset Information (开源许可与素材信息).
 
 Support: https://getchroni.zeabur.app/support.html
 Privacy: https://getchroni.zeabur.app/privacy.html

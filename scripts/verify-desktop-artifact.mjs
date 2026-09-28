@@ -48,7 +48,7 @@ const rendererScripts = files
   .map((file) => asar.extractFile(asarPath, archivePath(file)).toString("utf8"))
   .join("\n");
 
-if (expectedVariant === "product") {
+if ((expectedVariant === "product" || expectedVariant === "store")) {
   assert(buildManifest.petAssetMode === "xiaotong", "Product artifact does not declare xiaotong companion assets.");
   assert(rendererPngs.length >= 200, `Product artifact contains only ${rendererPngs.length} companion PNG files.`);
   assert(rendererPngBytes >= 10_000_000, `Product companion payload is unexpectedly small: ${rendererPngBytes} bytes.`);
@@ -61,11 +61,7 @@ if (expectedVariant === "product") {
   assert(buildManifest.petAssetMode === "original", `${label} artifact does not declare the first-party companion asset mode.`);
   assert(rendererPngs.length === 0, `${label} artifact unexpectedly contains restricted companion PNG files.`);
   assert(files.some((file) => /icon-source-.*\.svg$/i.test(file)), `${label} artifact is missing its first-party hourglass asset.`);
-  if (expectedVariant === "store") {
-    for (const marker of ["XIAOTONG Desktop Pet", "支持原作者", "捐赠二维码", "GOAI", "复赛", "参赛"]) {
-      assert(!rendererScripts.includes(marker), `Mac App Store artifact contains excluded copy: ${marker}`);
-    }
-  }
+
 }
 
 if (platform === "macos") await verifyMacArtifact(packageRoot, asarPath, fileSet);
@@ -99,7 +95,7 @@ function verifyPortableArtifactResources(appRoot, packagedAsar, fileSet) {
     "licenses/THIRD_PARTY_DEPENDENCIES.md",
     "privacy/PRIVACY.md",
   ]) assert(existsSync(join(resources, relative)), `Packaged resources are missing ${relative}.`);
-  if (expectedVariant === "product") {
+  if ((expectedVariant === "product" || expectedVariant === "store")) {
     for (const relative of [
       "licenses/XIAOTONG-APACHE-2.0.txt",
       "licenses/XIAOTONG-ADDITIONAL-TERMS.md",
@@ -173,7 +169,7 @@ async function verifyMacArtifact(appPath, packagedAsar, fileSet) {
     "licenses/THIRD_PARTY_DEPENDENCIES.md",
     "privacy/PRIVACY.md",
   ]) assert(existsSync(join(resources, relative)), `macOS bundle is missing ${relative}.`);
-  if (expectedVariant === "product") {
+  if ((expectedVariant === "product" || expectedVariant === "store")) {
     for (const relative of [
       "licenses/XIAOTONG-APACHE-2.0.txt",
       "licenses/XIAOTONG-ADDITIONAL-TERMS.md",

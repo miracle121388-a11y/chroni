@@ -6,6 +6,8 @@
 
 ## 最近核验
 
+2026-09-28 外观纠正：负责人明确要求所有正式发行保留 XIAOTONG 小童。构建 1、2 的沙漏由 MAS 配置强制选择 `original` 导致，不能再用于录屏或送审。已统一渲染器、清单和打包的素材规则：product/store 必须 xiaotong，original 仅用于显式兼容构建；MAS 复用正式版素材摘要与动画检查，截图和最终包都须一致。构建 3 待生成、上传及真机核验，线上原截图、Notes 和内容权利声明尚待同步；不得继续声称小童为自有第一方素材。
+
 2026-09-28：已整理[六项英文补充材料与真机录屏清单](./review-notes.md#2026-09-28guideline-21-补充材料)。已在 App Store Connect 核实原提交为“问题未解决”，版本状态“已拒绝”，原因 2.1.0；登录已恢复。已建立手动分发的内部群组 `Chroni Release QA`（`32d00693-b853-4525-9ce2-7eb78298cf5d`），添加 `0.2.4 (1)`，状态“准备测试”；经负责人授权，已邀请其现有账户持有人账号，群组现为 1 名测试员、1 个构建，测试员状态“已邀请”。TestFlight 已安装 `0.2.4 (1)`，真机启动后退出；辅助进程崩溃于 `_libsecinit_appsandbox`。已发现并移除继承沙盒辅助进程多余的麦克风 entitlement（主进程保留），新增源码及签名产物检查，17 项打包测试与商店准备检查通过。修复提交 `5ea9213`，`0.2.4 (2)` 已完成签名与最终产物检查，SHA-256 为 `7d103ece2cb2260bcfb6e20c8583ac0657df77a81a65fa63f5fcefa0c4f3e83d`，于 2026-09-28 13:10（中国标准时间）由 Transporter 交付 Apple，已完成处理并加入内部 QA 群组（2 个构建、1 名测试员），构建 2 状态“正在测试”。TestFlight 构建 2 已安装；在 macOS 27.0（26A428）、Mac17,3 真机上验证启动、伙伴与控制中心、本地文本建档、任务详情、成果说明保存、智能排程、每日回顾保存，以及模型默认关闭/显式同意/DeepSeek 提取成功/再次关闭均通过。应用已完全退出，尚待录屏中的重启持久化检查；系统录屏自动化启动失败，已请求负责人手动开始录屏后由代理继续演示；未更新线上 Notes、未回复审核消息或重新提交。网关健康检查返回 `ok`，不能据此认定全部模型功能真机测试通过。
 
 2026-09-27：已创建应用及安装器发行证书、distribution profile；已保存版本 0.2.4、六张截图、审核联系信息、免费定价、效率/教育类别与 4+ 分级，发布范围为中国大陆、香港、澳门、台湾、新加坡、马来西亚。隐私标签经负责人确认后已发布。版本 `0.2.4 (1)` 的 universal MAS 包已包含最新隐私声明，应用签名、安装器签名及全部本地检查通过；2026-09-27 13:46（中国标准时间）Transporter 确认交付成功，Apple 已完成处理；构建已关联至版本，App Store Connect 资料检查通过并完成提交，状态为“正在等待审核”。`store:prepare:macos`、`site:check` 通过；产品站经 Zeabur 本地上传部署后，`/support.html` 与 `/privacy.html` 均返回 HTTP 200，已确认包含公司名称和支持邮箱。审核提交 ID：`a533c206-dc2e-4b72-8881-e3beeb491e03`；设置为审核通过后自动发布。Zeabur 服务仍显示旧 GitHub 来源，后续网站更新应核对实际部署来源，不能假定当前仓库推送会自动部署。
@@ -16,11 +18,11 @@
 npx pnpm@11.7.0 run store:prepare
 ```
 
-`pnpm run store:prepare:macos` 会构建 MAS 专用第一方资产版本，使用虚构数据生成六张无 Alpha 的 `2880x1800` JPEG，并检查应用身份、App Store Connect 字段长度、隐私清单、明确模型授权、MAS 沙盒权限、语言声明和必要文档。该准备步骤不需要签名证书。
+`pnpm run store:prepare:macos` 会构建 MAS 小童动画版本，使用虚构数据生成六张无 Alpha 的 `2880x1800` JPEG，并检查应用身份、App Store Connect 字段长度、隐私清单、明确模型授权、MAS 沙盒权限、语言声明和必要文档。该准备步骤不需要签名证书。
 
 ## 可提交包
 
 - Windows：在 Partner Center 保留产品名并取得 Package/Identity/Name 与 Publisher 后运行 `pnpm run package:windows:store`。命令会使用 Windows SDK 解包，并核对身份、入口程序、载荷、许可文件和包哈希。
-- macOS：在 Apple Developer 创建 App ID、Mac App Distribution 证书、Mac Installer Distribution 证书和 provisioning profile 后，于 macOS 运行 `pnpm run package:macos:store`。命令会生成只含第一方沙漏伙伴资产的 MAS 包，并验证应用沙盒、版本号、签名、隐私清单、内嵌 profile 和安装包签名。
+- macOS：在 Apple Developer 创建 App ID、Mac App Distribution 证书、Mac Installer Distribution 证书和 provisioning profile 后，于 macOS 运行 `pnpm run package:macos:store`。命令会生成包含小童动画及完整素材许可的 MAS 包，并验证应用沙盒、版本号、签名、隐私清单、内嵌 profile 和安装包签名。
 
 每次成功构建会在 `apps/desktop/dist-electron/` 写入带 SHA-256 的 `store-verification-*.json`。详细变量和人工检查见[发布检查表](./release-checklist.md)，机器可校验字段见[App Store Connect 元数据](./app-store-connect.zh-CN.json)，隐私字段见[隐私申报基线](./privacy-declarations.md)，商店文案见[中文产品信息](./listing.zh-CN.md)，审核路径见[审核说明](./review-notes.md)。

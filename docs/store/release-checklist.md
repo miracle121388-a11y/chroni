@@ -38,7 +38,7 @@ $kit = "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\appcert.e
 ### 资质审核期间已可完成
 
 - [x] 固定 Bundle ID：`app.chroni.desktop`。
-- [x] MAS 专用包只使用 Chroni 第一方沙漏伙伴，不包含 XIAOTONG 素材、外部赠与二维码或付费入口。
+- [x] MAS 与正式产品包统一使用 XIAOTONG 小童动画，保留完整许可证、署名和原作者 About 信息；应用本身免费，无付费功能。
 - [x] App Sandbox、用户选择文件读写、网络客户端/本地回环服务、麦克风权限与隐私清单已配置。
 - [x] `CFBundleShortVersionString` 与产品版本一致，`CFBundleVersion` 支持独立递增构建号。
 - [x] 已声明使用标准传输、凭据保护和完整性校验，不使用非豁免加密；Electron 自带加密实现，不属于“仅系统加密”；提交前仍由公司负责人复核出口合规答案。
@@ -67,7 +67,7 @@ npx pnpm@11.7.0 run package:macos:store
 ```
 
 6. 保留构建生成的 `store-verification-macos.json`，确认 SHA-256、Bundle ID、营销版本、构建号、Team ID、profile 名称、应用签名和安装包签名正确。
-7. 在干净用户账户测试首次启动、本地默认模式、联网模型授权/撤回、沙盒文件选择与拖入、OCR、语音权限、通知、菜单栏、沙漏伙伴拖动和完全退出。
+7. 在干净用户账户测试首次启动、本地默认模式、联网模型授权/撤回、沙盒文件选择与拖入、OCR、语音权限、通知、菜单栏、小童伙伴拖动和完全退出。
 8. 创建 App Store Connect API Key 后，将私钥保存为 `~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8`，设置 `APP_STORE_CONNECT_API_KEY_ID` 与 `APP_STORE_CONNECT_API_ISSUER_ID`，运行 `pnpm run store:validate:macos`。
 9. 先上传到 TestFlight 内部测试，处理 Apple 自动验证结果；再按 `privacy-declarations.md` 填写隐私标签并提交审核。
 
