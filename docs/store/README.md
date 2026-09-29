@@ -2,9 +2,11 @@
 
 本目录保存 Microsoft Store 与 Mac App Store 的提交文案、审核说明和发布检查表。普通 GitHub Release 仍使用 NSIS、Portable、DMG 与 ZIP；商店包使用独立命令，且由系统应用商店负责后续更新。
 
-当前状态：公司已确认 Apple Developer Program 会员开通；Chroni 按免费 macOS 应用提交，版权主体为引力回响（苏州）科技有限公司，支持邮箱为 developer@twintalk.cn，公司官网为 https://twintalk.cn。产品支持与隐私 URL 继续使用现有 Chroni 产品站。团队 RJ9LMC47V5、Bundle ID `app.chroni.desktop` 和 App Store Connect App `6816595577` 已建立；版本 `0.2.4 (1)` 已提交 Apple 审核，2026-09-28 因 Guideline 2.1 要求补充信息而受阻。已于当天 16:21（中国标准时间）以小童版 `0.2.4 (3)` 重新提交，后台确认“等待审核”，尚未获批或上架。
+当前状态：公司已确认 Apple Developer Program 会员开通；Chroni 按免费 macOS 应用提交，版权主体为引力回响（苏州）科技有限公司，支持邮箱为 developer@twintalk.cn，公司官网为 https://twintalk.cn。产品支持与隐私 URL 继续使用现有 Chroni 产品站。团队 RJ9LMC47V5、Bundle ID `app.chroni.desktop` 和 App Store Connect App `6816595577` 已建立；版本 `0.2.4 (1)` 已提交 Apple 审核，2026-09-28 因 Guideline 2.1 要求补充信息而受阻。9 月 28 日以小童版 `0.2.4 (3)` 复审后，9 月 29 日又因 2.4.5 的 network.server 用途说明不足被自动拒绝。已补充权限用途、复现步骤和真机证据，并于 2026-09-29 20:22（中国标准时间）重新提交同一 build 3，后台确认“等待审核”，尚未获批或上架。
 
 ## 最近核验
+
+2026-09-29 权限说明补充：实际 TestFlight build 3 的签名包含 `com.apple.security.network.server`，主进程确实使用 Node HTTP server 提供本机自动化 API。源码 `startLocalApiServer` 在启动时运行；真机 `lsof` 确认 Chroni 仅监听 `127.0.0.1:8765`，`/api/health` 返回 200，`/api/daily-tasks` 无令牌返回 401、使用当前会话令牌返回 200。未输出或提交会话令牌及任务内容。此权限用于接受本机脚本的入站请求，不是模型服务出站权限。已在 Notes 中保留原六项材料并置顶权限说明，在 App 沙盒信息中新增对应权限用途，20:19 向审核回复复现命令，20:22 正式重新提交；提交 ID 不变。支持及隐私页再次核验 HTTP 200。本次无代码、二进制或权限变更，沿用构建 3 及既有录像。
 
 2026-09-28 外观纠正：负责人明确要求所有正式发行保留 XIAOTONG 小童。构建 1、2 的沙漏由 MAS 配置强制选择 `original` 导致，不能再用于录屏或送审。已统一渲染器、清单和打包的素材规则：product/store 必须 xiaotong，original 仅用于显式兼容构建；MAS 复用正式版素材摘要与动画检查，截图和最终包都须一致。构建 3 已完成签名、243 帧小童动画与授权文件、沙盒及安装包签名检查，SHA-256 为 `5521bd6af06af2adf177e1de3aa4600524746c25699ca55ee1e2ab7a01b92b04`；Transporter 于 2026-09-28 15:11（中国标准时间）交付 Apple，已处理完成并加入内部 QA 群组，TestFlight 构建 3 已安装；macOS 27.0（26A428）、Mac17,3 真机已确认启动成功、蓝色小童正常显示、此前任务和排程保留。构建 3 另已通过本地建档、证据说明保存、排程、回顾保存、模型显式同意与托管提取、关闭模型的真机验证。负责人确认录屏权限后，已用 macOS 自带 screencapture 完成构建 3 的 4 分钟真机操作录像，并导出 `Chroni-0.2.4-build3-demo.mp4`；抽查启动、任务、模型同意、操作过程与重启帧，已确认小童正常、虚构材料与保存结果。录像保存在仓库外；早期 5 秒测试片含工作界面，不得上传。负责人恢复 Safari 前台后，录像已上传至版本审核附件及审核回复附件，六项说明已同步 Notes 并发送给 Apple，构建 3 已关联并重新提交，16:21 后台确认为“等待审核”。线上六张截图已替换为小童版，负责人确认后内容版权已保存为拥有第三方内容必要权利；Notes 已保存录像引用与已执行的 QA 结果；不得继续声称小童为自有第一方素材。
 

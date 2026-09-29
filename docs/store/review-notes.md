@@ -55,7 +55,7 @@
 
 录像保存到仓库外，发送前检查没有个人课程材料、私人通知、账号信息或凭据。优先作为审核消息附件；如使用链接，应无需登录且审核人员可访问。后续版本须更新实际附件名或 URL，并在 Notes 中引用相同录像。下方为本次已提交正文。
 
-### 已提交英文回复与 Notes 共用正文
+### 2026-09-28 已提交英文回复与原 Notes 正文（历史记录）
 
 Thank you for reviewing Chroni 0.2.4 (build 3).
 
@@ -84,3 +84,11 @@ Chroni does not provide regulated medical, financial, gambling or similar servic
 
 Support: https://getchroni.zeabur.app/support.html
 Privacy: https://getchroni.zeabur.app/privacy.html
+
+## 2026-09-29：network.server 用途说明与复审
+
+Apple 后台对应 2.4.5，自动分析未识别权限用途。已采用其要求的“解释必要权限”路径：在 Notes 置顶说明、App 沙盒信息中新增 `com.apple.security.network.server` 用途，并于 20:19 发送回复。20:22 重新提交 `0.2.4 (3)`，已读回“等待审核”。旧六项说明已精简保留，原录像附件仍在。
+
+实测证据：安装版 build 3 主进程仅监听 TCP `127.0.0.1:8765`；健康检查 HTTP 200，任务接口无令牌 HTTP 401、有会话令牌 HTTP 200。用途是让本机脚本和自动化工具读取任务、导入文本、记录进度及访问排程，不向局域网或公网监听。健康检查有意提供本机会话令牌，不是云端账号认证。默认端口占用时，实际地址由沙盒 Application Support 目录中的 `chroni-api.json` 提供。完全退出后服务停止。
+
+审核人员复现：启动 Chroni，在同一 Mac 执行 `curl http://127.0.0.1:8765/api/health`，取得本次 `apiToken` 后，以 `Authorization: Bearer <apiToken>` 请求 `/api/daily-tasks`。回复不含真实令牌和任务数据。本次保留必要权限与同一构建，无需重新打包。
