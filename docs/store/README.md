@@ -2,11 +2,11 @@
 
 本目录保存 Microsoft Store 与 Mac App Store 的提交文案、审核说明和发布检查表。普通 GitHub Release 仍使用 NSIS、Portable、DMG 与 ZIP；商店包使用独立命令，且由系统应用商店负责后续更新。
 
-当前状态：公司已确认 Apple Developer Program 会员开通；Chroni 按免费 macOS 应用提交，版权主体为引力回响（苏州）科技有限公司，支持邮箱为 developer@twintalk.cn，公司官网为 https://twintalk.cn。产品支持与隐私 URL 继续使用现有 Chroni 产品站。团队 RJ9LMC47V5、Bundle ID `app.chroni.desktop` 和 App Store Connect App `6816595577` 已建立；版本 `0.2.4 (1)` 已提交 Apple 审核，2026-09-28 因 Guideline 2.1 要求补充信息而受阻。9 月 28 日以小童版 `0.2.4 (3)` 复审后，9 月 29 日又因 2.4.5 的 network.server 用途说明不足被自动拒绝。已补充权限用途、复现步骤和真机证据，并于 2026-09-29 20:22（中国标准时间）重新提交同一 build 3，后台确认“等待审核”，尚未获批或上架。
+当前状态：Chroni 为免费 macOS 应用，团队 `RJ9LMC47V5`、Bundle ID `app.chroni.desktop`、App Store Connect App `6816595577`。2026-10-03 构建 `0.2.4 (3)` 因 Guideline 4 缺少关闭主窗口后的应用菜单恢复入口被拒。已加入原生“窗口 → 打开控制中心”（⌘1），修复提交 `e971852` 已推送；构建 `0.2.4 (4)` 于 2026-10-05 21:23（中国标准时间）经 Transporter 交付成功，目前等待 Apple 处理，尚未重新提交或上架。版权主体为引力回响（苏州）科技有限公司，支持邮箱 developer@twintalk.cn；公司官网 https://twintalk.cn，产品支持与隐私页沿用 Chroni 产品站。
 
 ## 最近核验
 
-2026-10-05 窗口菜单修复：Apple 于 10 月 3 日通知构建 `0.2.4 (3)` 因 Guideline 4 被拒，原因是关闭主窗口后没有应用菜单入口重新打开。macOS 原生“窗口”菜单现固定提供“打开控制中心”（⌘1），调用既有窗口恢复逻辑。实际 Electron 原生窗口回归检查已验证首次打开、关闭后重建、最小化后恢复且不重复创建窗口；类型检查及正式小童素材构建通过。新构建 4 尚待签名、上传、TestFlight 真机验证及重新提交，不能将代码修复等同于审核完成。回归命令：`pnpm --filter @chroni/desktop run verify:macos-window-menu`。
+2026-10-05 窗口菜单修复：Apple 于 10 月 3 日通知构建 `0.2.4 (3)` 因 Guideline 4 被拒，原因是关闭主窗口后没有应用菜单入口重新打开。macOS 原生“窗口”菜单现固定提供“打开控制中心”（⌘1），调用既有窗口恢复逻辑。实际 Electron 原生窗口回归检查已验证首次打开、关闭后重建、最小化后恢复且不重复创建窗口；类型检查及正式小童素材构建通过。构建 4 已完成 universal MAS 签名、沙盒、243 帧小童动画与授权文件及安装包检查，SHA-256 为 `b7c56980a7d86be3c1e0292cc400cefadfca2f648b282baaff990c924e17d245`；21:23 交付 Apple，待处理、TestFlight 真机验证及重新提交。当前真机为 Mac17,3、macOS 27.0.1（26A434）。回归命令：`pnpm --filter @chroni/desktop run verify:macos-window-menu`。
 
 2026-09-29 权限说明补充：实际 TestFlight build 3 的签名包含 `com.apple.security.network.server`，主进程确实使用 Node HTTP server 提供本机自动化 API。源码 `startLocalApiServer` 在启动时运行；真机 `lsof` 确认 Chroni 仅监听 `127.0.0.1:8765`，`/api/health` 返回 200，`/api/daily-tasks` 无令牌返回 401、使用当前会话令牌返回 200。未输出或提交会话令牌及任务内容。此权限用于接受本机脚本的入站请求，不是模型服务出站权限。已在 Notes 中保留原六项材料并置顶权限说明，在 App 沙盒信息中新增对应权限用途，20:19 向审核回复复现命令，20:22 正式重新提交；提交 ID 不变。支持及隐私页再次核验 HTTP 200。本次无代码、二进制或权限变更，沿用构建 3 及既有录像。
 
