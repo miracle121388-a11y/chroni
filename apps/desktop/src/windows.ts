@@ -42,6 +42,26 @@ export function createAppWindows(options: { petPlacement?: PetPlacement; onPetPl
   const markAppQuitting = () => { appQuitting = true; };
   app.once("before-quit", markAppQuitting);
   autoUpdater.once("before-quit-for-update", markAppQuitting);
+  if (process.platform === "darwin") {
+    Menu.setApplicationMenu(Menu.buildFromTemplate([
+      { role: "appMenu" },
+      { role: "fileMenu" },
+      { role: "editMenu" },
+      { role: "viewMenu" },
+      {
+        label: "窗口",
+        role: "windowMenu",
+        submenu: [
+          { id: "chroni-open-control-center", label: "打开控制中心", accelerator: "Command+1", click: () => showControlCenter() },
+          { type: "separator" },
+          { role: "minimize" },
+          { role: "zoom" },
+          { type: "separator" },
+          { role: "front" },
+        ],
+      },
+    ]));
+  }
   lastPetPlacement = options.petPlacement;
   onPetPlacementChanged = options.onPetPlacementChanged;
   createPetWindow();

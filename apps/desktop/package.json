@@ -32,6 +32,7 @@
     "clean:package": "node scripts/clean-package-output.mjs",
     "verify:product-assets": "node ../../scripts/verify-product-assets.mjs",
     "verify:store-assets": "node ../../scripts/verify-store-assets.mjs",
+    "verify:macos-window-menu": "pnpm run build:main && node scripts/verify-macos-window-menu.cjs",
     "store:screenshots": "pnpm run build && node scripts/run-electron.cjs scripts/capture-store-listing.cjs",
     "store:screenshots:mac": "cross-env CHRONI_PET_ASSET_MODE=xiaotong CHRONI_BUILD_VARIANT=store CHRONI_STORE_SCREENSHOT_PLATFORM=macos pnpm run build:inner && cross-env CHRONI_STORE_SCREENSHOT_PLATFORM=macos node scripts/run-electron.cjs scripts/capture-store-listing.cjs",
     "package": "cross-env CHRONI_PET_ASSET_MODE=xiaotong pnpm run package:inner",
