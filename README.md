@@ -428,6 +428,7 @@ Chroni
 | [应用商店发布资料](./docs/store/README.md) | Microsoft Store / Mac App Store 身份、沙盒、隐私、文案与审核检查。 |
 | [小红书发布计划](./docs/marketing/xiaohongshu-launch-plan.md) | 15/30/60 秒脚本、截图清单、隐私检查和发布模板。 |
 | [v0.2.4 发布说明](./docs/releases/v0.2.4.md) | 修正日程输入、文件导入和待确认操作的加载文案。 |
+| [2026 上海开源软件应用创新大赛材料](./docs/os2026/README.md) | 作品介绍 PDF、真实操作演示视频、验证依据与复现说明。 |
 | [v0.2.3 发布说明](./docs/releases/v0.2.3.md) | Windows/macOS 下载后无需 API Key 即可使用完整模型能力。 |
 | [v0.2.2 发布说明](./docs/releases/v0.2.2.md) | 修复无签名 macOS 包首次启动时不必要的钥匙串密码提示。 |
 | [v0.2.1 发布说明](./docs/releases/v0.2.1.md) | Windows 应用身份、桌面伙伴打包、控制中心与商店准备。 |

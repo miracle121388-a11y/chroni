@@ -1,0 +1,76 @@
+{
+  "synthetic": true,
+  "model": "local-rules",
+  "networkForCoreFlow": false,
+  "taskCount": 1,
+  "evidence": 1,
+  "checkpoints": 1,
+  "dailyReviews": 1,
+  "clarifications": 1,
+  "reloadPersistence": true,
+  "date": "2026-10-08",
+  "productVersion": "0.2.4",
+  "productionSourceCommit": "4b3d3ba67af48da1c501b8f778e504998913542d",
+  "scope": "Single synthetic production-UI flow; not a full regression or real-user outcome study",
+  "video": {
+    "durationSeconds": 203.25,
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "videoCodec": "H.264",
+    "audioCodec": "AAC",
+    "chapters": [
+      {
+        "id": "intro",
+        "startSeconds": 0,
+        "durationSeconds": 18.25
+      },
+      {
+        "id": "intake",
+        "startSeconds": 18.25,
+        "durationSeconds": 28.25
+      },
+      {
+        "id": "mission",
+        "startSeconds": 46.5,
+        "durationSeconds": 24.25
+      },
+      {
+        "id": "schedule",
+        "startSeconds": 70.75,
+        "durationSeconds": 23.25
+      },
+      {
+        "id": "evidence",
+        "startSeconds": 94,
+        "durationSeconds": 24.25
+      },
+      {
+        "id": "checkpoint",
+        "startSeconds": 118.25,
+        "durationSeconds": 22.25
+      },
+      {
+        "id": "review",
+        "startSeconds": 140.5,
+        "durationSeconds": 23.25
+      },
+      {
+        "id": "clarify",
+        "startSeconds": 163.75,
+        "durationSeconds": 23.25
+      },
+      {
+        "id": "outro",
+        "startSeconds": 187,
+        "durationSeconds": 16.25
+      }
+    ],
+    "fullDecodePassed": true
+  },
+  "pdf": {
+    "pageCount": 8,
+    "embeddedChineseFonts": true,
+    "renderReviewPassed": true
+  }
+}
