@@ -36,7 +36,7 @@ export function VoiceAssistant({
   const [draft, setDraft] = useState("");
   const [preview, setPreview] = useState<VoiceCommandPreview | null>(null);
   const [feedback, setFeedback] = useState("");
-  const [engine, setEngine] = useState<VoiceEngineStatus>({ state: "idle", modelId: "onnx-community/whisper-tiny", message: "本地语音模型尚未载入。" });
+  const [engine, setEngine] = useState<VoiceEngineStatus>({ state: "idle", modelId: "onnx-community/whisper-base", message: "本地语音模型尚未载入。" });
   const recorder = useRef<RecorderSession | null>(null);
   const recordingTimer = useRef<number | null>(null);
   const textInput = useRef<HTMLTextAreaElement | null>(null);

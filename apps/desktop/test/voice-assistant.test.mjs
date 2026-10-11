@@ -124,3 +124,15 @@ test("voice audio validation enforces local Whisper input bounds", () => {
   assert.throws(() => validateVoiceAudio(valid, 48_000), /采样率/);
   assert.throws(() => validateVoiceAudio(new Float32Array(16_000 * 36), 16_000), /35 秒/);
 });
+
+test("Traditional Chinese group reminders retain the task and confirmed clock", async (t) => {
+  const harness = createHarness();
+  t.after(harness.cleanup);
+  const preview = await harness.assistant.preview("提醒我們明天晚上8點提交課程報告", new Date(2026, 9, 11, 12));
+  assert.equal(preview.state, "confirmation");
+  assert.doesNotMatch(preview.title, /們|们|我們/);
+  await harness.assistant.confirm(preview.id);
+  const task = harness.store.snapshot().dailyTasks[0];
+  assert.equal(task.title, "提交课程报告");
+  assert.equal(task.scheduledStartAt, new Date(2026, 9, 12, 20).toISOString());
+});

@@ -42,7 +42,8 @@ test("workbook text includes every sheet from read-excel-file v9", () => {
   ]);
 
   assert.match(text, /\[工作表: Tasks\]/);
-  assert.match(text, /2026-07-20T10:00:00.000Z/);
+  assert.match(text, /2026-07-20T10:00:00/);
+  assert.doesNotMatch(text, /10:00:00(?:\.000)?Z/);
   assert.match(text, /\[工作表: Notes\]/);
   assert.match(text, /Bring charts, true, 3/);
 });

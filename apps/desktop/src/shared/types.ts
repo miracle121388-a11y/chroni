@@ -601,6 +601,7 @@ export type SourceRecord = {
   id: string;
   sourceName: string;
   sourceType: string;
+  ocrUsed?: boolean;
   text: string;
   summary: string;
   extractionStatus: SourceExtractionStatus;

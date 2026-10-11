@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import AdmZip from "adm-zip";
 
 import { assertSafeOfficeArchive, extractDdlItemsFromText, extractPayload, itemFromLlmCandidate, processIntake, reprocessSource } from "../dist/intake.js";
 import { deadlineDateFromText, isConditionalDeadlineText } from "../dist/shared/deadline-text.js";
@@ -161,9 +162,9 @@ test("oversized path files are rejected from metadata before extraction", async 
 });
 
 test("Office archive preflight rejects zip bombs and traversal entries", () => {
-  assert.doesNotThrow(() => assertSafeOfficeArchive(makeOfficeArchive([
-    { name: "word/document.xml", compressedSize: 300, uncompressedSize: 1_200 },
-  ]), "safe.docx"));
+  const safe = new AdmZip();
+  safe.addFile("word/document.xml", Buffer.from("<document>valid fixture</document>"));
+  assert.doesNotThrow(() => assertSafeOfficeArchive(safe.toBuffer(), "safe.docx"));
   assert.throws(() => assertSafeOfficeArchive(makeOfficeArchive([
     { name: "word/document.xml", compressedSize: 1, uncompressedSize: 32 * 1024 * 1024 },
   ]), "bomb.docx"), /展开后过大|压缩比异常/);

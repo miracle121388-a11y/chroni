@@ -31,16 +31,23 @@ export async function recognizeDocumentImage(image: Buffer, cachePath: string): 
   const langPath = prepareOcrLanguages(cachePath);
   // chi_sim otherwise requests an unbundled vertical model during initialization.
   const configuration: Partial<InitOptions> & Record<string, string> = { tessedit_load_sublangs: "" };
-  const worker = await createWorker("eng+chi_sim", 1, {
+  const loading = createWorker("eng+chi_sim", 1, {
     langPath, cachePath: langPath, gzip: false, cacheMethod: "none",
     // Tesseract otherwise throws worker errors outside the intake promise.
     errorHandler: () => undefined,
   }, configuration);
+  let initializationTimeout: ReturnType<typeof setTimeout> | undefined;
+  const worker = await Promise.race([
+    loading,
+    new Promise<never>((_, reject) => { initializationTimeout = setTimeout(() => reject(new Error("本地识别引擎启动超时，请重试或粘贴文字。")), 90_000); }),
+  ]).catch((error) => {
+    void loading.then((lateWorker) => lateWorker.terminate()).catch(() => undefined);
+    throw error;
+  }).finally(() => { if (initializationTimeout) clearTimeout(initializationTimeout); });
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    const images = await prepareImages(image);
     const results: Array<{ text: string; confidence: number }> = [];
-    for (const prepared of images) {
+    for await (const prepared of prepareImages(image)) {
       const recognize = async (input: Buffer) => {
         const result = await Promise.race([
           worker.recognize(input, { rotateAuto: true }),
@@ -68,23 +75,21 @@ export async function recognizeDocumentImage(image: Buffer, cachePath: string): 
   }
 }
 
-async function prepareImages(buffer: Buffer): Promise<Buffer[]> {
+async function* prepareImages(buffer: Buffer): AsyncGenerator<Buffer> {
   // Skia's TIFF decoder can terminate the host process. Convert through libvips
-  // before OCR; animated formats use their first frame, document TIFFs all pages.
-  if (buffer.subarray(0, 2).toString("ascii") === "BM") return [await prepareBitmap(buffer)];
+  // before OCR. Decode one page/frame at a time to bound memory consumption.
+  if (buffer.subarray(0, 2).toString("ascii") === "BM") { yield await prepareBitmap(buffer); return; }
   try {
     const metadata = await sharp(buffer, { limitInputPixels: 40_000_000 }).metadata();
-    const pages = metadata.format === "tiff" ? metadata.pages ?? 1 : 1;
-    if (pages > 60) throw new Error("多页 TIFF 过长，请拆分为每份最多 60 页后导入。");
-    const images: Buffer[] = [];
+    const pages = metadata.pages ?? 1;
+    if (pages > 60) throw new Error("多页或动态图片过长，请拆分为每份最多 60 页或帧后导入。");
     for (let page = 0; page < pages; page += 1) {
       const pipeline = sharp(buffer, { page, pages: 1, limitInputPixels: 40_000_000 }).rotate().flatten({ background: "white" });
       const width = metadata.width ?? 1800;
       const height = metadata.pageHeight ?? metadata.height ?? 1800;
       const scale = Math.min(width < 1000 ? Math.min(2, 1800 / width) : 1, 3600 / Math.max(width, height));
-      images.push(await pipeline.resize(Math.round(width * scale), Math.round(height * scale), { fit: "inside" }).png().toBuffer());
+      yield await pipeline.resize(Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)), { fit: "inside" }).png().toBuffer();
     }
-    return images;
   } catch (error) {
     if (error instanceof Error && error.message.includes("最多 60 页")) throw error;
     throw new Error("图片无法解码，请重新导出为 PNG 或 JPG 后导入（单页不超过 4000 万像素）。");

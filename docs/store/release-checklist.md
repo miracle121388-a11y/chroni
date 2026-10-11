@@ -1,5 +1,17 @@
 # Chroni 应用商店发布检查表
 
+## 2026-10-11 解析专项验收
+
+- 源码检查：`pnpm run check` 通过，桌面端 326 项、网关 7 项测试通过。
+- 输入覆盖：TXT/MD/CSV/TSV/JSON/ICS/LOG/HTML/XML/YAML/RTF，DOCX/PDF/PPTX/XLSX/ODT/ODP/ODS，PNG/JPEG/WEBP/BMP/TIFF/GIF/AVIF；包含编码、扫描页、混排、旋转、多页/多帧、嵌入图片、损坏文件、伪造 ZIP 大小及混合批量失败。
+- 抽取评测：`pnpm run eval:goai` 的 60 个合成用例，任务、标题、日期、钟点、时区、提交物和原文证据全部精确匹配；这是固定测试集结果，不能推导为任意材料零错误。
+- 真实模型：`pnpm run eval:goai:model` 实际调用 Chroni 托管服务，8 个抽取用例和 1 次模型规划通过，共 9 次请求；无效模型字段由本地规则接管，不把时间猜测直接写入日程。明细为 `output/parsing-audit/model.json`。
+- 语音：本地 Whisper base 使用固定版本、SHA-256 与原子写入缓存；截断/损坏下载不会进入推理。合成中文录音在 Electron 42.6.0 中离线转写、提取准确钟点并释放引擎，进程正常退出；明细为 `output/parsing-audit/voice.json`。未使用真实麦克风录音。
+- 本地安装包：`output/parsing-audit/app/mac-arm64/Chroni.app` 已重新打包并通过签名结构检查；ASAR 内 9 个关键解析模块与检查后的编译结果逐字节一致。用户提供的作业 PNG、由该 PNG 生成的扫描 PDF 及合成语音在包内实现中通过导入验收；生成的任务保留 500 行、L1 要求，`2026-10-14 24:00` 正确解释为上海时间 `2026-10-15 00:00`。明细为 `output/parsing-audit/package.json`。这是 arm64 本地开发包，使用 ad-hoc 签名，未验证 MAS 沙盒或 x64 运行。
+- 修复重点：扫描 PDF、Office 图片引用与顺序、模型事实与任务隔离、数值/链接篡改、空候选、提示注入、错误规划降级、Excel 无时区日期、ICS 夏令时歧义、简繁中文、重复标题的不同文件、OCR 提示持久化和完整提交清单。
+- 支持边界：文件导入不支持音视频、HEIC、DOC/XLS/PPT；语音首次需联网下载模型；OCR 网址、文件名和数字仍需核对原件，缺失或含糊钟点必须确认。
+- 上架阻塞：当前 `apps/desktop/dist-electron/mas-universal/Chroni-0.2.4-mac-universal.pkg` 的验证日期为 2026-10-05，不包含本轮修复。本机未配置当前签名证书与 profile；必须重新生成带新构建号的签名 MAS 包，并在干净沙盒环境验证导入、麦克风授权及首次模型下载，再提交 Apple。开发包测试不能替代这一项。
+
 ## 共同检查
 
 - [ ] 根目录、桌面端和网关版本一致。

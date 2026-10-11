@@ -18,13 +18,9 @@ const root = dirname(fileURLToPath(import.meta.url));
 const repositoryState = gitState();
 const smoke = process.argv.includes("--smoke");
 const modelRequested = process.argv.includes("--model");
-if (modelRequested && !process.env.CHRONI_LLM_API_KEY && !process.env.DEEPSEEK_API_KEY) {
-  console.log("GOAI model benchmark skipped: set CHRONI_LLM_API_KEY or DEEPSEEK_API_KEY to opt in.");
-  process.exit(0);
-}
 if (modelRequested) {
-  console.log("GOAI model benchmark is not enabled in v1; no network request was made.");
-  process.exit(0);
+  await import("./model.mjs");
+  process.exit(process.exitCode ?? 0);
 }
 
 const selectedCases = smoke ? smokeCases(allCases) : allCases;
@@ -266,6 +262,9 @@ if (!smoke) writeFileSync(join(root, "../../docs/goai/07-evaluation-report.md"),
 console.log(`GOAI ${smoke ? "smoke" : "full"} evaluation: ${selectedCases.length} cases, F1 ${percent(f1)}, offline success ${percent(report.engineering.offlineSuccessRate)}.`);
 console.log(`Reports: ${jsonPath} and ${markdownPath}`);
 if (successfulExecutions !== selectedCases.length
+  || report.extraction.taskF1 !== 1
+  || report.extraction.dueDateExactMatch !== 1
+  || report.extraction.dueTimeExactMatch !== 1
   || report.learningMission.creationRate !== 1
   || report.learningMission.evidencePersistenceRate !== 1
   || report.learningMission.checkpointPersistenceRate !== 1

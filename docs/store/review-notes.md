@@ -74,7 +74,7 @@ There is no registration, login or account-deletion flow. Tasks and notes are pr
 
 4. External services and tools
 Electron provides the desktop runtime. Local storage, file parsing, OCR, scheduling and progress tracking run on the Mac. After explicit consent, optional managed AI sends necessary text through our Chroni gateway on Zeabur to DeepSeek. No DeepSeek key is shipped in the app. Users may optionally configure another OpenAI-compatible provider, with renewed consent. Service failures or usage limits fall back to local rules.
-Optional speech transcription downloads onnx-community/whisper-tiny model files from Hugging Face on first use, then runs locally. Raw microphone audio is not uploaded to our gateway or DeepSeek. Zeabur hosts our support/privacy website. Updates come from the Mac App Store. There are no authentication, payment or advertising services.
+Optional speech transcription downloads onnx-community/whisper-base model files from Hugging Face on first use, then runs locally. Raw microphone audio is not uploaded to our gateway or DeepSeek. Zeabur hosts our support/privacy website. Updates come from the Mac App Store. There are no authentication, payment or advertising services.
 
 5. Regional behavior
 Functionality and content are consistent across mainland China, Hong Kong, Macao, Taiwan, Singapore and Malaysia. We do not enable different features by region. Optional network services depend on connectivity and provider availability; local features remain usable without AI.

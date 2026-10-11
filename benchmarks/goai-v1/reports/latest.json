@@ -1,12 +1,12 @@
 {
   "schemaVersion": "chroni-goai-eval-v1",
-  "generatedAt": "2026-09-02T03:48:29.599Z",
-  "commitSha": "c71ba2efceaae6d05673853126cfd4ea2e1c38e1",
+  "generatedAt": "2026-10-11T04:55:34.249Z",
+  "commitSha": "855851d0763e2f9f82d624f4feb2ea5d81e6e751",
   "repository": {
-    "commitSha": "c71ba2efceaae6d05673853126cfd4ea2e1c38e1",
-    "workingTreeDirty": false,
-    "statusEntryCount": 0,
-    "trackedPatchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    "commitSha": "855851d0763e2f9f82d624f4feb2ea5d81e6e751",
+    "workingTreeDirty": true,
+    "statusEntryCount": 33,
+    "trackedPatchSha256": "704ad3965f730b283c2889befece0b34c295b46de13eda48c640451e43815eb6"
   },
   "dataset": {
     "name": "goai-v1",
@@ -29,9 +29,9 @@
     }
   },
   "environment": {
-    "node": "v24.12.0",
-    "platform": "win32",
-    "architecture": "x64",
+    "node": "v26.8.2",
+    "platform": "darwin",
+    "architecture": "arm64",
     "modelCalls": 0,
     "networkRequired": false
   },
@@ -39,13 +39,13 @@
     "taskPrecision": 1,
     "taskRecall": 1,
     "taskF1": 1,
-    "titleNormalizationAccuracy": 0.9545454545454546,
+    "titleNormalizationAccuracy": 1,
     "dueDateExactMatch": 1,
     "dueTimeExactMatch": 1,
     "timezoneAccuracy": 1,
-    "deliverablePrecision": 0.8666666666666667,
-    "deliverableRecall": 0.8125,
-    "deliverableF1": 0.8387096774193549,
+    "deliverablePrecision": 1,
+    "deliverableRecall": 1,
+    "deliverableF1": 1,
     "sourceEvidenceHitRate": 1,
     "noTaskFalsePositiveRate": 0,
     "hallucinatedTaskRate": 0
@@ -76,17 +76,17 @@
     "milestoneCheckpointSyncRate": 1
   },
   "engineering": {
-    "localRulesLatencyP50Ms": 47.61,
-    "localRulesLatencyP95Ms": 68.59,
-    "learningMissionLifecycleP50Ms": 48.06,
-    "learningMissionLifecycleP95Ms": 68.08,
-    "offlineCaseP50Ms": 67.58,
-    "offlineCaseP95Ms": 121.54,
+    "localRulesLatencyP50Ms": 1.15,
+    "localRulesLatencyP95Ms": 2.07,
+    "learningMissionLifecycleP50Ms": 0.74,
+    "learningMissionLifecycleP95Ms": 1.13,
+    "offlineCaseP50Ms": 1.88,
+    "offlineCaseP95Ms": 3.05,
     "modelLatencyP50Ms": "尚未完成测量：model benchmark is opt-in and was not run",
     "modelLatencyP95Ms": "尚未完成测量：model benchmark is opt-in and was not run",
     "modelCallsPerCase": 0,
     "tokenOrCostEstimate": "0 for this offline benchmark",
-    "sampledPeakRssMiB": 82,
+    "sampledPeakRssMiB": 128.4,
     "offlineSuccessRate": 1,
     "continuousRunStability": "尚未完成测量：v1 runs each case once"
   },
@@ -98,7 +98,7 @@
     },
     "fields": {
       "title": {
-        "correct": 42,
+        "correct": 44,
         "total": 44
       },
       "dueDate": {
@@ -119,9 +119,9 @@
       }
     },
     "deliverables": {
-      "tp": 26,
-      "fp": 4,
-      "fn": 6
+      "tp": 32,
+      "fp": 0,
+      "fn": 0
     },
     "clarification": {
       "expected": 14,
@@ -142,8 +142,8 @@
       "created": 44,
       "sourceExpected": 44,
       "sourceLinked": 44,
-      "deliverablesExpected": 30,
-      "deliverablesGrounded": 30,
+      "deliverablesExpected": 32,
+      "deliverablesGrounded": 32,
       "criteriaExpected": 44,
       "criteriaPresent": 44,
       "planExpected": 44,

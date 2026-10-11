@@ -1,4 +1,5 @@
 import { isValidCalendarDateTimeParts } from "./shared/date-time.js";
+import { normalizeChineseText } from "./shared/chinese-text.js";
 
 export function decodeEntities(text: string): string {
   return text.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (original, entity: string) => {
@@ -22,6 +23,10 @@ export function markupText(text: string): string {
 
 /** Decode formats before extracting dates; raw markup is not task evidence. */
 export function documentText(raw: string, extension = ""): string {
+  return normalizeChineseText(decodeDocumentText(raw, extension));
+}
+
+function decodeDocumentText(raw: string, extension = ""): string {
   const text = raw.replace(/^\uFEFF/, "");
   if (/^\s*BEGIN:VCALENDAR/i.test(text) || extension === ".ics") return calendarText(text);
   if (/^\s*{\\rtf/i.test(text) || extension === ".rtf") return rtfText(text);
@@ -150,6 +155,9 @@ function calendarTime(value: string, params: string): string {
     };
     for (let iteration = 0; iteration < 3; iteration += 1) instant = wallTime - offsetAt(instant);
     if (instant + offsetAt(instant) !== wallTime) return `${date}（时区钟点不存在，需确认）`;
+    // DST fall-back (including half-hour transitions) can map two instants to
+    // the same wall clock. A local date/time alone cannot select one safely.
+    if ([-120, -60, -30, 30, 60, 120].some((minutes) => { const alternative = instant + minutes * 60_000; return alternative + offsetAt(alternative) === wallTime; })) return `${date}（时区钟点有歧义，需确认）`;
     return new Date(instant).toISOString();
   } catch { return `${date}（时区无效，需确认）`; }
 }

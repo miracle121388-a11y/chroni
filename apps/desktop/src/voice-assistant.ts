@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { normalizeChineseText } from "./shared/chinese-text.js";
 import type { ChroniStore } from "./store.js";
 import type { ChroniSnapshot, DailyTask, DailyTaskCreateInput, IntakeResult, VoiceCommandExecution, VoiceCommandKind, VoiceCommandPreview } from "./shared/types.js";
 
@@ -202,7 +203,7 @@ export class VoiceAssistant {
 }
 
 function normalizeRequest(value: string): string {
-  return String(value ?? "").trim().replace(/\s+/g, " ").replace(/[。！？!?]+$/g, "");
+  return normalizeChineseText(String(value ?? "")).trim().replace(/\s+/g, " ").replace(/[。！？!?]+$/g, "");
 }
 
 function errorPreview(title: string, message: string, kind: VoiceCommandKind = "intake"): VoiceCommandPreview {
@@ -221,13 +222,13 @@ function navigationIntent(text: string): { tab: NonNullable<VoiceCommandPreview[
 }
 
 function isCreateIntent(text: string): boolean {
-  return /(提醒我|帮我记|添加|新建|创建|安排一个|记下|加入待办)/.test(text);
+  return /(提醒我(?:们)?|帮我记|添加|新建|创建|安排一个|记下|加入待办)/.test(text);
 }
 
 function extractTaskTitle(text: string): string {
   return text
     .replace(/^(请|可以|麻烦|小?Chroni[,， ]*)+/i, "")
-    .replace(/提醒我|帮我记(?:一下)?|添加(?:一个|一项)?|新建(?:一个|一项)?|创建(?:一个|一项)?|安排(?:一个|一项)?|记下|加入待办/g, " ")
+    .replace(/提醒我(?:们)?|帮我记(?:一下)?|添加(?:一个|一项)?|新建(?:一个|一项)?|创建(?:一个|一项)?|安排(?:一个|一项)?|记下|加入待办/g, " ")
     .replace(/今天|今日|明天|明日|后天|大后天|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]/g, " ")
     .replace(/(?:上午|早上|清晨|中午|下午|傍晚|晚上|今晚|凌晨)?\s*(?:[01]?\d|2[0-3])\s*[:：]\s*[0-5]\d/g, " ")
     .replace(/(?:上午|早上|清晨|中午|下午|傍晚|晚上|今晚|凌晨)?\s*[一二三四五六七八九十两\d]{1,3}点(?:半|一刻|三刻|[一二三四五六七八九十两\d]{1,3}分)?/g, " ")

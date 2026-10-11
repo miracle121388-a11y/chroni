@@ -263,7 +263,7 @@ function bitmap(canvas) {
 }
 
 test("image-based Office pages also expose a deadline", { timeout: 120_000 }, async () => {
-  const pptx = zip({ "ppt/slides/slide1.xml": '<p:sld xmlns:p="p"/>', "ppt/media/image1.png": fixture });
+  const pptx = zip({ "ppt/slides/slide1.xml": '<p:sld xmlns:p="p" xmlns:a="a" xmlns:r="r"><a:blip r:embed="img1"/></p:sld>', "ppt/slides/_rels/slide1.xml.rels": '<Relationships><Relationship Id="img1" Target="../media/image1.png"/></Relationships>', "ppt/media/image1.png": fixture });
   assertAssignment(await extractPayload({ kind: "files", files: [file("scan.pptx", pptx)] }, options));
 });
 

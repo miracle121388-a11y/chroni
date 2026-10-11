@@ -46,6 +46,26 @@ export function deadlineDateFromText(text: string, now = new Date()): string | u
   const monthName = english?.[1] ?? englishReversed?.[2];
   if (monthName) return datedDeadline(Number(english?.[3] ?? englishReversed?.[3]), months.findIndex((month) => month.toLowerCase().startsWith(monthName.slice(0, 3).toLowerCase())) + 1, Number(english?.[2] ?? englishReversed?.[1]), normalized);
 
+  const trailingYear = normalized.match(/(?<![\d/.])(\d{1,2})[/.](\d{1,2})[/.](20\d{2})(?!\d)/);
+  if (trailingYear) {
+    const first = Number(trailingYear[1]), second = Number(trailingYear[2]);
+    if (first <= 12 && second <= 12) return undefined; // Ambiguous MDY/DMY.
+    return datedDeadline(Number(trailingYear[3]), first > 12 ? second : first, first > 12 ? first : second, normalized);
+  }
+
+  // A version number or sampling decimal must not shadow the real relative date.
+  if (/今天|今日|今早|今晚|明天|明日|明早|明晚|后天|后日|\btoday\b|\btomorrow\b/i.test(normalized)) {
+    const relative = normalized.replace(/(?<!\d)\d{1,2}\.\d{1,2}(?!\d)/g, " ");
+    if (relative !== normalized) return deadlineDateFromText(relative, now);
+  }
+
+  const englishWeekday = normalized.match(/\b(next|this|last)?\s*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i);
+  if (englishWeekday) {
+    const day = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].indexOf(englishWeekday[2].toLowerCase());
+    const mode = englishWeekday[1]?.toLowerCase();
+    return weekdayDeadline("一二三四五六日"[day], normalized, now, mode === "next" ? "next" : mode === "this" ? "current" : mode === "last" ? "previous" : "rolling");
+  }
+
   const partial = normalized.match(/(\d{1,2})(?:\s*[月/\-]\s*|\.)(\d{1,2})\s*[日号]?/);
   if (partial) {
     const month = Number(partial[1]);

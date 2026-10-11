@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, Notification, safeStorage, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, net, Notification, safeStorage, shell } from "electron";
 import { createReadStream, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, join, resolve } from "node:path";
@@ -97,7 +97,14 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => showControlCenter());
 app.on("will-quit", () => globalShortcut.unregisterAll());
-app.on("before-quit", () => {
+let voiceShutdownComplete = false;
+app.on("before-quit", (event) => {
+  if (voiceTranscriber && !voiceShutdownComplete) {
+    event.preventDefault();
+    voiceShutdownComplete = true;
+    void voiceTranscriber.dispose().catch(() => undefined).finally(() => app.quit());
+    return;
+  }
   agentScheduler?.dispose();
   applicationUpdater?.dispose();
   if (focusTimer) clearTimeout(focusTimer);
@@ -616,7 +623,7 @@ function installDeadlineAgent(): void {
 function installVoiceAssistant(userDataPath: string): void {
   voiceTranscriber = new LocalVoiceTranscriber(join(userDataPath, "cache", "voice"), (status) => {
     broadcast("chroni:voice-status", status);
-  });
+  }, (input, init) => net.fetch(input instanceof URL ? input.toString() : input, init));
   voiceAssistant = new VoiceAssistant(() => store, {
     publish: (snapshot) => {
       broadcast("chroni:snapshot-updated", snapshot);
