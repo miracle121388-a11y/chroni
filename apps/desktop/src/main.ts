@@ -1,3 +1,4 @@
+import { installAppShutdown } from "./app-shutdown.js";
 import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, net, Notification, safeStorage, shell } from "electron";
 import { createReadStream, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -97,18 +98,19 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => showControlCenter());
 app.on("will-quit", () => globalShortcut.unregisterAll());
-let voiceShutdownComplete = false;
-app.on("before-quit", (event) => {
-  if (voiceTranscriber && !voiceShutdownComplete) {
-    event.preventDefault();
-    voiceShutdownComplete = true;
-    void voiceTranscriber.dispose().catch(() => undefined).finally(() => app.quit());
-    return;
-  }
+installAppShutdown(app, async () => {
+  await voiceTranscriber?.dispose().catch((error) => console.error("Voice shutdown failed.", error));
   agentScheduler?.dispose();
   applicationUpdater?.dispose();
+  globalShortcut.unregisterAll();
   if (focusTimer) clearTimeout(focusTimer);
-  if (apiServer?.listening) apiServer.close();
+  if (apiServer?.listening) {
+    const server = apiServer;
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+      server.closeAllConnections();
+    });
+  }
 });
 
 function installIpc(): void {

@@ -50,7 +50,8 @@
     "package:goai:win": "cross-env CHRONI_PET_ASSET_MODE=original pnpm run package:goai:win:inner",
     "package:goai:win:inner": "pnpm run clean:package && pnpm run build:inner && node ../../scripts/verify-goai-assets.mjs && electron-builder --config electron-builder.config.cjs --win --x64 --publish never && node ../../scripts/verify-desktop-artifact.mjs --platform=windows --variant=goai",
     "package:goai:mac": "cross-env CHRONI_PET_ASSET_MODE=original pnpm run package:goai:mac:inner",
-    "package:goai:mac:inner": "pnpm run clean:package && pnpm run build:inner && node ../../scripts/verify-goai-assets.mjs && electron-builder --config electron-builder.config.cjs --mac --universal --publish never && node ../../scripts/verify-desktop-artifact.mjs --platform=macos --variant=goai"
+    "package:goai:mac:inner": "pnpm run clean:package && pnpm run build:inner && node ../../scripts/verify-goai-assets.mjs && electron-builder --config electron-builder.config.cjs --mac --universal --publish never && node ../../scripts/verify-desktop-artifact.mjs --platform=macos --variant=goai",
+    "verify:macos-quit": "pnpm run build:main && node scripts/verify-macos-quit.cjs"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",
