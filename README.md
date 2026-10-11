@@ -39,7 +39,7 @@
   <a href="#开发与验证">开发</a>
 </p>
 
-> **当前版本：** `0.2.4`。公开安装包默认使用本地规则；用户阅读数据发送说明并明确同意后，可开启无需 API Key 的 Chroni 托管智能服务。签名、公证和可下载产物以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
+> **当前开发版本：** `0.2.5`；Mac App Store 已上架版本为 [0.2.4](https://apps.apple.com/cn/app/chroni/id6816595577)，0.2.5 正在准备更新。公开安装包默认使用本地规则；用户阅读数据发送说明并明确同意后，可开启无需 API Key 的 Chroni 托管智能服务。签名、公证和可下载产物以 [Releases](https://github.com/miracle121388-a11y/chroni/releases) 为准。
 
 > **资产许可提示：** MIT 许可覆盖 Chroni 自研代码，不自动覆盖字体、运行依赖与桌宠视觉素材；完整边界见 [第三方声明](./THIRD_PARTY_NOTICES.md)。
 
