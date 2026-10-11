@@ -2,9 +2,11 @@
 
 本目录保存 Microsoft Store 与 Mac App Store 的提交文案、审核说明和发布检查表。普通 GitHub Release 仍使用 NSIS、Portable、DMG 与 ZIP；商店包使用独立命令，且由系统应用商店负责后续更新。
 
-当前状态：Chroni 为免费 macOS 应用，团队 `RJ9LMC47V5`、Bundle ID `app.chroni.desktop`、App Store Connect App `6816595577`。2026-10-03 构建 `0.2.4 (3)` 因 Guideline 4 缺少关闭主窗口后的应用菜单恢复入口被拒。已加入原生“窗口 → 打开控制中心”（⌘1），修复提交 `e971852` 已推送；构建 `0.2.4 (4)` 于 2026-10-05 21:23（中国标准时间）经 Transporter 交付成功，已完成处理及 TestFlight 真机复验；21:48 回复 Apple，21:49 重新提交同一审核，后台确认为“等待审核”，尚未获批或上架。版权主体为引力回响（苏州）科技有限公司，支持邮箱 developer@twintalk.cn；公司官网 https://twintalk.cn，产品支持与隐私页沿用 Chroni 产品站。
+当前状态：Chroni 已通过审核并于 2026-10-11 在 Mac App Store 自动发布，正式版本 `0.2.4 (4)`，App Store Connect 状态为“可分发”。免费供应中国大陆、香港、澳门、台湾、新加坡、马来西亚，六个店面均已公开。正式下载：[Chroni · Mac App Store](https://apps.apple.com/cn/app/chroni/id6816595577)。团队 `RJ9LMC47V5`、Bundle ID `app.chroni.desktop`、App Store Connect App `6816595577`；版权主体为引力回响（苏州）科技有限公司，支持邮箱 developer@twintalk.cn，公司官网 https://twintalk.cn。产品支持与隐私页沿用 Chroni 产品站。首次上架已完成，无待发布操作。
 
 ## 最近核验
+
+2026-10-11 正式上架：在已登录的公司 App Store Connect 中核对 Chroni 的 macOS 版本 `0.2.4` 为“可分发”，关联构建 `0.2.4 (4)`，发布方式为审核通过后自动发布，无待开发者发布按钮。价格与销售范围显示公开分发、6 个可供应地区，分别为中国大陆、香港、澳门、台湾、新加坡、马来西亚。通过 Apple 公共查询接口 `https://itunes.apple.com/lookup?id=6816595577&country=<cn|hk|mo|tw|sg|my>&entity=macSoftware` 独立核验六个店面：均 HTTP 200、唯一返回 Chroni，类型 `mac-software`、版本 `0.2.4`、Bundle ID `app.chroni.desktop`、公司主体正确、价格为 0。Apple 返回版本发布日期 `2026-10-11T07:52:26Z`（中国标准时间 15:52:26），六个公开产品页均可查询。支持页与隐私页再次验证 HTTP 200，含公司名称及支持邮箱。复用已获批构建，未重新上传或送审。
 
 2026-10-05 窗口菜单修复：Apple 于 10 月 3 日通知构建 `0.2.4 (3)` 因 Guideline 4 被拒，原因是关闭主窗口后没有应用菜单入口重新打开。macOS 原生“窗口”菜单现固定提供“打开控制中心”（⌘1），调用既有窗口恢复逻辑。实际 Electron 原生窗口回归检查已验证首次打开、关闭后重建、最小化后恢复且不重复创建窗口；类型检查及正式小童素材构建通过。构建 4 已完成 universal MAS 签名、沙盒、243 帧小童动画与授权文件及安装包检查，SHA-256 为 `b7c56980a7d86be3c1e0292cc400cefadfca2f648b282baaff990c924e17d245`；21:23 交付 Apple，21:26 Apple 处理完成，已加入现有 Chroni Release QA 群组并通过 TestFlight 安装。Mac17,3、macOS 27.0.1（26A434）真机确认菜单首次打开、红色关闭按钮关闭后菜单重开、⌘1 重开、最小化后恢复、既有 6 项任务与旧排程保留；已核对安装版 CFBundleVersion 为 4、Bundle ID 与 Team ID 正确。本机 API 再次验证健康检查 200、无令牌任务接口 401、有令牌 200，不记录令牌或任务内容。18 项打包测试通过。审核 Notes 已保存 3,950 字符正文，包含修复、真机 QA、六项材料及权限用途，原构建 3 功能录像附件保留；本次补录捕获到其他工作画面，未采用或上传。21:48 回复 Apple，21:49 更新审核并重新提交构建 4，页面确认为“等待审核”，提交 ID 沿用 `a533c206-dc2e-4b72-8881-e3beeb491e03`。支持及隐私页重新验证 HTTP 200、公司名与邮箱完整。回归命令：`pnpm --filter @chroni/desktop run verify:macos-window-menu`。
 
