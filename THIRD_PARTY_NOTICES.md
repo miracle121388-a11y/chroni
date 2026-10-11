@@ -33,6 +33,8 @@ Chroni uses Source Sans 3, Source Serif 4, Noto Sans SC, and Noto Serif SC throu
 
 The application uses Electron, React, React DOM, Vite, TypeScript, Tesseract.js, Mammoth, pdf-parse, read-excel-file, electron-updater, and their transitive dependencies under their respective licenses. Exact dependency versions are fixed by `pnpm-lock.yaml`; the generated production inventory is committed as `THIRD_PARTY_DEPENDENCIES.md`. Run `pnpm run notices:generate` after dependency changes.
 
+Chinese and English OCR language data are bundled through `@tesseract.js-data/chi_sim` and `@tesseract.js-data/eng` (MIT). Their compressed data are expanded into a writable local cache on first use. Sharp/libvips converts image formats, including multi-page TIFF, before OCR; AdmZip reads bounded Office/OpenDocument archives. Their exact licenses are included in the production inventory.
+
 ## Models and APIs
 
 Chroni downloads the `onnx-community/whisper-tiny` ONNX speech-recognition model from Hugging Face on first voice use and caches it in the user's application-data directory. The converted model is based on `openai/whisper-tiny`; the upstream model is published under Apache License 2.0. Model files are not committed to this repository or embedded in release installers.

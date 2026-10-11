@@ -756,6 +756,7 @@ export type ExtractedInput = {
   sourceName: string;
   sourceType: string;
   text: string;
+  ocrUsed?: boolean;
 };
 
 export type ExtractedFailure = ExtractedInput & {

@@ -1484,7 +1484,7 @@ function ServicesPane({ snapshot, setSnapshot }: ViewProps) {
       </p>
       {feedback && <p className={`inline-feedback ${feedback.tone}`} role={feedback.tone === "warn" ? "alert" : "status"} aria-live="polite">{feedback.message}</p>}
       <div className="service-list">
-        <StatusRow label="文本解析" state={snapshot.services.parser} detail="TXT、MD、CSV、JSON、ICS、DOCX、PDF、XLSX 等本地解析" />
+        <StatusRow label="文本解析" state={snapshot.services.parser} detail="TXT、MD、CSV、JSON、ICS、DOCX、PDF、PPTX、XLSX 等本地解析" />
         <StatusRow label="图片 OCR" state={snapshot.services.ocr} detail="图片与扫描 PDF 先转为文字，再进入提取流程" />
         <StatusRow label="大模型理解" state={snapshot.services.model} detail="按输入内容理解日程、任务要求、交付物与截止信息，并保留来源证据" />
         <StatusRow
@@ -2296,7 +2296,7 @@ function intakeResultMessage(result: IntakeResult): string {
 }
 
 function acceptedFileTypes(): string {
-  return ".txt,.md,.csv,.tsv,.json,.ics,.log,.html,.htm,.xml,.yaml,.yml,.rtf,.docx,.pdf,.xlsx,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff";
+  return ".txt,.md,.csv,.tsv,.json,.ics,.log,.html,.htm,.xml,.yaml,.yml,.rtf,.docx,.pdf,.pptx,.xlsx,.odt,.odp,.ods,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,.gif,.avif";
 }
 
 async function filesFromFileList(fileList: FileList | File[] | null): Promise<ChroniInputFile[]> {

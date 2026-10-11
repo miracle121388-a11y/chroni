@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { basename, extname, isAbsolute, join } from "node:path";
 import mammoth from "mammoth";
 import readXlsxFile from "read-excel-file/node";
+import AdmZip from "adm-zip";
+import { documentText, markupText, openDocumentText, tabularText } from "./document-text.js";
+import { recognizeDocumentImage } from "./document-ocr.js";
 import type { DdlExtractionContext, DdlItem, ChroniInputFile, ChroniLlmSettings, ExtractResult, ExtractedFailure, ExtractedInput, Importance, IntakeDraft, IntakePayload, IntakeResult, PendingExtractedTask, PendingClarification } from "./shared/types.js";
 import type { ChroniStore } from "./store.js";
 import { requestChatCompletion } from "./llm-client.js";
@@ -20,7 +23,7 @@ import { inferImportanceFromText, strongerImportance } from "./shared/task-prior
 
 const plainTextExtensions = new Set([".txt", ".md", ".csv", ".tsv", ".json", ".ics", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".rtf"]);
 const spreadsheetExtensions = new Set([".xlsx"]);
-const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"]);
+const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".gif", ".avif"]);
 const unsupportedExtensions = new Set([".exe", ".dll", ".zip", ".rar", ".7z", ".mp4", ".mov", ".mp3", ".wav", ".app", ".dmg"]);
 
 const maxTextBytes = 2 * 1024 * 1024;
@@ -424,7 +427,7 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
     : payload;
   try {
     if (effectivePayload.kind === "text") {
-      const text = effectivePayload.text?.trim() ?? "";
+      const text = documentText(effectivePayload.text?.trim() ?? "");
       if (!text) return { ok: false, reason: "输入内容为空。", extracted, failures, items: [], pendingItems: [] };
       extracted.push({ sourceName: "直接文本", sourceType: "text", text });
     } else {
@@ -441,6 +444,11 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
     const ruleItems = extracted.flatMap((input) => extractDdlItemsFromText(input.text, input.sourceName, referenceNow));
     const pendingItems = llm.pendingItems.filter((pending) => ![...llm.items, ...ruleItems].some((item) => pendingCoversResolvedItem(pending, item)));
     const items = mergeModelAndRuleItems(llm.items, ruleItems, pendingItems);
+    for (const item of items) {
+      if (item.extraction && extracted.some((input) => input.ocrUsed && sourceName(item.sourceSummary) === input.sourceName.toLowerCase())) {
+        item.extraction.uncertainties.push("材料经过 OCR 识别，提交网址、文件名和数字要求需核对原件。");
+      }
+    }
     if (!items.length && !pendingItems.length) {
       if (llm.errors.length && isLlmEnabled(options.llm)) {
         return { ok: false, reason: "模型服务暂时不可用，请检查 API 配置和网络后重试。", extracted, failures, items: [], pendingItems: [] };
@@ -450,14 +458,14 @@ export async function extractPayload(payload: IntakePayload, options: ExtractOpt
       }
       return { ok: false, reason: "没有识别到明确的日程或截止事项。", extracted, failures, items: [], pendingItems: [] };
     }
-    const count = Math.min(items.length, 12);
+    const count = items.length;
     const message = extractionMessage(count, llm, pendingItems.length);
     return {
       ok: true,
       extracted,
       failures,
-      items: mergeDuplicateItems(items).slice(0, 12),
-      pendingItems: pendingItems.slice(0, 12),
+      items: mergeDuplicateItems(items),
+      pendingItems,
       message,
     };
   } catch (error) {
@@ -823,32 +831,68 @@ function failureFromFile(file: ChroniInputFile, reason: string): ExtractedFailur
 }
 
 export function extractDdlItemsFromText(text: string, sourceName = "输入内容", referenceNow = new Date()): DdlItem[] {
-  const normalized = normalizeOcrText(normalizeText(text));
+  const normalized = normalizeOcrText(normalizeText(documentText(text)));
   if (!normalized) return [];
-
   const candidates = candidateLines(normalized);
-  const items = candidates
-    .map((line, index) => {
-      if (containsPromptInjectionIndicators(line) || !hasDeadlineIntent(line) || isConditionalDeadlineText(line)) return null;
-      const dueAt = safeDateFromText(line, referenceNow);
-      if (!dueAt) return null;
-      let titleSource = line;
-      let title = shortTitle(titleSource);
-      const previous = candidates[index - 1];
-      if (title === "未命名 DDL" && previous && hasTaskTitleEvidence(previous) && !safeDateFromText(previous, referenceNow)) {
-        titleSource = `${previous}。${line}`;
-        title = shortTitle(titleSource);
-      }
-      if (title === "未命名 DDL") return null;
-      return createItem(title, dueAt, `${sourceName}: ${titleSource.slice(0, 180)}`, undefined, extractionContextFromRuleText(titleSource));
-    })
-    .filter((item): item is DdlItem => !!item);
+  const deadlines = candidates.flatMap((line, index) => {
+    if (containsPromptInjectionIndicators(line) || isConditionalDeadlineText(line)
+      || /^(?:[>\s]*(?:当前假设日期|发布(?:时间|日期)|通知(?:时间|日期)|更新(?:时间|日期)|发布时间|训练时间|示例日期|createdAt|updatedAt))\s*[:：]/i.test(line)) return [];
+    const dueAt = safeDateFromText(line, referenceNow);
+    if (!dueAt) return [];
+    const previous = candidates[index - 1] ?? "";
+    if (!hasDeadlineIntent(line) && !hasTaskTitleEvidence(previous) && !hasDeadlineIntent(previous)
+      && !(isBareDeadlineLine(line) && candidates.slice(0, index).some(isTaskHeading))) return [];
+    return [{ line, index, dueAt }];
+  });
+  const items: DdlItem[] = [];
+  for (const [position, deadline] of deadlines.entries()) {
+    const previousDeadline = deadlines[position - 1]?.index ?? -1;
+    const nextDeadline = deadlines[position + 1]?.index ?? candidates.length;
+    // Explicit records (calendar, table, JSON) must not share requirements.
+    const recordStart = candidates.slice(0, deadline.index + 1).reduce((last, line, index) => isRecordBoundary(line) ? index : last, -1);
+    const recordEndOffset = candidates.slice(deadline.index + 1).findIndex(isRecordBoundary);
+    const recordEnd = recordEndOffset < 0 ? candidates.length : deadline.index + 1 + recordEndOffset;
+    const preceding = candidates.slice(Math.max(previousDeadline + 1, recordStart), deadline.index);
+    const following = candidates.slice(deadline.index + 1, Math.min(nextDeadline, recordEnd));
+    // The next task heading belongs to its next deadline, not this task.
+    const nextHeading = following.findIndex((line) => (position + 1 < deadlines.length && isTaskHeading(line) || (hasTaskTitleEvidence(line) && hasDeadlineTemporalReference(line)))
+      && !/^(提交|要求|材料|结果|报告包含|任务要求)/.test(line));
+    const ownTitle = shortTitle(deadline.line);
+    const nearestFirst = preceding.slice().reverse();
+    const heading = nearestFirst.find((line) => /^任务名称\s*[:：]/.test(line))
+      ?? nearestFirst.find((line) => /^#{1,6}\s/.test(line) && hasTaskTitleEvidence(line))
+      ?? nearestFirst.find(isTaskHeading);
+    const precedingContext = heading ? preceding.slice(preceding.lastIndexOf(heading)) : preceding;
+    const contextLines = [...precedingContext, deadline.line, ...(recordStart < 0 && nextHeading >= 0 ? following.slice(0, nextHeading) : following)]
+      .filter((line) => !isRecordBoundary(line));
+    const context = contextLines.join("\n");
+    if (containsPromptInjectionIndicators(context) || isConditionalDeadlineText(context)) continue;
+    const title = heading && (ownTitle === "未命名 DDL" || isBareDeadlineLine(deadline.line)) ? shortTitle(heading) : ownTitle;
+    if (title === "未命名 DDL") continue;
+    const evidence = title === ownTitle ? deadline.line : `${precedingContext.filter(hasTaskTitleEvidence).slice(-2).join("\n")}\n${deadline.line}`;
+    // Keep the deadline itself even for long headings/paragraphs.
+    const sourceSummary = `${sourceName}: ${evidence.length <= 180 ? evidence : `${title}；${deadline.line.slice(-150)}`}`;
+    items.push(createItem(title, deadline.dueAt, sourceSummary, importanceFromText(context), extractionContextFromRuleText(context)));
+  }
+  return mergeDuplicateItems(items);
+}
 
-  if (items.length) return mergeDuplicateItems(items);
-  if (containsPromptInjectionIndicators(normalized) || !hasDeadlineIntent(normalized) || isConditionalDeadlineText(normalized)) return [];
-  const dueAt = safeDateFromText(normalized, referenceNow);
-  const title = shortTitle(normalized);
-  return dueAt && title !== "未命名 DDL" ? [createItem(title, dueAt, `${sourceName}: ${normalized.slice(0, 180)}`, undefined, extractionContextFromRuleText(normalized))] : [];
+function isRecordBoundary(line: string): boolean {
+  return /^\[(?:任务\s*\d+|工作表[:：])/.test(line);
+}
+
+function isTaskHeading(line: string): boolean {
+  return line.length <= 120 && hasTaskTitleEvidence(line) && !hasDeadlineTemporalReference(line)
+    && /任务名称|作业|报告|项目|论文|实验|测验|考试|答辩|汇报|会议|活动|申请|报名|展示|homework|assignment|report|project/i.test(line)
+    && !/(包含|包括|必须|不得|不少于|以内|需采用)/.test(line)
+    && !/^(提交(?:物|材料|网址|方式|要求)|要求|训练|网络|例如|说明|结果|备注|给出|生成|提供|PDF\s*文档|requirements|deliverables|constraints|\(?\d+\)?[.、])/i.test(line);
+}
+
+function isBareDeadlineLine(line: string): boolean {
+  const stripped = stripDeadlineTemporalExpressions(line)
+    .replace(/[*`_]/g, "")
+    .replace(/(?:截止(?:日期|时间)?|提交(?:截止(?:日期|时间)?|时间|日期)|截至|due\s*(?:date|at)?|deadline|[:：\s,，。；;前])/gi, "");
+  return !stripped || (stripped.length <= 8 && /(?:日期|时间)/.test(stripped));
 }
 
 function safeDateFromText(text: string, referenceNow = new Date()): string | null {
@@ -861,32 +905,48 @@ function safeDateFromText(text: string, referenceNow = new Date()): string | nul
 
 async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput> {
   const name = file.name || (file.path ? basename(file.path) : "未命名文件");
-  const extension = extname(name || file.path || "").toLowerCase();
+  let extension = extname(name || file.path || "").toLowerCase();
   if (unsupportedExtensions.has(extension)) throw new Error(`文件类型不支持：${name}`);
-  if (!extension) throw new Error(`无法判断文件类型：${name}`);
 
   const isPlainText = plainTextExtensions.has(extension);
   const sizeLimit = isPlainText ? maxTextBytes : maxDocumentBytes;
   const sizeError = `${isPlainText ? "文本文件" : "文件"}过大：${name}`;
   const buffer = readFileBuffer(file, sizeLimit, sizeError);
+  if (!plainTextExtensions.has(extension) && !imageExtensions.has(extension) && ![".docx", ".pptx", ".xlsx", ".pdf", ".odt", ".odp", ".ods", ".doc", ".xls", ".ppt"].includes(extension)) {
+    extension = detectedDocumentExtension(buffer, name) || extension;
+  }
   const sourceType = extension.slice(1);
   if (buffer.length > maxDocumentBytes) throw new Error(`文件过大：${name}`);
 
   if (isPlainText) {
     if (buffer.length > maxTextBytes) throw new Error(`文本文件过大：${name}`);
-    const text = textFromBuffer(buffer);
+    const text = documentText(textFromBuffer(buffer), extension);
     assertReliableExtractedText(text, name);
     return { sourceName: name, sourceType, text };
   }
   if (extension === ".docx") {
     assertSafeOfficeArchive(buffer, name);
     const result = await mammoth.extractRawText({ buffer });
-    assertReliableExtractedText(result.value, name);
-    return { sourceName: name, sourceType, text: result.value };
+    const imageText = await officeImageText(new AdmZip(buffer), "word/media/");
+    const text = [result.value, imageText].filter(Boolean).join("\n");
+    assertReliableExtractedText(text, name);
+    return { sourceName: name, sourceType, text, ocrUsed: !!imageText };
+  }
+  if (extension === ".pptx" || [".odt", ".odp", ".ods"].includes(extension)) {
+    assertSafeOfficeArchive(buffer, name);
+    const archive = new AdmZip(buffer);
+    const entries = archive.getEntries().filter((entry) => extension === ".pptx"
+      ? /^ppt\/slides\/slide\d+\.xml$/.test(entry.entryName)
+      : entry.entryName === "content.xml").sort((a, b) => a.entryName.localeCompare(b.entryName, undefined, { numeric: true }));
+    const nativeText = entries.map((entry) => extension === ".pptx" ? markupText(entry.getData().toString("utf8")) : openDocumentText(entry.getData().toString("utf8"), extension === ".ods")).join("\n\n");
+    const imageText = await officeImageText(archive, extension === ".pptx" ? "ppt/media/" : "Pictures/");
+    const text = [nativeText, imageText].filter(Boolean).join("\n");
+    assertReliableExtractedText(text, name);
+    return { sourceName: name, sourceType, text, ocrUsed: !!imageText };
   }
   if (extension === ".pdf") {
-    const text = await extractPdfText(buffer, name);
-    return { sourceName: name, sourceType, text };
+    const result = await extractPdfText(buffer, name);
+    return { sourceName: name, sourceType, ...result };
   }
   if (spreadsheetExtensions.has(extension)) {
     assertSafeOfficeArchive(buffer, name);
@@ -900,10 +960,45 @@ async function extractSingleFile(file: ChroniInputFile): Promise<ExtractedInput>
     const text = result.text;
     assertReliableExtractedText(text, name, "图片 OCR 失败");
     if (!isReliableOcrResult(text, result.confidence)) throw new Error(`图片 OCR 置信度不足：${name}`);
-    return { sourceName: name, sourceType, text };
+    return { sourceName: name, sourceType, text, ocrUsed: true };
   }
 
-  throw new Error(`文件类型不支持：${name}`);
+  if ([".doc", ".xls", ".ppt"].includes(extension)) throw new Error(`旧版 Office 格式请另存为 DOCX、XLSX、PPTX 或 PDF 后导入：${name}`);
+  // Extensionless or custom-named text is common in exported course notices.
+  const text = documentText(textFromBuffer(buffer));
+  if (looksLikeReliableText(text) && buffer.length <= maxTextBytes) return { sourceName: name, sourceType: sourceType || "text", text };
+  throw new Error(`文件类型不支持，请转为 PDF、图片或文本后导入：${name}`);
+}
+
+function detectedDocumentExtension(buffer: Buffer, name: string): string | undefined {
+  const prefix = buffer.subarray(0, 12);
+  if (prefix.subarray(0, 5).toString("ascii") === "%PDF-") return ".pdf";
+  if (prefix.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return ".png";
+  if (prefix[0] === 255 && prefix[1] === 216 && prefix[2] === 255) return ".jpg";
+  if (prefix.toString("ascii").startsWith("GIF8")) return ".gif";
+  if (prefix.subarray(0, 2).toString("ascii") === "BM") return ".bmp";
+  if (prefix.subarray(0, 4).equals(Buffer.from([73, 73, 42, 0])) || prefix.subarray(0, 4).equals(Buffer.from([77, 77, 0, 42]))) return ".tiff";
+  if (prefix.subarray(0, 4).toString("ascii") === "RIFF" && prefix.subarray(8, 12).toString("ascii") === "WEBP") return ".webp";
+  if (prefix.length >= 4 && prefix.readUInt32LE(0) === 0x04034b50) {
+    assertSafeOfficeArchive(buffer, name);
+    const archive = new AdmZip(buffer);
+    if (archive.getEntry("word/document.xml")) return ".docx";
+    if (archive.getEntry("xl/workbook.xml")) return ".xlsx";
+    if (archive.getEntries().some((entry) => /^ppt\/slides\/slide\d+\.xml$/.test(entry.entryName))) return ".pptx";
+    if (archive.getEntry("content.xml")) return ".odt";
+  }
+  return undefined;
+}
+
+async function officeImageText(archive: AdmZip, prefix: string): Promise<string> {
+  const images = archive.getEntries().filter((entry) => entry.entryName.startsWith(prefix) && imageExtensions.has(extname(entry.entryName).toLowerCase()) && entry.header.size >= 8_000);
+  if (images.length > maxPdfOcrPages) throw new Error("文档内图片过多，请拆分为每份最多 60 张图片后导入。");
+  const texts: string[] = [];
+  for (const image of images) {
+    const result = await recognizeImage(image.getData());
+    if (isReliableOcrResult(result.text, result.confidence)) texts.push(result.text);
+  }
+  return texts.join("\n\n");
 }
 
 export function assertSafeOfficeArchive(buffer: Buffer, name = "Office 文档"): void {
@@ -972,45 +1067,59 @@ export function assertSafeOfficeArchive(buffer: Buffer, name = "Office 文档"):
   }
 }
 
-async function extractPdfText(buffer: Buffer, name: string): Promise<string> {
+async function extractPdfText(buffer: Buffer, name: string): Promise<{ text: string; ocrUsed: boolean }> {
   const mod = await import("pdf-parse") as unknown as {
     PDFParse: new (options: { data: Uint8Array }) => {
-      getText: () => Promise<{ text: string }>;
+      getText: (options?: { parseHyperlinks: boolean }) => Promise<{ text: string; total: number; pages: Array<{ num: number; text: string }> }>;
       getInfo: () => Promise<{ total: number }>;
+      getImage: (options: { partial: number[]; imageBuffer: boolean; imageDataUrl: boolean; imageThreshold: number }) => Promise<{ pages: Array<{ images: Array<{ width: number; height: number; data: Uint8Array }> }> }>;
       getScreenshot: (options: { desiredWidth: number; imageBuffer: boolean; imageDataUrl: boolean; partial: number[] }) => Promise<{ pages: Array<{ data: Uint8Array; pageNumber: number }> }>;
       destroy: () => Promise<void>;
     };
   };
   const parser = new mod.PDFParse({ data: buffer });
   try {
-    const parsed = await parser.getText();
-    if (parsed.text.trim() && looksLikeReliableText(parsed.text.trim())) return parsed.text;
-
+    const parsed = await parser.getText({ parseHyperlinks: true });
     const { total } = await parser.getInfo();
     if (!Number.isInteger(total) || total < 1) throw new Error(`PDF 页数信息无效：${name}`);
-    if (total > maxPdfOcrPages) throw new Error(`扫描型 PDF 页数过多：${name}（最多支持 ${maxPdfOcrPages} 页 OCR）`);
     const pageTexts: string[] = [];
+    let ocrPages = 0;
     for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
-      const screenshots = await parser.getScreenshot({ desiredWidth: 1_800, imageBuffer: true, imageDataUrl: false, partial: [pageNumber] });
-      const page = screenshots.pages[0];
-      if (!page?.data?.length) continue;
-      const result = await recognizeImage(Buffer.from(page.data));
+      // Use real page text, not the synthetic page separators in parsed.text.
+      const nativeText = parsed.pages.find((page) => page.num === pageNumber)?.text.trim() ?? "";
+      const nativeReliable = looksLikeReliableText(nativeText);
+      const images = await parser.getImage({ partial: [pageNumber], imageBuffer: true, imageDataUrl: false, imageThreshold: 250 });
+      const hasLargeImage = images.pages.some((page) => page.images.some((image) => image.width >= 600 && image.height >= 300));
+      if (nativeReliable && !hasLargeImage) { pageTexts.push(nativeText); continue; }
+      ocrPages += 1;
+      if (ocrPages > maxPdfOcrPages) throw new Error(`扫描型 PDF 页数过多：${name}（最多支持 ${maxPdfOcrPages} 页 OCR）`);
+      const embedded = images.pages[0]?.images;
+      const originalScan = embedded?.length === 1 && hasLargeImage ? embedded[0].data : undefined;
+      const screenshot = originalScan?.length ? originalScan : (await parser.getScreenshot({ desiredWidth: 2_400, imageBuffer: true, imageDataUrl: false, partial: [pageNumber] })).pages[0]?.data;
+      if (!screenshot?.length) throw new Error(`PDF 第 ${pageNumber} 页无法渲染，请重新导出 PDF 后导入：${name}`);
+      const result = await recognizeImage(Buffer.from(screenshot));
       if (isReliableOcrResult(result.text, result.confidence)) {
-        pageTexts.push(`[第 ${page.pageNumber} 页]\n${result.text.trim()}`);
-      }
+        // Whole-page OCR preserves the reading order of native headings and images.
+        pageTexts.push([nativeReliable ? nativeText : "", result.text.trim()].filter(Boolean).join("\n"));
+      } else if (nativeReliable) pageTexts.push(nativeText);
+      else if (!hasLargeImage && !result.text.trim()) continue; // An actually blank page.
+      else throw new Error(`PDF 第 ${pageNumber} 页无法可靠识别，请提供更清晰的页面或粘贴文字：${name}`);
     }
     const text = pageTexts.join("\n\n");
     assertReliableExtractedText(text, name, "PDF 没有文本层，页面 OCR 也未识别到可靠文本");
-    return text;
+    return { text, ocrUsed: ocrPages > 0 };
+  } catch (error) {
+    if (error instanceof Error && /password/i.test(error.name + error.message)) throw new Error(`PDF 已加密，请解除密码后导入：${name}`);
+    if (error instanceof Error && /InvalidPDF|Invalid PDF|MissingPDF|FormatError/i.test(error.name + error.message)) throw new Error(`PDF 已损坏或格式不正确，请重新导出后导入：${name}`);
+    throw error;
   } finally {
     await parser.destroy().catch(() => undefined);
   }
 }
 
 async function recognizeImage(image: Buffer): Promise<{ text: string; confidence?: number }> {
-  const mod = await import("tesseract.js") as unknown as TesseractModule;
   const cachePath = ocrCachePath();
-  return recognizeImageWithTesseract(image, mod, cachePath);
+  return recognizeDocumentImage(image, cachePath);
 }
 
 export async function recognizeImageWithTesseract(image: Buffer, mod: TesseractModule, cachePath: string): Promise<{ text: string; confidence?: number }> {
@@ -1051,9 +1160,8 @@ export function workbookText(sheets: WorkbookSheet[]): string {
   return sheets.flatMap((sheet) => {
     const rows = sheet.data
       .map((row) => row.map((cell) => cell instanceof Date ? cell.toISOString() : String(cell ?? "")))
-      .filter((row) => row.some((cell) => cell.trim()))
-      .map((row) => row.join(", "));
-    return rows.length ? [`[工作表: ${sheet.sheet}]\n${rows.join("\n")}`] : [];
+      .filter((row) => row.some((cell) => cell.trim()));
+    return rows.length ? [`[工作表: ${sheet.sheet}]\n${tabularText(rows)}`] : [];
   }).join("\n\n");
 }
 
@@ -1148,29 +1256,34 @@ export function isReliableOcrResult(text: string, confidence?: number): boolean 
 
 function normalizeText(text: string): string {
   return text
-    .replace(/\r/g, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\\par[d]?/g, "\n")
+    .normalize("NFKC")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u200B-\u200D\u2060]/g, "")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
 function normalizeOcrText(text: string): string {
-  return text.replace(/(?<=\p{Script=Han})[ \t]+(?=\p{Script=Han})/gu, "");
+  return text.replace(/(?<=\p{Script=Han})[ \t]+(?=\p{Script=Han})/gu, "")
+    .replace(/(20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/g, "$1年$2月$3日")
+    .replace(/(\d{1,2})\s*[:：]\s*(\d{2})/g, "$1:$2");
 }
 
 function candidateLines(text: string): string[] {
-  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-  const sentenceParts = lines.flatMap((line) => line.split(/[。；;.!?？]+/).map((part) => part.trim()).filter(Boolean));
+  const joined = text
+    .replace(/((?:截止|截至|提交)(?:日期|时间)?\s*[:：])\s*\n\s*/g, "$1 ")
+    .replace(/((?:20\d{2}\s*[年/.\-]\s*)?\d{1,2}\s*[月/.\-]\s*\d{1,2}\s*[日号]?)\s*\n\s*(?:(?:时间|time)\s*[:：]\s*)?(?=\d{1,2}:\d{2})/gi, "$1 ");
+  const lines = joined.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const sentenceParts = lines.flatMap((line) => line.split(/[。；;!?？]+|\.(?=\s|$)/).map((part) => part.trim()).filter(Boolean));
   const taskParts = sentenceParts.flatMap((line) => hasMultipleTemporalExpressions(line) && !isConditionalDeadlineText(line)
     ? line.split(/[，,]/).map((part) => part.trim()).filter(Boolean)
     : [line]);
-  return [...new Set(taskParts)].filter((line) => line.length <= 280);
+  return taskParts;
 }
 
 function hasMultipleTemporalExpressions(text: string): boolean {
-  const matches = text.match(/20\d{2}\s*[年/.\-]\s*\d{1,2}\s*[月/.\-]\s*\d{1,2}|\d{1,2}(?:\s*[月/\-]\s*|\.)\d{1,2}|今天|今日|今早|今晚|明天|明日|明早|明晚|后天|后日|下(?:个)?(?:周|星期)[一二三四五六日天]|(?:周|星期)[一二三四五六日天]/g);
+  const matches = text.match(/20\d{2}\s*[年/.\-]\s*\d{1,2}\s*[月/.\-]\s*\d{1,2}|(?<![\d.])\d{1,2}\s*[月/\-]\s*\d{1,2}|今天|今日|今早|今晚|明天|明日|明早|明晚|后天|后日|下(?:个)?(?:周|星期)[一二三四五六日天]|(?:周|星期)[一二三四五六日天]/g);
   return (matches?.length ?? 0) > 1;
 }
 
@@ -1189,10 +1302,14 @@ function containsPromptInjectionIndicators(text: string): boolean {
 
 function extractionContextFromRuleText(text: string): DdlExtractionContext {
   const hasArtifactCue = /(?:提交|上交|交付|\bsubmit\b|\bturn\s*in\b|需(?:要)?|准备|包括|包含|[:：])[^。；;]{1,160}/i.test(text);
+  const lines = text.split(/\n+/);
+  const submission = lines.filter((line) => /提交(?:网址|方式|地址|平台)|上传(?:地址|平台)|submit\s+(?:to|via)|https?:\//i.test(line));
+  const constraints = lines.filter((line) => /要求[:：]|必须|务必|不得|不超过|不少于|至少|最多|控制在|以内|需采用|需要使用|命名|文件名|应包含|清晰|must\b|at\s+(?:least|most)/i.test(line));
   return {
-    contextExcerpt: text.slice(0, 2_000),
+    contextExcerpt: text.length <= 2_000 ? text : `${text.slice(0, 1_300)}\n…\n${text.slice(-690)}`,
     deliverables: hasArtifactCue ? inferredDeliverables(text) : [],
-    constraints: [],
+    ...(submission.length ? { submissionMethod: submission.join("；").slice(0, 500) } : {}),
+    constraints: [...new Set(constraints)].slice(0, 12).map((line) => line.slice(0, 300)),
     risks: [],
     uncertainties: [],
     reminderSuggestions: [],
@@ -1229,13 +1346,41 @@ function inferredDeliverables(text: string): string[] {
     [/复盘报告/i, "复盘报告"],
     [/总结/i, "总结"],
     [/\breport\b/i, "report"],
+    [/解题思路/i, "解题思路"],
+    [/生成(?:图片|图像)/i, "生成图片"],
+    [/\(1\)和\(2\)的结果|（1）和（2）的结果/i, "(1)和(2)的结果"],
   ];
   const values = patterns.flatMap(([pattern, label]) => pattern.test(text) ? [label] : []);
+  // Retain filenames and numbered submission lists rather than only formats.
+  const filenames = text.match(/[\p{Script=Han}\w-]+\.(?:pdf|zip|docx|pptx|ipynb|py|sql|xlsx|csv)\b/giu) ?? [];
+  values.push(...filenames);
+  let inList = false;
+  for (const line of text.split(/\n/)) {
+    if (/^提交(?:物|材料|要求)\s*[:：]/.test(line)) {
+      inList = true;
+      const inline = line.replace(/^提交(?:物|材料|要求)\s*[:：]\s*/, "");
+      if (inline) values.push(inline);
+    } else if (inList && /^\s*\d+[.、)]\s*/.test(line)) {
+      values.push(line.replace(/^\s*\d+[.、)]\s*/, ""));
+    } else if (inList) inList = false;
+  }
+  const content = text.match(/(?:PDF\s*)?文档应包含[^:：\n]*[:：]\s*([\s\S]*?)(?=\n(?:提交(?:网址|方式)|截止)|$)/i)?.[1];
+  if (content) values.push(...content.replace(/\n/g, " ").split(/[、；;]+/).map((value) => value.trim()).filter(Boolean));
   return [...new Set(values)].filter((value) => !values.some((candidate) => candidate !== value && candidate.includes(value)));
 }
 
 export function shortTitle(text: string): string {
+  const quoted = text.match(/[“「《]([^”」》\n]{2,64})[”」》]/);
+  if (quoted) return quoted[1];
   const cleaned = stripDeadlineTemporalExpressions(text)
+    .replace(/[*`_]/g, "")
+    .replace(/^\s*(?:#{1,6}\s*|【|\[)|[】\]]\s*$/g, "")
+    .replace(/^\s*(?:任务名称|任务标题|标题|名称|任务|作业名称)\s*[:：]\s*/i, "")
+    .replace(/^\s*(?:通知[一二三四五六七八九十\d]+|同学你好|各位同学)\s*[:：,，]?\s*/i, "")
+    .replace(/^关于\s*/, "")
+    .replace(/(?:截止|截至|提交截止)(?:日期|时间)|(?:due\s*date|deadline)\s*[:：]?/gi, " ")
+    .replace(/(?:需要在|须在|请于|将于|于|在)\s*(?=提交|上交|进行|$)/g, " ")
+    .replace(/(?:提交|上交)至[^，,。；;\n]+/g, " ")
     .replace(/^\s*(?:today|tomorrow|the\s+day\s+after\s+tomorrow)(?:\s+at)?\s*/i, "")
     .replace(/^\s*(?:submit|finish|complete|deliver|upload|turn\s+in)\s+(?:the\s+)?/i, "")
     .replace(/如果[^，,。；;]+[，,]?/g, " ")
@@ -1244,10 +1389,13 @@ export function shortTitle(text: string): string {
     .replace(/(?:提交|上交|交付|交)(?=作业|报告|论文|项目|实验|文件|材料|代码|PPT)/gi, " ")
     .replace(/参加(?=答辩|会议|展示|汇报|考试|活动)/g, " ")
     .replace(/(截止|截至|ddl|deadline|due|提交|完成|之前|前|到期|提醒|请在|需要|任务)[:：]*/gi, " ")
+    .replace(/(?:预计|估计)(?:需要|耗时)?\s*\d+\s*(?:分钟|小时)/g, " ")
+    .replace(/\s+(?:需要在|须在|在|进行)\s*$/g, "")
+    .split(/[，,。；;\n]|\s*[:：]\s*(?=\s*$)/)[0]
     .replace(/^[。！？.!?,，、:：\s]+|[。！？.!?,，、:：\s]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  return (cleaned || "未命名 DDL").slice(0, 16);
+  return (cleaned || "未命名 DDL").slice(0, 64);
 }
 
 function createItem(title: string, dueAt: string, sourceSummary: string, importance = importanceFromText(`${title} ${sourceSummary}`), extraction?: DdlExtractionContext): DdlItem {
@@ -1308,8 +1456,21 @@ function mergePendingItems(items: PendingExtractedTask[]): PendingExtractedTask[
 
 export function mergeModelAndRuleItems(modelItems: DdlItem[], ruleItems: DdlItem[], pendingItems: PendingExtractedTask[] = []): DdlItem[] {
   const reconciledModelItems = modelItems.map((modelItem) => {
-    const localMatch = ruleItems.find((ruleItem) => timezoneVariantOfSameEvidence(modelItem, ruleItem));
-    return localMatch ? { ...modelItem, dueAt: localMatch.dueAt } : modelItem;
+    const localMatch = ruleItems.find((ruleItem) => sameExtractedDeadline(modelItem, ruleItem) || timezoneVariantOfSameEvidence(modelItem, ruleItem));
+    if (!localMatch) return modelItem;
+    const local = localMatch.extraction;
+    const model = modelItem.extraction;
+    const extraction = model && local ? {
+      ...local, ...model,
+      contextExcerpt: model.contextExcerpt.length >= local.contextExcerpt.length ? model.contextExcerpt : local.contextExcerpt,
+      deliverables: [...new Set([...model.deliverables, ...local.deliverables.filter((value) => !model.deliverables.some((existing) => {
+        const tokens = value.match(/[A-Za-z]+|\p{Script=Han}+|\d+/gu) ?? [];
+        return tokens.length > 0 && tokens.every((token) => normalizeEvidenceText(existing).includes(normalizeEvidenceText(token)));
+      }))])],
+      constraints: [...new Set([...model.constraints, ...local.constraints])],
+      submissionMethod: model.submissionMethod || local.submissionMethod,
+    } : model ?? local;
+    return { ...modelItem, dueAt: localMatch.dueAt, ...(extraction ? { extraction } : {}) };
   });
   const ruleFallbacks = ruleItems.filter((ruleItem) => !reconciledModelItems.some((modelItem) => sameExtractedDeadline(modelItem, ruleItem))
     && !pendingItems.some((pendingItem) => pendingCoversRuleItem(pendingItem, ruleItem)));

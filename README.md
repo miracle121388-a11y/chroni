@@ -302,13 +302,17 @@ CHRONI_LLM_API_KEY=你的_DeepSeek_API_Key
 | 类型 | 格式 |
 | --- | --- |
 | 文本与结构化文本 | TXT、MD、CSV、TSV、JSON、ICS、LOG、HTML、XML、YAML、RTF |
-| 文档与表格 | DOCX、PDF、XLSX |
-| 图片 OCR | PNG、JPG/JPEG、WEBP、BMP、TIF/TIFF |
+| 文档与表格 | DOCX、PDF、PPTX、XLSX、ODT、ODP、ODS |
+| 图片 OCR | PNG、JPG/JPEG、WEBP、BMP、TIF/TIFF、GIF、AVIF |
 | 输入入口 | 桌宠拖放、控制中心快速添加、本地 HTTP API |
 
 - 单个文档最大 `18 MiB`，纯文本最大 `2 MiB`；HTTP JSON 请求体最大 `32 MiB`。
 - TXT 支持 UTF-8、UTF-16、GBK 与 GB18030；XLSX 会读取全部工作表。
-- 没有文本层的扫描 PDF 会逐页渲染再 OCR，最多处理 `60` 页；OCR 可靠性阈值为 `55`。
+- PDF 按真实页面内容判断文本层，页面分隔标记不计入正文；扫描页、混合文档中的图片页和带少量文字覆盖的扫描页都会补充本地 OCR。最多处理 `60` 页 OCR，可靠性阈值为 `55`。
+- 中英文 OCR 模型随应用安装，首次识别不依赖网络；多页 TIFF 逐页读取，DOCX、PPTX 与 OpenDocument 中的图片也进入 OCR。
+- ICS 会读取事件时间、时区与折行描述；JSON、CSV/TSV、RTF、HTML 按格式解码。表格与结构化记录分别关联任务名称、截止时间和提交要求，批量导入不会在第 12 项后截断。
+- 标题、要求和截止日期分行时会关联上下文，`10月14日24:00` 对应 `10月15日00:00`。OCR 产生的网址、文件名和数字要求保留原识别结果，并提示核对原件。
+- 无扩展名的 PDF、Office 文档、常见图片按文件签名识别；可读文本允许使用自定义扩展名。旧版 DOC/XLS/PPT 需另存为现代 Office 格式或 PDF。
 - 空文件、乱码、非法日期、低置信度 OCR 或缺少任务语义时，会返回具体原因而不是静默写入错误日程。
 - 学习任务、日程、来源、证据元数据、检查点、计划版本、偏好和 Agent Memory 保存在 Electron 用户数据目录，可在“运行状态”中打开。
 - 产出文件本体留在用户原位置；Chroni 只保存显示名称、大小、MIME、SHA-256、关联交付物与登记时间，不把绝对路径写入任务状态。

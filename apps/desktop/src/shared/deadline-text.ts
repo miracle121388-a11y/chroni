@@ -6,7 +6,7 @@ const clockSuffixPattern = `(?:[:：]\\s*\\d{1,2}|[点时]\\s*(?:\\d{1,2}\\s*分
 const chineseClockSuffixPattern = `[点时]\\s*(?:半|一刻|三刻|[${chineseNumberPattern}]{1,3}\\s*分?)?`;
 
 export function deadlineDateFromText(text: string, now = new Date()): string | undefined {
-  const normalized = text.replace(/\s+/g, " ").trim();
+  const normalized = text.normalize("NFKC").replace(/[\u200B-\u200D\u2060]/g, "").replace(/\s+/g, " ").trim();
   if (!normalized) return undefined;
 
   const iso = normalized.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?([Zz]|[+-]\d{1,4}(?::\d{0,4})?)?/);
@@ -17,19 +17,34 @@ export function deadlineDateFromText(text: string, now = new Date()): string | u
     const hour = Number(iso[4]);
     const minute = Number(iso[5]);
     const second = Number(iso[6] ?? 0);
-    if (!isValidCalendarDateTimeParts(year, month, day, hour, minute, second)) return undefined;
+    const midnightRollover = hour === 24 && minute === 0 && second === 0 && !Number(iso[7] ?? 0);
+    if (!isValidCalendarDateTimeParts(year, month, day, midnightRollover ? 0 : hour, minute, second)) return undefined;
+    const dayOffset = midnightRollover ? 1 : 0;
     if (iso[8]) {
       const fraction = iso[7] ? `.${iso[7]}` : "";
-      const candidate = `${iso[1]}-${iso[2]}-${iso[3]}T${iso[4]}:${iso[5]}:${String(second).padStart(2, "0")}${fraction}${iso[8]}`;
-      return normalizeRfc3339DateTime(candidate);
+      const candidate = `${iso[1]}-${iso[2]}-${iso[3]}T${midnightRollover ? "00" : iso[4]}:${iso[5]}:${String(second).padStart(2, "0")}${fraction}${iso[8]}`;
+      const result = normalizeRfc3339DateTime(candidate);
+      return result && dayOffset ? new Date(new Date(result).getTime() + 86_400_000).toISOString() : result;
     }
     const suffix = normalized.slice((iso.index ?? 0) + iso[0].length);
     if (/^[Zz+-]/.test(suffix)) return undefined;
-    return localDate(year, month, day, hour, minute, second);
+    // AM/PM is valid in prose, but must not silently turn 11 PM into 11 AM.
+    if (/^\s*[ap]\.?m\.?\b/i.test(suffix) || /\b(?:UTC|GMT)\b|北京时间/i.test(suffix)) return datedDeadline(year, month, day, normalized);
+    const result = localDate(year, month, day, midnightRollover ? 0 : hour, minute, second);
+    if (!result || !dayOffset) return result;
+    const nextDay = new Date(result); nextDay.setDate(nextDay.getDate() + 1);
+    return nextDay.toISOString();
   }
 
   const full = normalized.match(/(20\d{2})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*[日号]?/);
   if (full) return datedDeadline(Number(full[1]), Number(full[2]), Number(full[3]), normalized);
+
+  const months = "January February March April May June July August September October November December".split(" ");
+  const monthPattern = months.map((month) => `${month.slice(0, 3)}(?:${month.slice(3)})?`).join("|");
+  const english = normalized.match(new RegExp(`\\b(${monthPattern})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,)?\\s+(20\\d{2})\\b`, "i"));
+  const englishReversed = normalized.match(new RegExp(`\\b(\\d{1,2})\\s+(${monthPattern})\\.?\\s+(20\\d{2})\\b`, "i"));
+  const monthName = english?.[1] ?? englishReversed?.[2];
+  if (monthName) return datedDeadline(Number(english?.[3] ?? englishReversed?.[3]), months.findIndex((month) => month.toLowerCase().startsWith(monthName.slice(0, 3).toLowerCase())) + 1, Number(english?.[2] ?? englishReversed?.[1]), normalized);
 
   const partial = normalized.match(/(\d{1,2})(?:\s*[月/\-]\s*|\.)(\d{1,2})\s*[日号]?/);
   if (partial) {
@@ -42,7 +57,9 @@ export function deadlineDateFromText(text: string, now = new Date()): string | u
 
   if (/今天|今日|今早|今晚/.test(normalized)) return relativeDeadline(0, normalized, now);
   if (/明天|明日|明早|明晚/.test(normalized)) return relativeDeadline(1, normalized, now);
+  if (/\bday\s+after\s+tomorrow\b/i.test(normalized)) return relativeDeadline(2, normalized, now);
   if (/\btomorrow\b/i.test(normalized)) return relativeDeadline(1, normalized, now);
+  if (/\btoday\b/i.test(normalized)) return relativeDeadline(0, normalized, now);
   if (/大后天/.test(normalized)) return relativeDeadline(3, normalized, now);
   if (/后天|后日/.test(normalized)) return relativeDeadline(2, normalized, now);
 
@@ -68,6 +85,11 @@ export function deadlineDateFromText(text: string, now = new Date()): string | u
 
 export function stripDeadlineTemporalExpressions(text: string): string {
   return text
+    .replace(/\b(?:UTC|GMT)(?:\s*[+-]\d{1,2}(?::?\d{2})?)?\b|北京时间/gi, " ")
+    .replace(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,)?\s+20\d{2}\b/gi, " ")
+    .replace(/\b\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+20\d{2}\b/gi, " ")
+    .replace(/\b\d{1,2}(?::\d{2})?\s*[ap]\.?m\.?\b/gi, " ")
+    .replace(/\b(?:at|on)(?=\s*(?:\d|$))/gi, " ")
     .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?/gi, " ")
     .replace(/20\d{2}\s*[年/.\-]\s*\d{1,2}\s*[月/.\-]\s*\d{1,2}\s*[日号]?/g, " ")
     .replace(/\d{1,2}(?:\s*[月/\-]\s*|\.)\d{1,2}\s*[日号]?/g, " ")
@@ -105,6 +127,15 @@ export function isConditionalDeadlineText(text: string): boolean {
 function datedDeadline(year: number, month: number, day: number, text: string): string | undefined {
   const time = timeFromText(text);
   if (!time) return undefined;
+  if (!isValidCalendarDateTimeParts(year, month, day, time.hour, time.minute, 0)) return undefined;
+  const timezone = text.match(/\b(?:UTC|GMT)(?:\s*([+-])(\d{1,2})(?::?(\d{2}))?)?\b/i);
+  if (timezone || /北京时间/.test(text)) {
+    const hours = timezone ? Number(timezone[2] ?? 0) : 8;
+    const minutes = Number(timezone?.[3] ?? 0);
+    if (hours > 23 || minutes > 59) return undefined;
+    const offset = (hours * 60 + minutes) * (timezone?.[1] === "-" ? -1 : 1);
+    return new Date(Date.UTC(year, month - 1, day + time.dayOffset, time.hour, time.minute) - offset * 60_000).toISOString();
+  }
   const date = new Date(year, month - 1, day, time.hour, time.minute, 0, 0);
   if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return undefined;
   if (time.dayOffset) date.setDate(date.getDate() + time.dayOffset);
@@ -137,6 +168,12 @@ function weekdayDeadline(dayText: string, text: string, now: Date, mode: "rollin
 }
 
 function timeFromText(text: string): { hour: number; minute: number; dayOffset: number } | undefined {
+  const meridiem = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?\b/i);
+  if (meridiem) {
+    const hour = Number(meridiem[1]);
+    if (hour < 1 || hour > 12) return undefined;
+    return normalizedTime(hour % 12 + (meridiem[3].toLowerCase() === "p" ? 12 : 0), Number(meridiem[2] ?? 0));
+  }
   const colon = text.match(new RegExp(`(${periodPattern})?\\s*(\\d{1,2})\\s*[:：]\\s*(\\d{1,2})`));
   if (colon) return normalizedTime(Number(colon[2]), Number(colon[3]), colon[1]);
 

@@ -30,6 +30,18 @@ importers:
       '@huggingface/transformers':
         specifier: 3.8.1
         version: 3.8.1(@types/node@25.9.4)
+      '@napi-rs/canvas':
+        specifier: 0.1.80
+        version: 0.1.80
+      '@tesseract.js-data/chi_sim':
+        specifier: 1.0.0
+        version: 1.0.0
+      '@tesseract.js-data/eng':
+        specifier: 1.0.0
+        version: 1.0.0
+      adm-zip:
+        specifier: 0.6.1
+        version: 0.6.1
       electron-updater:
         specifier: 6.8.9
         version: 6.8.9
@@ -48,6 +60,9 @@ importers:
       read-excel-file:
         specifier: ^9.3.10
         version: 9.3.10
+      sharp:
+        specifier: 0.35.4
+        version: 0.35.4(@types/node@25.9.4)
       tesseract.js:
         specifier: ^7.0.0
         version: 7.0.0
@@ -64,6 +79,9 @@ importers:
       '@fontsource-variable/source-serif-4':
         specifier: 5.2.9
         version: 5.2.9
+      '@types/adm-zip':
+        specifier: ^0.5.8
+        version: 0.5.8
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.4
@@ -618,8 +636,17 @@ packages:
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
     engines: {node: '>=10'}
 
+  '@tesseract.js-data/chi_sim@1.0.0':
+    resolution: {integrity: sha512-iuErURkPbECDUazgsLn/r3c+tU2y5o5S/w14d0A/YiagfsjYyZKgTo75RUpsGJ311qtu0dIX4hqnXAAjmqf2CA==}
+
+  '@tesseract.js-data/eng@1.0.0':
+    resolution: {integrity: sha512-mbTumm6KQPUHyzTPQaF3ObXYnx0SqqfV2nabqFVQBwD6Kl7PhGSLSzOlfFTWy0P3BjghaSKA2W9GB19Jk+ZcTg==}
+
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
+
+  '@types/adm-zip@0.5.8':
+    resolution: {integrity: sha512-RVVH7QvZYbN+ihqZ4kX/dMiowf6o+Jk1fNwiSdx0NahBJLU787zkULhGhJM8mf/obmLGmgdMM0bXsQTmyfbR7Q==}
 
   '@types/cacheable-request@6.0.3':
     resolution: {integrity: sha512-IQ3EbTzGxIigb1I3qPZc1rWJnH0BmSKv5QYTalEwweFvyBDLSAe24zP0le/hyi7ecGfZVlIVAg4BZqb8WBwKqw==}
@@ -2420,10 +2447,18 @@ snapshots:
     dependencies:
       defer-to-connect: 2.0.1
 
+  '@tesseract.js-data/chi_sim@1.0.0': {}
+
+  '@tesseract.js-data/eng@1.0.0': {}
+
   '@tybys/wasm-util@0.10.3':
     dependencies:
       tslib: 2.8.1
     optional: true
+
+  '@types/adm-zip@0.5.8':
+    dependencies:
+      '@types/node': 25.9.5
 
   '@types/cacheable-request@6.0.3':
     dependencies:
