@@ -251,14 +251,13 @@ const report = {
   cases: results,
 };
 
-const reports = join(root, "reports");
+const reports = join(root, "../../output/evaluation");
 mkdirSync(reports, { recursive: true });
 const baseName = smoke ? "smoke" : "latest";
 const jsonPath = join(reports, `${baseName}.json`);
 const markdownPath = join(reports, `${baseName}.md`);
 writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 writeFileSync(markdownPath, markdownReport(report), "utf8");
-if (!smoke) writeFileSync(join(root, "../../docs/goai/07-evaluation-report.md"), markdownReport(report), "utf8");
 console.log(`GOAI ${smoke ? "smoke" : "full"} evaluation: ${selectedCases.length} cases, F1 ${percent(f1)}, offline success ${percent(report.engineering.offlineSuccessRate)}.`);
 console.log(`Reports: ${jsonPath} and ${markdownPath}`);
 if (successfulExecutions !== selectedCases.length

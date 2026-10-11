@@ -31,7 +31,7 @@ const licenseResources = [
   { from: "../../LICENSE", to: "licenses/CHRONI-MIT-LICENSE.txt" },
   { from: "../../THIRD_PARTY_NOTICES.md", to: "licenses/THIRD_PARTY_NOTICES.md" },
   { from: "../../THIRD_PARTY_DEPENDENCIES.md", to: "licenses/THIRD_PARTY_DEPENDENCIES.md" },
-  { from: "../../docs/user/privacy.md", to: "privacy/PRIVACY.md" },
+  { from: "build/PRIVACY.md", to: "privacy/PRIVACY.md" },
   { from: "third_party/fonts/OFL-1.1.txt", to: "licenses/FONTS-SIL-OFL-1.1.txt" },
   { from: "third_party/fonts/NOTICE.md", to: "licenses/FONT-NOTICE.md" },
   ...(petAssetMode === "xiaotong" ? [

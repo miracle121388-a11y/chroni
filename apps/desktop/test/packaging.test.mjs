@@ -9,11 +9,8 @@ import builderConfig from "../electron-builder.config.cjs";
 
 const require = createRequire(import.meta.url);
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-const workspacePackageJson = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8"));
 const electronBuilderRequire = createRequire(require.resolve("electron-builder/package.json"));
 const builderSchema = JSON.parse(readFileSync(electronBuilderRequire.resolve("app-builder-lib/scheme.json"), "utf8"));
-const releaseWorkflow = readFileSync(new URL("../../../.github/workflows/release-build.yml", import.meta.url), "utf8");
-const storeWorkflow = readFileSync(new URL("../../../.github/workflows/store-build.yml", import.meta.url), "utf8");
 const rendererSource = readFileSync(new URL("../src/renderer/src/main.tsx", import.meta.url), "utf8");
 const dailyReviewSource = readFileSync(new URL("../src/renderer/src/components/DailyReviewWorkspace.tsx", import.meta.url), "utf8");
 const rendererTypes = readFileSync(new URL("../src/renderer/src/vite-env.d.ts", import.meta.url), "utf8");
@@ -26,7 +23,6 @@ const artifactVerifier = readFileSync(new URL("../../../scripts/verify-desktop-a
 const afterPackSource = readFileSync(new URL("../scripts/after-pack.cjs", import.meta.url), "utf8");
 const builderConfigSource = readFileSync(new URL("../electron-builder.config.cjs", import.meta.url), "utf8");
 const releaseVerifierPath = fileURLToPath(new URL("../../../scripts/verify-release-version.mjs", import.meta.url));
-const submissionPackager = readFileSync(new URL("../../../scripts/submission/build-goai-submission.mjs", import.meta.url), "utf8");
 
 test("release version verification ignores branch names and validates tags", () => {
   const runVerifier = (refType, refName) => execFileSync(process.execPath, [releaseVerifierPath], {
@@ -47,26 +43,18 @@ test("release version verification ignores branch names and validates tags", () 
 });
 
 test("packaging commands never publish before release artifacts are verified", () => {
-  for (const name of ["package:inner", "package:win:inner", "package:mac:inner", "package:linux:inner", "package:win:store:inner", "package:mac:store:inner", "package:goai:win:inner", "package:goai:mac:inner"]) {
+  for (const name of ["package:inner", "package:win:inner", "package:mac:inner", "package:linux:inner", "package:goai:win:inner", "package:goai:mac:inner"]) {
     assert.match(packageJson.scripts[name], /--publish never/);
     assert.match(packageJson.scripts[name], /verify-desktop-artifact\.mjs/);
   }
-  for (const name of ["package", "package:win", "package:mac", "package:linux", "package:win:store"]) {
+  for (const name of ["package", "package:win", "package:mac", "package:linux"]) {
     assert.match(packageJson.scripts[name], /CHRONI_PET_ASSET_MODE=xiaotong/);
   }
-  for (const name of ["package:inner", "package:win:inner", "package:mac:inner", "package:linux:inner", "package:win:store:inner"]) {
+  for (const name of ["package:inner", "package:win:inner", "package:mac:inner", "package:linux:inner"]) {
     assert.match(packageJson.scripts[name], /verify:product-assets/);
   }
-  assert.match(packageJson.scripts["package:mac:store"], /CHRONI_PET_ASSET_MODE=xiaotong/);
-  assert.match(packageJson.scripts["store:screenshots:mac"], /CHRONI_PET_ASSET_MODE=xiaotong/);
-  assert.match(packageJson.scripts["package:mac:store"], /CHRONI_BUILD_VARIANT=store/);
-  assert.match(packageJson.scripts["package:mac:store:inner"], /verify:store-assets/);
   for (const name of ["package:goai:win", "package:goai:mac"]) {
     assert.match(packageJson.scripts[name], /CHRONI_PET_ASSET_MODE=original/);
-  }
-  for (const name of ["package:win:store:inner", "package:mac:store:inner"]) {
-    assert.match(packageJson.scripts[name], /verify-store-readiness\.mjs/);
-    assert.match(packageJson.scripts[name], /verify-store-artifact\.mjs/);
   }
 });
 
@@ -157,27 +145,6 @@ test("Store packages keep Chroni identity, sandbox permissions, and system-manag
   assert.match(preloadSource, /storeManaged: Boolean\(process\.mas \|\| process\.windowsStore\)/);
   assert.match(rendererSource, /api\.storeManaged && api\.platform === "darwin"/);
   assert.match(rendererSource, /updateStatus\.managedByStore/);
-  assert.match(storeWorkflow, /store-verification-windows\.json/);
-  assert.match(storeWorkflow, /store-verification-macos\.json/);
-  assert.match(storeWorkflow, /MAC_STORE_INSTALLER_CSC_LINK/);
-  assert.match(storeWorkflow, /MAC_STORE_INSTALLER_CSC_KEY_PASSWORD/);
-  assert.match(storeWorkflow, /CHRONI_MAC_BUILD_NUMBER/);
-  assert.match(storeWorkflow, /CHRONI_APP_STORE_SUPPORT_EMAIL/);
-  assert.match(storeWorkflow, /APP_STORE_CONNECT_API_PRIVATE_KEY/);
-});
-
-test("release packaging removes empty certificate variables", () => {
-  assert.match(releaseWorkflow, /Remove-Item Env:CSC_LINK/);
-  assert.match(releaseWorkflow, /unset CSC_LINK CSC_KEY_PASSWORD/);
-});
-
-test("public release jobs use the verified product packaging path", () => {
-  assert.match(releaseWorkflow, /pnpm run package:windows/);
-  assert.match(releaseWorkflow, /pnpm run package:macos/);
-  assert.doesNotMatch(releaseWorkflow, /pnpm run package:goai:(?:windows|macos)/);
-  assert.match(releaseWorkflow, /CHRONI_REQUIRE_SIGNING: \$\{\{ vars\.CHRONI_REQUIRE_SIGNING \|\| '0' \}\}/);
-  assert.match(releaseWorkflow, /CHRONI_REQUIRE_NOTARIZATION: \$\{\{ vars\.CHRONI_REQUIRE_NOTARIZATION \|\| '0' \}\}/);
-  assert.doesNotMatch(releaseWorkflow, /github\.ref_type == 'tag' && '1'/);
 });
 
 test("desktop packages preserve the local voice runtime and declare microphone use", () => {
@@ -193,23 +160,12 @@ test("desktop packages preserve the local voice runtime and declare microphone u
   ]);
 });
 
-test("competition submission ships the animated companion product build", () => {
-  assert.equal(workspacePackageJson.scripts["package:submission:windows"], "pnpm run package:windows");
-  assert.match(submissionPackager, /buildManifest\.variant !== "product"/);
-  assert.match(submissionPackager, /buildManifest\.petAssetMode !== "xiaotong"/);
-  assert.match(submissionPackager, /XIAOTONG-ADDITIONAL-TERMS\.md/);
-  assert.match(submissionPackager, /06_桌宠交互\.png/);
-  assert.match(submissionPackager, /\\\\\\\\\?\\\\/);
-  assert.match(submissionPackager, /System\.IO\.Directory.*Delete/);
-  assert.doesNotMatch(workspacePackageJson.scripts["package:submission:windows"], /package:goai/);
-});
-
 test("default desktop packages include the companion's required notices", () => {
   assert.deepEqual(builderConfig.extraResources, [
     { from: "../../LICENSE", to: "licenses/CHRONI-MIT-LICENSE.txt" },
     { from: "../../THIRD_PARTY_NOTICES.md", to: "licenses/THIRD_PARTY_NOTICES.md" },
     { from: "../../THIRD_PARTY_DEPENDENCIES.md", to: "licenses/THIRD_PARTY_DEPENDENCIES.md" },
-    { from: "../../docs/user/privacy.md", to: "privacy/PRIVACY.md" },
+    { from: "build/PRIVACY.md", to: "privacy/PRIVACY.md" },
     { from: "third_party/fonts/OFL-1.1.txt", to: "licenses/FONTS-SIL-OFL-1.1.txt" },
     { from: "third_party/fonts/NOTICE.md", to: "licenses/FONT-NOTICE.md" },
     { from: "third_party/xiaotong/LICENSE", to: "licenses/XIAOTONG-APACHE-2.0.txt" },

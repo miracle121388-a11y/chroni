@@ -43,6 +43,6 @@ Optional OpenAI-compatible services, including a user-configured endpoint or the
 
 ## Historical synthetic evaluation data
 
-Files under `examples/goai/` and `benchmarks/goai-v1/` are synthetic, contain no real student records, and are published under the repository MIT License unless a fixture states otherwise.
+Test fixtures under `apps/desktop/test/fixtures/` and cases under `benchmarks/goai-v1/` are synthetic, contain no real student records, and are published under the repository MIT License unless a fixture states otherwise.
 
 This notice is an engineering inventory, not legal advice. When rights are unclear, Chroni excludes the material from the competition-safe build.
