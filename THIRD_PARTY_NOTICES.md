@@ -37,7 +37,7 @@ Chinese and English OCR language data are bundled through `@tesseract.js-data/ch
 
 ## Models and APIs
 
-Chroni downloads the `onnx-community/whisper-tiny` ONNX speech-recognition model from Hugging Face on first voice use and caches it in the user's application-data directory. The converted model is based on `openai/whisper-tiny`; the upstream model is published under Apache License 2.0. Model files are not committed to this repository or embedded in release installers.
+Chroni downloads a pinned revision of the [`onnx-community/whisper-base`](https://huggingface.co/onnx-community/whisper-base) ONNX speech-recognition model from Hugging Face on first voice use, verifies each file with SHA-256, and caches it in the user's application-data directory. The converted model is based on [`openai/whisper-base`](https://huggingface.co/openai/whisper-base); the upstream model is published under Apache License 2.0. Model files are not committed to this repository or embedded in release installers.
 
 Optional OpenAI-compatible services, including a user-configured endpoint or the managed beta gateway, remain subject to the selected provider's terms. The local rules and bounded voice-command paths do not require a model API. Unmatched voice transcripts enter the ordinary intake path and may use the selected model service after user confirmation.
 
