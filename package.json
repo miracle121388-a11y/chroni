@@ -45,6 +45,6 @@
   ],
   "devDependencies": {
     "@napi-rs/canvas": "0.1.80",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }
