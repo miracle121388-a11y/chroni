@@ -14,6 +14,9 @@ import { processIntake } from "../../apps/desktop/dist/intake.js";
 import { ChroniStore } from "../../apps/desktop/dist/store.js";
 import { cases as allCases, referenceNow, timezone } from "./cases/index.mjs";
 
+// Interpret timezone-free fixtures in the timezone declared by the dataset.
+process.env.TZ = timezone;
+
 const root = dirname(fileURLToPath(import.meta.url));
 const repositoryState = gitState();
 const smoke = process.argv.includes("--smoke");
@@ -260,14 +263,21 @@ writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 writeFileSync(markdownPath, markdownReport(report), "utf8");
 console.log(`GOAI ${smoke ? "smoke" : "full"} evaluation: ${selectedCases.length} cases, F1 ${percent(f1)}, offline success ${percent(report.engineering.offlineSuccessRate)}.`);
 console.log(`Reports: ${jsonPath} and ${markdownPath}`);
-if (successfulExecutions !== selectedCases.length
-  || report.extraction.taskF1 !== 1
-  || report.extraction.dueDateExactMatch !== 1
-  || report.extraction.dueTimeExactMatch !== 1
-  || report.learningMission.creationRate !== 1
-  || report.learningMission.evidencePersistenceRate !== 1
-  || report.learningMission.checkpointPersistenceRate !== 1
-  || report.learningMission.milestoneCheckpointSyncRate !== 1) process.exitCode = 1;
+const requiredMetrics = {
+  offlineSuccessRate: report.engineering.offlineSuccessRate,
+  taskF1: report.extraction.taskF1,
+  dueDateExactMatch: report.extraction.dueDateExactMatch,
+  dueTimeExactMatch: report.extraction.dueTimeExactMatch,
+  creationRate: report.learningMission.creationRate,
+  evidencePersistenceRate: report.learningMission.evidencePersistenceRate,
+  checkpointPersistenceRate: report.learningMission.checkpointPersistenceRate,
+  milestoneCheckpointSyncRate: report.learningMission.milestoneCheckpointSyncRate,
+};
+const failedMetrics = Object.entries(requiredMetrics).filter(([, value]) => value !== 1);
+if (failedMetrics.length) {
+  console.error(`Evaluation failed: ${failedMetrics.map(([name, value]) => `${name}=${value} (expected 1)`).join(", ")}`);
+  process.exitCode = 1;
+}
 
 function smokeCases(input) {
   const seen = new Set();
