@@ -4,6 +4,9 @@ import { resolveLlmSettings } from "../../apps/desktop/dist/llm-settings.js";
 import { extractPayload } from "../../apps/desktop/dist/intake.js";
 import { generateTaskPlan } from "../../apps/desktop/dist/agent/task-plan-agent.js";
 import { CHRONI_MANAGED_LLM_BASE_URL, CHRONI_MANAGED_LLM_MODEL } from "../../apps/desktop/dist/shared/types.js";
+import { timezone } from "./cases/index.mjs";
+
+process.env.TZ = timezone;
 
 // Explicit --model authorizes requests; this corpus contains synthetic data only.
 const settings = resolveLlmSettings({ enabled: true, mode: "managed", provider: "openai-compatible", baseUrl: CHRONI_MANAGED_LLM_BASE_URL, apiKey: "", model: CHRONI_MANAGED_LLM_MODEL });
