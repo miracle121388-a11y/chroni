@@ -2,12 +2,32 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run audit:prod
   check:
     strategy:
       fail-fast: false
@@ -25,8 +45,13 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - if: matrix.os == 'ubuntu-latest'
-        run: pnpm run audit:prod
       - run: pnpm run check
+        env:
+          TZ: UTC
+      - name: Verify parsing in the Shanghai timezone
+        working-directory: apps/desktop
+        run: node --test test/document-intake.test.mjs test/parsing-release.test.mjs
+        env:
+          TZ: Asia/Shanghai
       - if: matrix.os == 'ubuntu-latest'
         run: pnpm run eval:smoke

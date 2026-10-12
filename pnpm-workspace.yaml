@@ -17,6 +17,10 @@ overrides:
   adm-zip: 0.6.1
   js-yaml: 4.3.2
   onnxruntime-node: 1.23.2
-  sharp: 0.35.4
+  sharp: 0.35.5
+  global-agent: 4.1.3
+  # Mammoth's CLI-only parser is unused by the imported DOCX library API.
+  # Removing it also removes the unpatched sprintf-js dependency.
+  mammoth>argparse: '-'
 patchedDependencies:
   app-builder-lib@26.15.3: patches/app-builder-lib@26.15.3.patch

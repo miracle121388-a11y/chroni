@@ -1,11 +1,13 @@
 import { mkdirSync } from "node:fs";
-import type { AutomaticSpeechRecognitionPipelineType } from "@huggingface/transformers";
+import type { pipeline } from "@huggingface/transformers";
 import type { VoiceEngineStatus, VoiceTranscriptionResult } from "./shared/types.js";
 import { normalizeChineseText } from "./shared/chinese-text.js";
 import { prepareVoiceModel, VOICE_MODEL_ID } from "./voice-model.js";
 
 const VOICE_SAMPLE_RATE = 16_000;
 const MAX_AUDIO_SECONDS = 35;
+
+type SpeechTranscriber = Awaited<ReturnType<typeof pipeline<"automatic-speech-recognition">>>;
 
 type ProgressInfo = {
   status?: unknown;
@@ -18,8 +20,8 @@ export class LocalVoiceTranscriber {
     modelId: VOICE_MODEL_ID,
     message: "本地语音模型尚未载入。",
   };
-  #transcriber?: AutomaticSpeechRecognitionPipelineType;
-  #loading?: Promise<AutomaticSpeechRecognitionPipelineType>;
+  #transcriber?: SpeechTranscriber;
+  #loading?: Promise<SpeechTranscriber>;
   #closed = false;
   #downloads?: AbortController;
 
@@ -75,7 +77,7 @@ export class LocalVoiceTranscriber {
     if (loaded) await loaded.dispose();
   }
 
-  async #load(): Promise<AutomaticSpeechRecognitionPipelineType> {
+  async #load(): Promise<SpeechTranscriber> {
     if (this.#transcriber) return this.#transcriber;
     if (this.#loading) return this.#loading;
     this.#setStatus({ state: "loading", modelId: VOICE_MODEL_ID, progress: 0, message: "正在准备本地语音模型，首次使用需要下载。" });

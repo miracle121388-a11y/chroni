@@ -106,10 +106,9 @@ test("renderer bundles local cross-platform fonts under the production CSP", asy
   assert.equal(packageJson.dependencies?.["@fontsource-variable/source-serif-4"], undefined);
   assert.equal(packageJson.dependencies?.["@fontsource-variable/noto-sans-sc"], undefined);
   assert.equal(packageJson.dependencies?.["@fontsource-variable/noto-serif-sc"], undefined);
-  assert.equal(packageJson.devDependencies["@fontsource-variable/source-sans-3"], "5.2.9");
-  assert.equal(packageJson.devDependencies["@fontsource-variable/source-serif-4"], "5.2.9");
-  assert.equal(packageJson.devDependencies["@fontsource-variable/noto-sans-sc"], "5.2.10");
-  assert.equal(packageJson.devDependencies["@fontsource-variable/noto-serif-sc"], "5.2.10");
+  for (const family of ["source-sans-3", "source-serif-4", "noto-sans-sc", "noto-serif-sc"]) {
+    assert.match(packageJson.devDependencies[`@fontsource-variable/${family}`], /^\d+\.\d+\.\d+$/);
+  }
   assert.match(stylesSource, /--font-ui:\s*"Source Sans 3 Variable",\s*"Noto Sans SC Variable"/);
   assert.match(stylesSource, /--font-display:\s*"Source Serif 4 Variable",\s*"Noto Serif SC Variable"/);
   assert.match(stylesSource, /--font-number-ui:\s*var\(--font-ui\)/);

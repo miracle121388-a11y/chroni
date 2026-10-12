@@ -14,8 +14,9 @@ import { tmpdir } from "node:os";
 import { normalizeChineseText } from "../dist/shared/chinese-text.js";
 import { downloadVerifiedModelFile, isVerifiedModelFile } from "../dist/voice-model.js";
 
-const now = new Date("2026-10-11T12:00:00+08:00");
-const due = "2026-10-14T20:00:00+08:00";
+const now = new Date(2026, 9, 11, 12);
+// A notice without a timezone uses the user's local wall clock.
+const due = new Date(2026, 9, 14, 20).toISOString();
 const evidence = "视觉课程作业2\n要求：代码500行以内，重构损失采用L1损失，采样范围[-3,3]，步长0.3。\n提交材料：实验报告PDF\n截止：2026年10月14日20:00";
 const candidate = { title: "视觉课程作业2", dueAt: due, sourceSummary: "截止：2026年10月14日20:00", contextExcerpt: evidence, deliverables: ["实验报告PDF"] };
 const llm = { enabled: true, mode: "custom", provider: "openai-compatible", baseUrl: "https://model.example/v1", apiKey: "synthetic", model: "synthetic" };
@@ -100,7 +101,7 @@ test("animated image deadlines after the first frame are retained", { timeout: 1
   const buffer = readFileSync(new URL("./fixtures/multiframe-assignment.gif", import.meta.url));
   const result = await extractPayload({ kind: "files", files: [{ name: "animation.gif", contentBase64: buffer.toString("base64") }] }, { referenceNow: now, llm: { enabled: false } });
   assert.equal(result.items.length, 1, result.reason);
-  assert.equal(result.items[0].dueAt, "2026-10-14T16:00:00.000Z");
+  assert.equal(result.items[0].dueAt, new Date(2026, 9, 15, 0).toISOString());
 });
 
 test("calendar DST gaps and ambiguous repeated clocks require confirmation", () => {

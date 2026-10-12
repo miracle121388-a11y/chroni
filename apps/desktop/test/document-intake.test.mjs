@@ -21,11 +21,11 @@ const fixture = readFileSync(new URL("./fixtures/assignment-slide.png", import.m
 const file = (name, content) => ({ name, contentBase64: Buffer.from(content).toString("base64") });
 const xml = (value) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
-function assertAssignment(result) {
+function assertAssignment(result, expectedDueAt = dueAt) {
   assert.equal(result.ok, true, result.reason);
   assert.equal(result.items.length, 1);
   assert.match(result.items[0].title, /VAE.*作业\s*2/);
-  assert.equal(result.items[0].dueAt, dueAt);
+  assert.equal(result.items[0].dueAt, expectedDueAt);
   assert.match(result.items[0].extraction.contextExcerpt, /500/);
   assert.match(result.items[0].extraction.contextExcerpt, /L1/);
   assert.ok(result.items[0].extraction.deliverables.some((entry) => /PDF|pdf/.test(entry)));
@@ -88,7 +88,7 @@ test("RTF Chinese legacy hex sequences and Unicode controls are decoded", () => 
 
 test("calendar events unfold escaped text, compact timestamps and named timezones", async () => {
   const calendar = `BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:${title}\r\nDTSTART;TZID=Asia/Shanghai:20261015T000000\r\nDESCRIPTION:代码500行以内\\n重构损失需采用L1损失。\\n提交报告P\r\n DF。\r\nEND:VEVENT\r\nEND:VCALENDAR`;
-  assertAssignment(await extractPayload({ kind: "files", files: [file("task.ics", calendar)] }, options));
+  assertAssignment(await extractPayload({ kind: "files", files: [file("task.ics", calendar)] }, options), "2026-10-14T16:00:00.000Z");
   const allDay = calendar.replace(";TZID=Asia/Shanghai:20261015T000000", ";VALUE=DATE:20261015");
   const pending = await extractPayload({ kind: "text", text: allDay }, options);
   assert.equal(pending.items.length, 0);
